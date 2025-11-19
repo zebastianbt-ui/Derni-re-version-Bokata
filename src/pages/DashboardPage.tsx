@@ -1,435 +1,811 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React from "react";
 
-type Meal = "Alla" | "Frukost" | "Lunch" | "Middag";
-type Booking = {
-  id: string;
-  date: string;
-  time: string;
-  name: string;
-  guests: number;
-  durationMin?: number;
-  tableId?: number | null;
-  status?: "pending" | "confirmed" | "cancelled";
-  source?: "web" | "phone" | "walkin";
-  note?: boolean;
-  notes?: string;
-  color?: string;
-};
-type PetsPolicy = "none" | "terrace" | "everywhere";
-const DAYS_SV: readonly ["söndag","måndag","tisdag","onsdag","torsdag","fredag","lördag"] = [
-  "söndag","måndag","tisdag","onsdag","torsdag","fredag","lördag"
-];
-type DayName = (typeof DAYS_SV)[number];
-const DAYS_ORDER: DayName[] = ["måndag","tisdag","onsdag","torsdag","fredag","lördag","söndag"];
+export default function Page() {
+  // Smooth scroll with header offset (SSR-safe)
+  const scrollToHash = React.useCallback((hash) => {
+    if (!hash || !hash.startsWith('#')) return;
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
 
-type Settings = {
-  info: { email: string };
-  seating: { groupThreshold: number; highChairs: number; allowCombineTables: boolean };
-  policies: { vegan: boolean; glutenFree: boolean; lactoseFree: boolean; kidsMenu: boolean; strollerAllowed: boolean; pets: PetsPolicy; wheelchair: boolean };
-  hours: { normal: Record<DayName, { closed: boolean; open: string; close: string }>; special: { date: string; closed: boolean; open: string; close: string }[] };
-  ai: { name: string; allowAutoConfirm: boolean; outOfScopeReply: string; languages: string[]; knowledge: string; faq: string };
-  escalation: { maxGuestsPerReservation: number; manualReviewKeywords: string[] };
-  notifications: { to: string };
-};
+    const el = document.querySelector(hash);
+    if (!el) return;
 
-const MEAL_RANGES: Record<Meal, [string, string]> = {
-  Alla: ["00:00", "23:59"],
-  Frukost: ["08:00", "10:59"],
-  Lunch: ["11:00", "14:30"],
-  Middag: ["17:00", "21:30"],
-};
-const ENGINE = { slotStepMin: 30, durations: { Frukost: 60, Lunch: 90, Middag: 120 }, tables: [2,2,2,4,4,4,6,6] };
-const MONTHS = ["januari","februari","mars","april","maj","juni","juli","augusti","september","oktober","november","december"];
-const WD_SHORT = ["Må","Ti","On","To","Fr","Lö","Sö"];
-const WD_FULL = ["Söndag","Måndag","Tisdag","Onsdag","Torsdag","Fredag","Lördag"];
-const HOLIDAYS_2025 = [
-  {date:"2025-01-01", name:"Nyårsdagen"},
-  {date:"2025-01-06", name:"Trettondedag jul"},
-  {date:"2025-05-01", name:"Första maj"},
-  {date:"2025-05-29", name:"Kristi himmelsfärdsdag"},
-  {date:"2025-06-06", name:"Nationaldagen"},
-  {date:"2025-06-21", name:"Midsommardagen"},
-  {date:"2025-12-25", name:"Juldagen"},
-  {date:"2025-12-26", name:"Annandag jul"},
-];
-const pad2 = (n:number)=>String(n).padStart(2,"0");
-const timeToMin = (t:string)=>{const [h,m]=t.split(":").map(Number);return h*60+m};
-const minToTime = (m:number)=>`${pad2(Math.floor(m/60))}:${pad2(m%60)}`;
-const round30 = (t:string)=>{const [h,m]=t.split(":").map(Number); if(m<15) return `${pad2(h)}:00`; if(m<45) return `${pad2(h)}:30`; return `${pad2((h+1)%24)}:00`;};
-const mealFor = (t:string):Meal=>{const x=timeToMin(t); for(const m of ["Frukost","Lunch","Middag"] as Meal[]){const [a,b]=MEAL_RANGES[m]; if(x>=timeToMin(a)&&x<=timeToMin(b)) return m;} return "Alla"};
-const overlap = (aS:number,aE:number,bS:number,bE:number)=>aS<bE&&bS<aE;
-const uid = ()=>Math.random().toString(36).slice(2,10);
+    const headerOffset = 80; // sticky header height
+    const y = el.getBoundingClientRect().top + window.scrollY - headerOffset;
+    window.scrollTo({ top: y, behavior: 'smooth' });
 
-function assignTablesForDate(date:string, input:Booking[]):Booking[]{
-  const tables = ENGINE.tables.map((cap,i)=>({id:i+1,cap}));
-  const day = input.filter(b=>b.date===date).map(b=>({...b})).sort((a,b)=>b.guests-a.guests||timeToMin(a.time)-timeToMin(b.time));
-  const out:Booking[]=[];
-  for(const b of day){
-    const dur=b.durationMin??ENGINE.durations[mealFor(b.time) as keyof typeof ENGINE.durations]??90;
-    const s=timeToMin(round30(b.time)); const e=s+dur; let chosen:number|null=null;
-    for(const t of tables.filter(t=>t.cap>=b.guests).sort((a,b)=>a.cap-b.cap)){
-      const conflict=out.some(x=>x.tableId===t.id && overlap(s,e,timeToMin(round30(x.time)), timeToMin(round30(x.time)) + (x.durationMin??ENGINE.durations[mealFor(x.time) as keyof typeof ENGINE.durations])));
-      if(!conflict){chosen=t.id; break;}
-    }
-    out.push({...b, tableId:chosen, durationMin:dur, time:round30(b.time)});
-  }
-  return [...input.filter(b=>b.date!==date), ...out];
-}
-function findAvailableTable({date,time,guests,bookings}:{date:string;time:string;guests:number;bookings:Booking[]}):number|null{
-  const when=round30(time); const dur=ENGINE.durations[mealFor(when) as keyof typeof ENGINE.durations]??90; const s=timeToMin(when), e=s+dur;
-  for(let i=0;i<ENGINE.tables.length;i++){ const id=i+1, cap=ENGINE.tables[i]; if(cap<guests) continue; const conflict=bookings.some(b=>b.date===date && b.tableId===id && overlap(s,e,timeToMin(round30(b.time)), timeToMin(round30(b.time))+(b.durationMin??ENGINE.durations[mealFor(b.time) as keyof typeof ENGINE.durations]))); if(!conflict) return id; }
-  return null;
-}
+    try {
+      if (typeof window !== 'undefined' && window.history && window.history.pushState) {
+        window.history.pushState(null, '', hash);
+      }
+    } catch {}
+  }, []);
 
-export default function ReservationDashboard(){
-  const [activeMeal,setActiveMeal]=useState<Meal>("Lunch");
-  const [openBooking,setOpenBooking]=useState<Booking|null>(null);
-  const [createOpen,setCreateOpen]=useState(false);
-  const [settingsOpen,setSettingsOpen]=useState(false);
-  const [month,setMonth]=useState(8); // 0-indexed (Sept)
-  const [year,setYear]=useState(2025);
-  const [selectedDay,setSelectedDay]=useState(5);
-  const dateSel=`${year}-${pad2(month+1)}-${pad2(selectedDay)}`;
+  const onAnchorClick = (e, hash) => {
+    e.preventDefault();
+    scrollToHash(hash);
+  };
 
-  const defaultSettings:Settings={
-    info:{email:"bookings@example.se"},
-    seating:{groupThreshold:6,highChairs:3,allowCombineTables:false},
-    policies:{vegan:true,glutenFree:true,lactoseFree:true,kidsMenu:true,strollerAllowed:true,pets:"terrace",wheelchair:true},
-    hours:{
-      normal:{
-        söndag:{closed:false,open:"11:00",close:"17:00"},
-        måndag:{closed:false,open:"11:00",close:"17:00"},
-        tisdag:{closed:false,open:"11:00",close:"17:00"},
-        onsdag:{closed:false,open:"11:00",close:"17:00"},
-        torsdag:{closed:false,open:"11:00",close:"17:00"},
-        fredag:{closed:false,open:"11:00",close:"17:00"},
-        lördag:{closed:false,open:"11:00",close:"17:00"},
+  // Pricing drawer state
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [selectedPlan, setSelectedPlan] = React.useState(null);
+  const openPlan = (plan) => {
+    setSelectedPlan(plan);
+    setDrawerOpen(true);
+  };
+
+  // Auth modal state (Zettle-like)
+  const [authOpen, setAuthOpen] = React.useState(false);
+  const [authMode, setAuthMode] = React.useState('login'); // 'login' | 'signup'
+  const openAuth = (mode = 'login') => {
+    setAuthMode(mode);
+    setAuthOpen(true);
+  };
+
+  // Single source of truth for plan data (used by Pricing cards & Signup modal)
+  const PLAN_MAP = React.useMemo(
+    () => ({
+      manad: {
+        title: 'Månad',
+        price: '790 kr/månad',
+        note: 'Utan bindningstid, mest flexibelt',
       },
-      special:[
-        {date:"2025-05-29",closed:false,open:"09:00",close:"17:00"},
-        {date:"2025-06-06",closed:false,open:"11:00",close:"17:00"},
-        {date:"2025-06-20",closed:false,open:"11:00",close:"16:00"},
-      ],
-    },
-    ai:{
-      name:"Bokäta Assistant",
-      allowAutoConfirm:true,
-      outOfScopeReply:"Jag kan bara hjälpa till med bordsbokningar och relaterade frågor. Kontakta oss på {email}.",
-      languages:["sv","en","fr"],
-      knowledge:"",
-      faq:[
-        "Tar ni emot kontanter?",
-        "Tar ni kort (Visa/Mastercard/Amex)? Swish?",
-        "Vilka är era öppettider per dag?",
-        "Hur lång är bordsbokningstiden per sittning?",
-        "Hur tar man sig till er med kollektivtrafik?",
-        "Finns det parkering i närheten?",
-        "Tillgänglig entré och toalett?",
-        "Erbjuder ni vegan-, gluten- och laktosfria alternativ?",
-        "Finns barnstolar? Barnvagn? Barnmeny?",
-        "Hundpolicy (ej/terrass/överallt)?",
-        "Max antal gäster per bokning?",
-      ].join("\n"),
-    },
-    escalation:{maxGuestsPerReservation:22, manualReviewKeywords:["privat event","bröllop","afterwork"]},
-    notifications:{to:"bookings@example.se"},
-  };
-  const [config,setConfig]=useState<Settings>(defaultSettings);
+      ettar: {
+        title: '1 år (Populär)',
+        price: '658 kr/månad · 7 900 kr',
+        note: 'Spara 1 920 kr jämfört med månadspris',
+      },
+      tvar: {
+        title: '2 år (Bästa deal)',
+        price: '579 kr/månad · 13 900 kr',
+        note: 'Spara 5 760 kr jämfört med månadspris',
+      },
+    }),
+    []
+  );
 
-  const seed:Booking[]=[
-    {id:uid(),date:"2025-09-05",time:"11:00",name:"Emma Larsson",guests:2,color:"bg-green-200",note:true,notes:"Allergi: nötter (inga spår)."},
-    {id:uid(),date:"2025-09-05",time:"11:30",name:"Klara Nyman",guests:2,color:"bg-green-200"},
-    {id:uid(),date:"2025-09-05",time:"12:00",name:"Sara Lind",guests:3,color:"bg-yellow-200",note:true,notes:"Vegan + glutenfritt."},
-    {id:uid(),date:"2025-09-05",time:"12:30",name:"Henrik Holm",guests:6,color:"bg-purple-200"},
-    {id:uid(),date:"2025-09-05",time:"13:00",name:"Familjen Sjögren",guests:4,color:"bg-green-200",note:true,notes:"Barnstol. Hörnbord om möjligt."},
-    {id:uid(),date:"2025-09-05",time:"18:00",name:"Familjen Karlsson",guests:8,color:"bg-yellow-200",note:true,notes:"Jordnöt – inga spår."},
-  ];
-  const [bookings,setBookings]=useState<Booking[]>(assignTablesForDate(dateSel, seed));
-
-  const ALL_TIMES = useMemo(()=>{const mins=[MEAL_RANGES.Frukost[0],MEAL_RANGES.Lunch[0],MEAL_RANGES.Middag[0]].map(timeToMin); const maxs=[MEAL_RANGES.Frukost[1],MEAL_RANGES.Lunch[1],MEAL_RANGES.Middag[1]].map(timeToMin); const out:string[]=[]; for(let s=Math.min(...mins),e=Math.max(...maxs);s<=e;s+=ENGINE.slotStepMin) out.push(minToTime(s)); return out;},[]);
-
-  const dayBookings=useMemo(()=>bookings.filter(b=>b.date===dateSel),[bookings,dateSel]);
-  const filtered=useMemo(()=>{const [a,b]=MEAL_RANGES[activeMeal]; const s=timeToMin(a),e=timeToMin(b); return dayBookings.filter(bk=>{const t=timeToMin(bk.time); return t>=s&&t<=e}).sort((x,y)=>timeToMin(x.time)-timeToMin(y.time));},[activeMeal,dayBookings]);
-  const displayBookings=useMemo(()=>filtered.map(b=>({...b,time:round30(b.time)})),[filtered]);
-  const groupedByTime=useMemo(()=>{const g:Record<string,Booking[]>={}; for(const b of displayBookings){(g[b.time]??=[]).push(b);} return g;},[displayBookings]);
-  const totalGuestsDay=useMemo(()=>dayBookings.reduce((s,b)=>s+b.guests,0),[dayBookings]);
-  const totals=useMemo(()=>displayBookings.reduce((a,b)=>({count:a.count+1,guests:a.guests+b.guests}),{count:0,guests:0}),[displayBookings]);
-  const busiestLeast=useMemo(()=>{const map=new Map<number,number>(); dayBookings.forEach(b=>{const h=Math.floor(timeToMin(b.time)/60); map.set(h,(map.get(h)||0)+1);}); if(!map.size) return {max:"–",min:"–"}; let maxH=-1,maxV=-1,minH=-1,minV=1e9; map.forEach((v,h)=>{if(v>maxV){maxV=v;maxH=h;} if(v<minV){minV=v;minH=h;}}); const hr=(h:number)=>`${pad2(h)}:00 – ${pad2((h+1)%24)}:00`; return {max:hr(maxH),min:hr(minH)};},[dayBookings]);
-  const guestsByMeal=useMemo(()=>{const m:{[k in Meal]:number}={Alla:0,Frukost:0,Lunch:0,Middag:0}; dayBookings.forEach(b=>{const mf=mealFor(b.time); m[mf]+=b.guests; m.Alla+=b.guests;}); return m;},[dayBookings]);
-
-  const [aiMsg,setAiMsg]=useState("");
-  const [aiPreview,setAiPreview]=useState("");
-  const knowledgeRef=useRef<HTMLTextAreaElement>(null);
-  const faqItems=useMemo(()=>config.ai.faq.split("\n").map(s=>s.trim()).filter(Boolean),[config.ai.faq]);
-  const insertFaqIntoKnowledge=(q:string)=>{const block=`Fråga: ${q}\nSvar: \n\n`; setConfig(prev=>{const exists=prev.ai.knowledge.includes(q); const kn=exists?prev.ai.knowledge:(prev.ai.knowledge?(prev.ai.knowledge.endsWith("\n")?prev.ai.knowledge+block:prev.ai.knowledge+"\n"+block):block); return {...prev, ai:{...prev.ai, knowledge:kn}}}); setTimeout(()=>knowledgeRef.current?.focus(),0);};
-
-  function isBookingIntent(txt:string){const t=txt.toLowerCase(); return /(boka|booking|reservation|reservera|bord|table)/.test(t) || /\b\d{1,2}[:\.h]\d{2}\b/.test(t) || /\b\d{1,2}\s*(gäster|guests|personer|pers)\b/.test(t)}
-  function extractGuests(txt:string){const nums=(txt.match(/\d+/g)||[]).map(Number).filter(n=>n>0&&n<500); return nums.length?Math.max(...nums):null}
-  function aiRespond(text:string){ if(!isBookingIntent(text)) return config.ai.outOfScopeReply.replace("{email}",config.notifications.to); const guests=extractGuests(text)??2; if(guests>config.escalation.maxGuestsPerReservation) return `Tack! För ${guests} gäster behöver vi manuell bekräftelse. Vi återkommer snarast.`; return `Förfrågan mottagen för ${guests} gäster.`; }
-
-  const [formDate,setFormDate]=useState<string>(dateSel);
-  const [formTime,setFormTime]=useState<string>("12:00");
-  const [formName,setFormName]=useState<string>("");
-  const [formGuests,setFormGuests]=useState<number>(2);
-  const [formNotes,setFormNotes]=useState<string>("");
-  const [formError,setFormError]=useState<string|null>(null);
-  useEffect(()=>{ if(createOpen){ setFormDate(dateSel); setFormTime("12:00"); setFormName(""); setFormGuests(2); setFormNotes(""); setFormError(null);} },[createOpen,dateSel]);
-  const handleCreate=()=>{ const res=createReservation({date:formDate,time:formTime,name:formName,guests:formGuests,notes:formNotes}); if(!(res as any).ok){ setFormError((res as any).error||"Kunde inte spara."); return; } setFormError(null); const d=new Date(formDate); if(!Number.isNaN(d.getTime())){ setYear(d.getFullYear()); setMonth(d.getMonth()); setSelectedDay(d.getDate()); } setCreateOpen(false); };
-
-  const upsertSpecialByDate = (date: string, patch: Partial<{closed:boolean; open:string; close:string}>) => {
-    setConfig(prev => {
-      const arr = prev.hours.special.slice();
-      const idx = arr.findIndex(s => s.date === date);
-      if (idx === -1) arr.push({ date, closed: true, open: "11:00", close: "17:00", ...patch });
-      else arr[idx] = { ...arr[idx], ...patch } as any;
-      return { ...prev, hours: { ...prev.hours, special: arr } };
-    });
+  const handleAuthSubmit = (email, mode, planKey = 'manad') => {
+    if (mode === 'signup') {
+      const plan = PLAN_MAP[planKey] || PLAN_MAP.manad;
+      setAuthOpen(false);
+      openPlan(plan);
+    } else {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login' + (email ? `?email=${encodeURIComponent(email)}` : '');
+      }
+    }
   };
 
-  function createReservation(d:{date:string;time:string;name:string;guests:number;notes?:string}){
-    if(!d.name.trim()) return {ok:false,error:"Namn krävs."}; if(!d.date) return {ok:false,error:"Datum krävs."}; if(!d.time) return {ok:false,error:"Tid krävs."}; if(d.guests<1) return {ok:false,error:"Ogiltigt antal gäster."}; if(d.guests>config.escalation.maxGuestsPerReservation) return {ok:false,error:"Kräver manuell bekräftelse p.g.a. gruppstorlek."};
-    const when=round30(d.time); const tableId=findAvailableTable({date:d.date,time:when,guests:d.guests,bookings}); if(tableId==null) return {ok:false,error:"Ingen ledig passande bord i detta tidsintervall."};
-    const dur=ENGINE.durations[mealFor(when) as keyof typeof ENGINE.durations]??90; const colors=["bg-green-200","bg-blue-200","bg-yellow-200","bg-pink-200","bg-purple-200"]; const b:Booking={id:uid(),date:d.date,time:when,name:d.name.trim(),guests:d.guests,notes:d.notes,note:!!d.notes,color:colors[Math.floor(Math.random()*colors.length)],tableId,durationMin:dur,status:"confirmed",source:"web"};
-    setBookings(prev=>assignTablesForDate(d.date,[...prev,b])); return {ok:true};
-  }
+  // Tiny runtime checks (dev sanity tests)
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return;
+    console.assert(!!document.querySelector('#pricing'), 'Pricing section should exist');
+    console.assert(!!document.querySelector('#faq'), 'FAQ section should exist');
+  }, []);
 
-  // Header
   return (
-    <div className="min-h-screen bg-pink-50 p-6">
-      <header className="-mx-1 mb-8 rounded-2xl bg-gradient-to-br from-[#180033] via-[#2a0146] to-[#3b024f] px-6 py-10 text-white shadow-lg">
-        <div className="max-w-6xl mx-auto text-center">
-          <h1 className="text-4xl md:text-6xl font-black tracking-tight">Dashboard</h1>
-          <p className="mt-3 text-lg md:text-xl text-white/80 max-w-2xl mx-auto">Övervaka bokningar, gäster och AI-svar i realtid.</p>
-          <div className="mt-6 flex flex-wrap gap-3 justify-center">
-            <button className="rounded-full px-6 py-3 font-semibold text-white bg-pink-500 hover:bg-pink-600 shadow-md ring-1 ring-pink-300" onClick={()=>setCreateOpen(true)}>Ny bokning</button>
-            <button className="rounded-full px-6 py-3 font-semibold text-white/90 bg-white/10 border border-white/20 hover:bg-white/15" onClick={()=>setSettingsOpen(true)}>Inställningar</button>
+    <div className="min-h-screen text-gray-900 bg-white">
+      {/* Top Nav */}
+      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-pink-100">
+        <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
+          <a href="#" className="flex items-center gap-2 font-bold text-xl">
+            <ForkLogo />
+            <span>Bokäta</span>
+          </a>
+          <nav className="hidden md:flex items-center gap-4 text-base">
+            <a
+              href="#features"
+              onClick={(e) => onAnchorClick(e, '#features')}
+              className="px-3 py-1 rounded-full text-pink-700 font-semibold hover:bg-pink-50 hover:text-pink-800"
+            >
+              Funktioner
+            </a>
+            <a
+              href="#pricing"
+              onClick={(e) => onAnchorClick(e, '#pricing')}
+              className="px-3 py-1 rounded-full text-pink-700 font-semibold hover:bg-pink-50 hover:text-pink-800"
+            >
+              Priser
+            </a>
+          </nav>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => openAuth('login')}
+              className="hidden sm:inline-flex items-center px-4 py-2 rounded-full border border-pink-200 text-pink-700 hover:bg-pink-50"
+            >
+              Log in
+            </button>
+            <button
+              onClick={() => openAuth('signup')}
+              className="inline-flex items-center px-4 py-2 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700"
+            >
+              Sign up
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Top stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 shadow-lg rounded-lg border border-pink-300"><p className="text-sm text-gray-500">📅 Bokningar idag</p><h2 className="text-xl font-bold text-gray-800">{dayBookings.length}</h2></div>
-        <div className="bg-white p-4 shadow-lg rounded-lg border border-pink-300"><p className="text-sm text-gray-500">👨‍👩‍👧‍👦 Antal gäster idag</p><h2 className="text-xl font-bold text-gray-800">{totalGuestsDay}</h2></div>
-        <div className="bg-white p-4 shadow-lg rounded-lg border border-pink-300"><p className="text-sm text-gray-500">🕓 Mest bokade tid</p><h2 className="text-xl font-bold text-gray-800">{busiestLeast.max}</h2></div>
-        <div className="bg-white p-4 shadow-lg rounded-lg border border-pink-300"><p className="text-sm text-gray-500">🕓 Minst bokade tid</p><h2 className="text-xl font-bold text-gray-800">{busiestLeast.min}</h2></div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 shadow-lg rounded-lg border border-pink-300"><p className="text-sm text-gray-500">📊 Totalt denna vecka</p><h2 className="text-xl font-bold text-gray-800">348</h2></div>
-        <div className="bg-white p-4 shadow-lg rounded-lg border border-pink-300"><p className="text-sm text-gray-500">💖 Stammiskunder</p><h2 className="text-xl font-bold text-gray-800">35</h2></div>
-        <div className="bg-white p-4 shadow-lg rounded-lg border border-pink-300"><p className="text-sm text-gray-500">⭐️ Google-recensioner</p><h2 className="text-xl font-bold text-gray-800">4.8 ★</h2><p className="text-xs text-gray-500">12 nya denna vecka</p></div>
-        <div className="bg-white p-4 shadow-lg rounded-lg border border-pink-300"><p className="text-sm text-gray-500">🤖 Svar skickade av AI denna vecka</p><h2 className="text-xl font-bold text-gray-800">37</h2></div>
+      {/* Hero Section */}
+      <section className="bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 text-white px-6 py-16 text-center">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight mb-4">Bokäta</h1>
+          <h2 className="text-2xl md:text-3xl mb-4">Den lagar inte mat. Den lagar allt annat.</h2>
+          <p className="text-lg md:text-xl leading-relaxed max-w-2xl mx-auto mb-8">
+            AI-assistenten som sköter bokningar, svarar gäster automatiskt och fyller dina bord utan krångel.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <a
+              href="#pricing"
+              onClick={(e) => onAnchorClick(e, '#pricing')}
+              className="inline-flex justify-center items-center px-6 py-3 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700"
+            >
+              Kom igång nu
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* Problem + Solution Section */}
+      <section className="bg-white px-6 py-12">
+        <div className="max-w-3xl mx-auto text-center">
+          <h3 className="text-2xl md:text-3xl font-extrabold text-pink-700 mb-4">
+            Hinner du inte svara på mejl, hantera bokningar eller följa upp gäster?
+          </h3>
+          <p className="text-gray-700 text-lg mb-6">
+            Förfrågningar blir liggande. Bord står tomma. Och återbesöken uteblir.
+          </p>
+          <h3 className="text-2xl md:text-3xl font-extrabold text-pink-700 mb-4">
+            Bokäta gör (nästan) allt det där åt dig.
+          </h3>
+          <p className="text-gray-700 text-lg">
+            Den svarar på frågor, föreslår lediga tider, hanterar väntelista och skickar smarta påminnelser. Efter besöket ber den om
+            Google-omdömen och lockar till återbesök.
+          </p>
+        </div>
+      </section>
+
+      {/* Dashboard Preview (mock) */}
+      <section className="bg-white px-6 py-10">
+        <div className="max-w-6xl mx-auto">
+          <div className="rounded-2xl overflow-hidden shadow-lg ring-1 ring-pink-100">
+            <DashboardMock />
+          </div>
+          <p className="text-sm font-semibold text-pink-700 mt-3 text-center tracking-wide">
+            Exempel på dashboard: bokningar, gäster och AI-svar i realtid.
+          </p>
+        </div>
+      </section>
+
+      {/* Funktioner */}
+      <section className="px-6 py-10" id="features">
+        <div className="max-w-6xl mx-auto rounded-3xl overflow-hidden border border-pink-100 shadow-[0_14px_40px_rgba(236,72,153,0.15)]">
+          <div className="bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-700 text-white text-center px-6 py-10">
+            <h3 className="text-3xl md:text-4xl font-extrabold">Funktioner</h3>
+            <p className="opacity-90">Så funkar det och allt du behöver, samlat.</p>
+            <div className="mt-4 flex justify-center gap-2 text-sm">
+              <a
+                href="#features"
+                onClick={(e) => onAnchorClick(e, '#features')}
+                className="px-4 py-2 rounded-full bg-white text-pink-700 font-semibold shadow ring-1 ring-pink-200 hover:bg-pink-50 text-base md:text-lg"
+              >
+                Funktioner
+              </a>
+              <a
+                href="#pricing"
+                onClick={(e) => onAnchorClick(e, '#pricing')}
+                className="px-4 py-2 rounded-full bg-white text-pink-700 font-semibold shadow ring-1 ring-pink-200 hover:bg-pink-50 text-base md:text-lg"
+              >
+                Priser
+              </a>
+            </div>
+          </div>
+          <div className="bg-white px-6 md:px-10 py-10">
+            {/* Steps */}
+            <div className="grid md:grid-cols-3 gap-6 mb-10">
+              <StepCard
+                index={1}
+                title="Ställ in kapacitet & tider"
+                text="Lägg in öppettider, sittningar och bord. Importera från kalender om du vill."
+              />
+              <StepCard index={2} title="AI:n sköter dialogen" text="Gästen får svar direkt, med förslag, väntelista och bekräftelse." />
+              <StepCard index={3} title="Få fler återbesök" text="Efter besöket: omdömen och erbjudanden för att få gästen tillbaka." />
+            </div>
+
+            {/* Features grid */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 text-gray-900">
+              <Feature>Svarar på mejl & frågor automatiskt</Feature>
+              <Feature>Bokningar med bekräftelse och påminnelse</Feature>
+              <Feature>Din egen AI-assistent hanterar dina bokningar</Feature>
+              <Feature>Erbjudanden för att få gäster tillbaka</Feature>
+              <Feature>Be om Google-omdömen efter besök</Feature>
+              <Feature>Smart väntelista och överlappsskydd</Feature>
+              <Feature>Enkel statistik & export</Feature>
+              <Feature>Förhandsbetalning valbar (grupper/event)</Feature>
+            </div>
+
+            <div className="mt-10 flex items-center justify-center">
+              <a
+                href="#pricing"
+                onClick={(e) => onAnchorClick(e, '#pricing')}
+                className="inline-flex justify-center items-center px-6 py-3 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700 text-lg"
+                role="button"
+              >
+                Kom igång
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <section className="px-6 py-10" id="pricing">
+        <div className="max-w-6xl mx-auto rounded-3xl overflow-hidden border border-pink-100 shadow-[0_14px_40px_rgba(236,72,153,0.15)]">
+          <div className="bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-700 text-white text-center px-6 py-10">
+            <h2 className="text-3xl md:text-4xl font-extrabold">Priser</h2>
+            <p className="mt-2">
+              <span className="inline-block bg-white text-pink-700 font-semibold px-3 py-1 rounded-full">Gratisperiod: 14 dagar!</span>
+            </p>
+            <p className="opacity-90 text-sm mt-2">Priser inkl. moms. Ingen bindningstid på månadsplanen.</p>
+          </div>
+          <div className="bg-white px-6 md:px-10 py-10">
+            <div className="grid md:grid-cols-3 gap-8">
+              <PriceCard
+                title="Månad"
+                priceLine="790 kr/månad"
+                note="Utan bindningstid, mest flexibelt"
+                cta="Starta månadsplan"
+                onSelect={() => openPlan(PLAN_MAP.manad)}
+              />
+              <PriceCard
+                title="1 år (Populär)"
+                highlight
+                priceLine="658 kr/månad · 7 900 kr"
+                note="Spara 1 920 kr jämfört med månadspris"
+                cta="Välj årsplan"
+                onSelect={() => openPlan(PLAN_MAP.ettar)}
+              />
+              <PriceCard
+                title="2 år (Bästa deal)"
+                priceLine="579 kr/månad · 13 900 kr"
+                note="Spara 5 760 kr jämfört med månadspris"
+                cta="Välj 2-årsplan"
+                onSelect={() => openPlan(PLAN_MAP.tvar)}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="px-6 py-10" id="faq">
+        <div className="max-w-6xl mx-auto rounded-3xl overflow-hidden border border-pink-100 shadow-[0_14px_40px_rgba(236,72,153,0.15)]">
+          <div className="bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-700 text-white text-center px-6 py-10">
+            <h2 className="text-2xl md:text-3xl font-extrabold">Vanliga frågor</h2>
+          </div>
+          <div className="bg-white px-6 md:px-10 py-10">
+            <div className="space-y-6 text-gray-900">
+              <Faq
+                q="Hur funkar betalningen?"
+                a="Betala via Stripe (kort eller faktura). Du får kvitto direkt. Årsplaner förskottsbetalas."
+              />
+              <Faq
+                q="Kan jag avsluta?"
+                a="Månadsplanen kan sägas upp när som helst. Early-adopter-planerna förnyas inte automatiskt, de upphör efter perioden."
+              />
+              <Faq q="Kan jag aktivera förhandsbetalning?" a="Ja, valbart för särskilda bokningar (t.ex. grupper, event, brunch)." />
+              <Faq q="Behöver jag installera en app?" a="Nej, allt sker i webbläsaren (dator eller surfplatta)." />
+              <Faq
+                q="Hur anpassar jag AI:n?"
+                a="Du förkonfigurerar svar, meny, sittningar och policy. AI:n följer dina regler och kan eskalera till människa."
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-white border-t border-pink-100 text-center text-xs text-gray-500 py-6">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+            <p>© {new Date().getFullYear()} Bokäta</p>
+            <div className="flex flex-wrap items-center gap-4">
+              <a href="#" className="hover:text-pink-700">
+                Integritet
+              </a>
+              <a href="#" className="hover:text-pink-700">
+                Villkor
+              </a>
+            </div>
+          </div>
+        </div>
+      </footer>
+
+      {/* Drawers & Modals */}
+      <PlanDrawer open={drawerOpen} plan={selectedPlan} onClose={() => setDrawerOpen(false)} />
+      <AuthModal
+        open={authOpen}
+        mode={authMode}
+        onClose={() => setAuthOpen(false)}
+        onSubmit={handleAuthSubmit}
+        onToggleMode={(m) => setAuthMode(m)}
+      />
+    </div>
+  );
+}
+
+function ForkLogo() {
+  return (
+    <svg className="h-8 w-8" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="forkGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#FF2BD0" />
+          <stop offset="100%" stopColor="#7A3CFF" />
+        </linearGradient>
+      </defs>
+      <g transform="rotate(-25 32 32)">
+        <rect x="18" y="10" width="8" height="18" rx="3" fill="url(#forkGrad)" />
+        <rect x="28" y="10" width="8" height="18" rx="3" fill="url(#forkGrad)" />
+        <rect x="38" y="10" width="8" height="18" rx="3" fill="url(#forkGrad)" />
+        <rect x="26" y="28" width="12" height="26" rx="6" fill="url(#forkGrad)" />
+      </g>
+    </svg>
+  );
+}
+
+function DashboardMock() {
+  const [viewDate, setViewDate] = React.useState(new Date(2025, 8, 5)); // Sep 2025
+
+  const monthLabel = viewDate.toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' });
+  const monthLabelCap = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
+
+  const start = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+  const end = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
+  const daysInMonth = end.getDate();
+  const startOffset = (start.getDay() + 6) % 7; // Monday=0
+  const totalCells = 42;
+  const cells = Array.from({ length: totalCells }, (_, idx) => {
+    const dayNum = idx - startOffset + 1;
+    return dayNum >= 1 && dayNum <= daysInMonth ? dayNum : null;
+  });
+
+  const isActiveDay = (day) => viewDate.getFullYear() === 2025 && viewDate.getMonth() === 8 && day === 5;
+
+  const prevMonth = () => setViewDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  const nextMonth = () => setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+
+  const stats = [
+    { label: 'Bokningar idag', value: '26', icon: '📅' },
+    { label: 'Antal gäster idag', value: '79', icon: '👥' },
+    { label: 'Mest bokade tid', value: '11:00–12:00', icon: '⏰' },
+    { label: 'Totalt denna vecka', value: '348', icon: '📊' },
+    { label: 'Stammiskunder', value: '35', icon: '⭐️' },
+    { label: 'Svar skickade av AI denna vecka', value: '37', icon: '🤖' },
+  ];
+
+  const schedule = [
+    {
+      time: '11:00',
+      items: [
+        ['Emma Larsson', 2, 'green'],
+        ['Linnéa Bergström', 2, 'teal'],
+        ['Alva Lind', 2, 'yellow'],
+        ['Noel Svensson', 2, 'rose'],
+      ],
+    },
+    {
+      time: '11:30',
+      items: [
+        ['Per Andersson', 2, 'blue'],
+        ['Gustav Åberg', 2, 'teal'],
+        ['Klara Nyman', 2, 'green'],
+        ['Maja Berg', 2, 'violet'],
+      ],
+    },
+    {
+      time: '12:00',
+      items: [
+        ['Sofie Dahl', 2, 'yellow'],
+        ['Elin Wiklund', 3, 'amber'],
+        ['Sara Lind', 3, 'orange'],
+        ['Viktor Lindqvist', 2, 'rose'],
+      ],
+    },
+    {
+      time: '12:30',
+      items: [
+        ['Oskar Nilsson', 2, 'blue'],
+        ['Agnes Holmgren', 2, 'teal'],
+        ['Henrik Holm', 2, 'indigo'],
+        ['Familjen Nyström', 3, 'green'],
+      ],
+    },
+    {
+      time: '13:00',
+      items: [
+        ['Camilla Svensson', 2, 'rose'],
+        ['Familjen Sjögren', 4, 'teal'],
+        ['Johanna Sjöberg', 3, 'yellow'],
+        ['Hugo Dahl', 2, 'amber'],
+      ],
+    },
+    {
+      time: '13:30',
+      items: [
+        ['Fredrik Björk', 2, 'blue'],
+        ['Patrik Olsson', 2, 'indigo'],
+        ['Matilda Åkesson', 2, 'violet'],
+        ['Elin Karlsson', 2, 'rose'],
+      ],
+    },
+    { time: '14:00', items: [['Erik Sandberg', 4, 'green']] },
+  ];
+
+  return (
+    <div className="rounded-3xl border border-pink-100 shadow-[0_14px_40px_rgba(236,72,153,0.2)] overflow-hidden bg-white">
+      {/* Top gradient header */}
+      <div className="relative">
+        <div className="h-36 sm:h-40 bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-700" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
+          <h2 className="text-4xl sm:text-5xl font-extrabold text-white drop-shadow">Dashboard</h2>
+          <p className="text-white/90 text-sm sm:text-base">Övervaka bokningar, gäster och AI-svar i realtid.</p>
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <button className="px-4 py-2 rounded-full bg-pink-600 text-white text-sm font-semibold shadow hover:bg-pink-700">
+              Ny bokning
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Calendar + Day view */}
-      <div className="bg-white shadow rounded-lg p-4">
-        <h3 className="text-lg font-bold text-gray-700 mb-4">{(()=>{const dim=new Date(year,month+1,0).getDate(); const d=Math.min(selectedDay,dim); const dd=new Date(year,month,d); return `${WD_FULL[dd.getDay()]} ${d} ${MONTHS[month]} ${year}`;})()}</h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Month */}
-          <div className="border border-gray-300 rounded-lg p-4">
-            <div className="grid grid-cols-3 items-center mb-2">
-              <button className="justify-self-start h-8 w-8 rounded-full border border-pink-300 text-pink-700 hover:bg-pink-50" onClick={()=>setMonth(m=>{if(m===0){setYear(y=>y-1); return 11;} return m-1;})} aria-label="Föregående månad">‹</button>
-              <p className="justify-self-center text-sm font-bold text-gray-700 text-center">{MONTHS[month]} {year}</p>
-              <button className="justify-self-end h-8 w-8 rounded-full border border-pink-300 text-pink-700 hover:bg-pink-50" onClick={()=>setMonth(m=>{if(m===11){setYear(y=>y+1); return 0;} return m+1;})} aria-label="Nästa månad">›</button>
+      {/* Stat cards */}
+      <div className="px-4 sm:px-6 md:px-8 py-4 grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        {stats.map((s) => (
+          <StatCard key={s.label} icon={s.icon} label={s.label} value={s.value} />
+        ))}
+      </div>
+
+      {/* Calendar + timeline */}
+      <div className="px-4 sm:px-6 md:px-8 pb-6">
+        <div className="grid lg:grid-cols-3 gap-4">
+          {/* Left: Calendar card */}
+          <div className="rounded-2xl border border-pink-200 bg-white p-2 shadow-sm text-[11px]">
+            <div className="mb-2">
+              <div className="flex items-center justify-center gap-2 text-gray-700">
+                <button
+                  onClick={prevMonth}
+                  aria-label="Föregående månad"
+                  className="h-7 w-7 rounded-md border border-gray-200 hover:bg-gray-50"
+                >
+                  ‹
+                </button>
+                <div className="text-xs font-semibold w-32 text-center select-none">{monthLabelCap}</div>
+                <button
+                  onClick={nextMonth}
+                  aria-label="Nästa månad"
+                  className="h-7 w-7 rounded-md border border-gray-200 hover:bg-gray-50"
+                >
+                  ›
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-7 text-center text-sm text-gray-700 gap-1">
-              {WD_SHORT.map(d=>(<div key={d} className="font-semibold text-gray-500">{d}</div>))}
-              {(()=>{const off=(new Date(year,month,1).getDay()+6)%7; const days=new Date(year,month+1,0).getDate(); const disp=Math.min(selectedDay,days); const blanks=Array.from({length:off},(_,i)=><div key={`b-${i}`}/>); const cells=Array.from({length:days},(_,i)=>{const day=i+1; const sel=day===disp; return (<div key={day} onClick={()=>setSelectedDay(day)} className={`rounded-full w-8 h-8 flex items-center justify-center ${sel?"bg-pink-500 text-white font-bold ring-2 ring-pink-700":"text-gray-800 hover:bg-gray-100 cursor-pointer"}`} role="button" tabIndex={0} aria-label={`Välj ${day} ${MONTHS[month]} ${year}`}>{day}</div>);}); return [...blanks,...cells];})()}
+            <div className="grid grid-cols-7 text-center text-[9px] uppercase tracking-wide text-gray-500">
+              {['Må', 'Ti', 'On', 'To', 'Fr', 'Lö', 'Sö'].map((d) => (
+                <div key={d} className="py-1">
+                  {d}
+                </div>
+              ))}
+            </div>
+            <div className="mt-1 grid grid-cols-7 gap-1">
+              {cells.map((day, idx) => (
+                <div
+                  key={idx}
+                  className={
+                    'h-6 w-6 md:h-7 md:w-7 mx-auto flex items-center justify-center rounded-md text-[10px] ' +
+                    (day
+                      ? isActiveDay(day)
+                        ? 'bg-pink-600 text-white font-semibold ring-2 ring-pink-300 ring-offset-2'
+                        : 'bg-gray-50 hover:bg-gray-100'
+                      : 'invisible')
+                  }
+                >
+                  {day ?? ''}
+                </div>
+              ))}
+            </div>
+
+            {/* Summary stats under calendar */}
+            <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+              <div className="rounded-lg bg-gradient-to-br from-pink-600 to-rose-500 text-white px-2 py-1 flex items-center justify-between shadow-sm">
+                <span className="font-semibold">Kvar idag</span>
+                <span className="font-bold">26</span>
+              </div>
+              <div className="rounded-lg bg-purple-50 border border-purple-200 text-purple-900 px-2.5 py-1.5 flex items-center justify-between">
+                <span>Morgon</span>
+                <span>0</span>
+              </div>
+              <div className="rounded-lg bg-pink-50 border border-pink-200 text-pink-900 px-2.5 py-1.5 flex items-center justify-between">
+                <span>Lunch</span>
+                <span>20</span>
+              </div>
+              <div className="rounded-lg bg-rose-50 border border-rose-200 text-rose-900 px-2.5 py-1.5 flex items-center justify-between">
+                <span>Kväll</span>
+                <span>6</span>
+              </div>
             </div>
           </div>
 
-          {/* Day schedule */}
-          <div className="md:col-span-3 border border-gray-300 rounded-lg p-4">
-            <div className="flex flex-wrap items-center gap-2 mb-4">
-              {(["Alla","Frukost","Lunch","Middag"] as Meal[]).map(m=>{const on=activeMeal===m; return (
-                <button key={m} className={`px-3 py-1 text-sm rounded transition border focus:outline-none focus:ring-2 focus:ring-pink-400 ${on?"bg-pink-100 border-pink-500 text-pink-700 font-bold":"bg-white border-pink-300 text-pink-600 hover:bg-pink-50"}`} onClick={()=>setActiveMeal(m)} aria-pressed={on}>{m} ({guestsByMeal[m]})</button>
-              );})}
-              <span className="ml-auto text-xs text-gray-500">{totals.count} bokningar • {totals.guests} gäster</span>
-            </div>
-            {Object.keys(groupedByTime).length===0?(
-              <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded border border-dashed border-gray-300">Inga bokningar i denna tidsperiod.</div>
-            ):(
-              <div className="space-y-2">
-                {Object.keys(groupedByTime).sort((a,b)=>timeToMin(a)-timeToMin(b)).map(time=>(
-                  <div key={time} className="bg-gray-50 rounded-md p-2 border border-gray-200">
-                    <div className="flex items-start gap-3">
-                      <div className="w-14 shrink-0 text-sm font-semibold text-gray-700 pt-1">{time}</div>
-                      <div className="flex flex-wrap gap-2">
-                        {groupedByTime[time].map((b,idx)=>(
-                          <div key={`${time}-${idx}`} className={`px-2 py-1 rounded shadow border text-sm text-gray-700 ${b.color??"bg-pink-100"} ${b.note?"cursor-pointer hover:brightness-95":""}`} onClick={b.note?()=>setOpenBooking(b):undefined} role={b.note?"button":undefined} tabIndex={b.note?0:-1} title={b.note?"Visa anteckning":undefined}>
-                            <div className="font-medium">{b.name}{b.note&&<span className="ml-1">📎</span>}</div>
-                            <div className="text-xs text-gray-600">{b.guests} gäster</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+          {/* Right: Timeline */}
+          <div className="lg:col-span-2 rounded-2xl border border-pink-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between text-sm text-gray-600 mb-3">
+              <div className="flex gap-2">
+                {['Alla', 'Frukost', 'Lunch', 'Middag'].map((tag) => (
+                  <span
+                    key={tag}
+                    className={`px-2 py-1 rounded-full border ${
+                      tag === 'Lunch' ? 'bg-pink-100 border-pink-200 text-pink-700' : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    {tag}
+                  </span>
                 ))}
               </div>
+            </div>
+            <div className="mb-2 text-sm text-gray-600">25 bokningar • 66 gäster</div>
+            <div className="space-y-2">
+              {schedule.map((row) => (
+                <div key={row.time} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-gray-500 w-14 shrink-0">{row.time}</span>
+                    <div className="flex flex-wrap gap-2">
+                      {row.items.map(([name, guests, variant]) => (
+                        <BookChip key={name + row.time} name={name} guests={guests} variant={variant} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="text-center text-xs text-gray-400 mt-4">© 2025 Bokäta</div>
+      </div>
+    </div>
+  );
+}
+
+function StepCard({ index, title, text }) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-pink-200 p-6 shadow-md bg-gradient-to-br from-pink-50 via-rose-50 to-purple-50">
+      <span
+        aria-hidden
+        className="absolute inset-0 flex items-center justify-center text-7xl md:text-8xl font-black bg-gradient-to-br from-[#3d015f] to-pink-600 bg-clip-text text-transparent opacity-10 select-none"
+      >
+        {index}
+      </span>
+      <h4 className="relative font-semibold mb-2 text-pink-900">{title}</h4>
+      <p className="relative text-gray-800">{text}</p>
+    </div>
+  );
+}
+
+function StatCard({ icon, label, value }) {
+  return (
+    <div className="rounded-xl border border-pink-200 bg-white p-4 shadow-sm flex items-center gap-3">
+      <div className="text-lg select-none">{icon}</div>
+      <div>
+        <div className="text-[11px] uppercase tracking-wide text-gray-500">{label}</div>
+        <div className="text-xl font-semibold text-gray-900">{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function BookChip({ name, guests, variant = 'gray' }) {
+  const variants = {
+    green: 'bg-green-100 text-green-800 border-green-200',
+    teal: 'bg-teal-100 text-teal-800 border-teal-200',
+    yellow: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    amber: 'bg-amber-100 text-amber-800 border-amber-200',
+    orange: 'bg-orange-100 text-orange-800 border-orange-200',
+    blue: 'bg-blue-100 text-blue-800 border-blue-200',
+    indigo: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    violet: 'bg-violet-100 text-violet-800 border-violet-200',
+    rose: 'bg-rose-100 text-rose-800 border-rose-200',
+    gray: 'bg-gray-100 text-gray-800 border-gray-200',
+  };
+
+  const cls = variants[variant] || variants.gray;
+
+  return (
+    <span className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-md border text-xs font-medium ${cls}`}>
+      <span className="truncate max-w-[10rem]">{name}</span>
+      <span className="opacity-80">{guests} gäster</span>
+      <span className="opacity-70">•</span>
+    </span>
+  );
+}
+
+function Feature({ children }) {
+  return (
+    <div className="rounded-2xl bg-gradient-to-br from-white via-pink-50 to-rose-50 p-5 border border-pink-200 shadow-md">
+      {children}
+    </div>
+  );
+}
+
+function PriceCard({ title, priceLine, note, cta, highlight, onSelect }) {
+  return (
+    <div
+      className={`relative bg-white p-6 rounded-2xl shadow-sm border ${
+        highlight ? 'border-2 border-pink-500' : 'border-pink-100'
+      }`}
+    >
+      {highlight && (
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs px-2 py-1 rounded-full bg-pink-600 text-white shadow">
+          Populär
+        </span>
+      )}
+      <h3 className="text-xl font-semibold mb-1">{title}</h3>
+      <p className="text-gray-800">{priceLine}</p>
+      {note && <p className="text-sm text-gray-500 mt-2">{note}</p>}
+      <button
+        onClick={() => onSelect && onSelect({ title, price: priceLine, note })}
+        className="mt-5 w-full rounded-full bg-pink-600 text-white py-2.5 hover:bg-pink-700"
+      >
+        {cta}
+      </button>
+    </div>
+  );
+}
+
+function PlanDrawer({ open, plan, onClose }) {
+  return (
+    <div className={`fixed inset-0 z-50 ${open ? '' : 'pointer-events-none'}`}>
+      <div
+        className={`absolute inset-0 bg-black/30 transition-opacity ${open ? 'opacity-100' : 'opacity-0'}`}
+        onClick={onClose}
+      />
+      <aside
+        className={`absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl border-l border-pink-100 transform transition-transform ${
+          open ? 'translate-x-0' : 'translate-x-full'
+        }`}
+        aria-hidden={!open}
+      >
+        <div className="p-6 flex items-start justify-between border-b">
+          <div>
+            <h3 className="text-xl font-bold">{plan?.title ?? 'Plan'}</h3>
+            <p className="text-gray-600">{plan?.price}</p>
+          </div>
+          <button
+            aria-label="Stäng"
+            onClick={onClose}
+            className="rounded-full px-2 py-1 hover:bg-gray-100"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="p-6 space-y-4 text-sm">
+          <p>{plan?.note}</p>
+          <ul className="list-disc list-inside space-y-1 text-gray-700">
+            <li>Fakturering via Stripe.</li>
+            <li>Ingen bindningstid på månadsplan.</li>
+            <li>Avsluta när som helst inför nästa period.</li>
+          </ul>
+          <a
+            href="/signup"
+            className="inline-flex justify-center items-center px-4 py-2 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700"
+          >
+            Fortsätt
+          </a>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function PlanPill({ active, children, ...props }) {
+  return (
+    <button
+      type="button"
+      className={`px-3 py-1.5 rounded-full border text-sm ${
+        active ? 'bg-pink-600 text-white border-pink-600' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+      }`}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+function AuthModal({ open, mode = 'login', onClose, onSubmit, onToggleMode }) {
+  const [email, setEmail] = React.useState('');
+  const [planKey, setPlanKey] = React.useState('manad');
+
+  React.useEffect(() => {
+    if (!open) {
+      setEmail('');
+      setPlanKey('manad');
+    }
+  }, [open]);
+
+  const title = mode === 'signup' ? 'Skapa konto' : 'Logga in';
+  const next = () => onSubmit && onSubmit(email, mode, planKey);
+  const onKey = (e) => {
+    if (e.key === 'Enter') next();
+  };
+
+  return (
+    <div className={`fixed inset-0 z-50 ${open ? '' : 'hidden'}`}>
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="absolute inset-0 flex items-start justify-center mt-28 px-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-pink-100 p-6">
+          <h3 className="text-2xl font-bold text-center mb-6">{title}</h3>
+
+          {mode === 'signup' && (
+            <div className="mb-4">
+              <div className="text-sm font-medium mb-2">Välj plan</div>
+              <div className="flex gap-2">
+                <PlanPill active={planKey === 'manad'} onClick={() => setPlanKey('manad')}>
+                  Månad
+                </PlanPill>
+                <PlanPill active={planKey === 'ettar'} onClick={() => setPlanKey('ettar')}>
+                  1 år
+                </PlanPill>
+                <PlanPill active={planKey === 'tvar'} onClick={() => setPlanKey('tvar')}>
+                  2 år
+                </PlanPill>
+              </div>
+            </div>
+          )}
+
+          <label className="block text-sm text-gray-700 mb-2">Ange e-postadressen för ditt konto</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={onKey}
+            placeholder="E-post"
+            className="w-full h-12 rounded-lg border border-gray-300 px-4 mb-4 focus:outline-none focus:ring-2 focus:ring-pink-500"
+          />
+          <button onClick={next} className="w-full h-12 rounded-full bg-pink-700 text-white font-semibold">
+            Nästa
+          </button>
+
+          <div className="text-center text-sm mt-4">
+            {mode === 'login' ? (
+              <span>
+                Inget konto än?{' '}
+                <button
+                  onClick={() => onToggleMode && onToggleMode('signup')}
+                  className="text-pink-700 hover:underline"
+                >
+                  Skapa ett konto
+                </button>
+              </span>
+            ) : (
+              <span>
+                Har du redan ett konto?{' '}
+                <button
+                  onClick={() => onToggleMode && onToggleMode('login')}
+                  className="text-pink-700 hover:underline"
+                >
+                  Logga in
+                </button>
+              </span>
             )}
           </div>
         </div>
       </div>
-
-      {/* Note modal */}
-      {openBooking&&(
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={()=>setOpenBooking(null)} aria-hidden="true" />
-          <div role="dialog" aria-modal="true" className="relative bg-white rounded-2xl shadow-xl w-[92vw] max-w-md p-6 border border-pink-200">
-            <button className="absolute top-3 right-3 text-gray-500 hover:text-gray-700" onClick={()=>setOpenBooking(null)} aria-label="Stäng">✕</button>
-            <h4 className="text-lg font-bold text-gray-800">{openBooking.name} – {openBooking.time}</h4>
-            <p className="text-sm text-gray-500 mb-4">{openBooking.guests} gäster{openBooking.tableId?` • Bord ${openBooking.tableId}`:""}</p>
-            <div className="bg-pink-50 border border-pink-200 rounded-lg p-3 text-gray-800 whitespace-pre-wrap">{openBooking.notes||"(Ingen anteckning)"}</div>
-            <div className="mt-5 flex justify-end"><button className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow" onClick={()=>setOpenBooking(null)}>OK</button></div>
-          </div>
-        </div>
-      )}
-
-      {/* Create booking */}
-      {createOpen&&(
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={()=>setCreateOpen(false)} aria-hidden="true" />
-          <div role="dialog" aria-modal="true" className="relative bg-white rounded-2xl shadow-xl w-[92vw] max-w-md p-6 border border-pink-200">
-            <button className="absolute top-3 right-3 text-gray-500 hover:text-gray-700" onClick={()=>setCreateOpen(false)} aria-label="Stäng">✕</button>
-            <h4 className="text-lg font-bold text-gray-800">Ny bokning</h4>
-            <div className="mt-4 space-y-3">
-              <label className="block text-sm"><span className="text-gray-600">Datum</span><input type="date" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300" value={formDate} onChange={e=>setFormDate(e.target.value)} /></label>
-              <label className="block text-sm"><span className="text-gray-600">Tid</span><select className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300" value={formTime} onChange={e=>setFormTime(e.target.value)}>{ALL_TIMES.map(t=>(<option key={t}>{t}</option>))}</select></label>
-              <label className="block text-sm"><span className="text-gray-600">Namn</span><input className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300" placeholder="För- och efternamn" value={formName} onChange={e=>setFormName(e.target.value)} /></label>
-              <label className="block text-sm"><span className="text-gray-600">Gäster</span><input type="number" min={1} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300" value={formGuests} onChange={e=>setFormGuests(Math.max(1,Number(e.target.value)||1))} /></label>
-              <label className="block text-sm"><span className="text-gray-600">Anteckning</span><textarea rows={3} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300" placeholder="Allergier, barnstol, hund, vegan…" value={formNotes} onChange={e=>setFormNotes(e.target.value)} /></label>
-            </div>
-            {formError&&(<div className="pt-2 text-sm text-red-600">{formError}</div>)}
-            <div className="pt-4 flex justify-end gap-2"><button className="px-4 py-2 rounded-lg border border-gray-300" onClick={()=>setCreateOpen(false)}>Avbryt</button><button className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow" onClick={handleCreate}>Skapa</button></div>
-          </div>
-        </div>
-      )}
-
-      {/* Settings */}
-      {settingsOpen&&(
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/40" onClick={()=>setSettingsOpen(false)} aria-hidden="true" />
-          <div className="absolute right-0 top-0 h-full w-full max-w-2xl bg-gradient-to-b from-pink-50 via-white to-purple-50 shadow-xl border-l border-pink-200 p-6 overflow-y-auto">
-            <div className="sticky top-0 z-10 flex items-center justify-between mb-4 bg-white/80 backdrop-blur border-b border-pink-200 rounded-t-xl px-1 py-3">
-              <h4 className="text-xl font-bold text-gray-800">Inställningar</h4>
-              <button className="text-gray-500 hover:text-gray-700" onClick={()=>setSettingsOpen(false)} aria-label="Stäng">✕</button>
-            </div>
-
-            <div className="space-y-6">
-              <section className="border border-pink-200 rounded-xl p-4 bg-white shadow-sm">
-                <h5 className="font-semibold mb-3 text-pink-700">Restauranginfo</h5>
-                <label className="block text-sm mb-2">E‑post för bokningar<input className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300" value={config.info.email} onChange={e=>setConfig({...config, info:{...config.info, email:e.target.value}})} /></label>
-              </section>
-
-              <section className="border border-pink-200 rounded-xl p-4 bg-white shadow-sm">
-                <h5 className="font-semibold mb-3 text-pink-700">Kapacitet & tider</h5>
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="text-sm">Gräns för grupp<input type="number" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300" value={config.seating.groupThreshold} onChange={e=>setConfig({...config, seating:{...config.seating, groupThreshold:Math.max(1,Number(e.target.value)||1)}})} /></label>
-                  <label className="text-sm">Barnstolar<input type="number" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300" value={config.seating.highChairs} onChange={e=>setConfig({...config, seating:{...config.seating, highChairs:Math.max(0,Number(e.target.value)||0)}})} /></label>
-                  <label className="text-sm col-span-2">Max gäster per bokning<input type="number" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300" value={config.escalation.maxGuestsPerReservation} onChange={e=>setConfig({...config, escalation:{...config.escalation, maxGuestsPerReservation:Math.max(1,Number(e.target.value)||1)}})} /></label>
-                </div>
-
-                <div className="mt-6">
-                  <div className="text-sm font-semibold text-gray-700 mb-2">Öppettider (normala)</div>
-                  <div className="divide-y rounded-lg border border-pink-200 bg-pink-50/40">
-                    {DAYS_ORDER.map(day=>{const d=config.hours.normal[day]; return (
-                      <div key={day} className="grid grid-cols-12 items-center gap-2 px-3 py-2">
-                        <div className="col-span-3 capitalize">{day}</div>
-                        <label className="col-span-2 inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={d.closed} onChange={e=>setConfig(prev=>({...prev,hours:{...prev.hours,normal:{...prev.hours.normal,[day]:{...prev.hours.normal[day],closed:e.target.checked}}}}))} />Stängt</label>
-                        <div className="col-span-3"><input type="time" className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60" value={d.open} onChange={e=>setConfig(prev=>({...prev,hours:{...prev.hours,normal:{...prev.hours.normal,[day]:{...prev.hours.normal[day],open:e.target.value}}}}))} disabled={d.closed} /></div>
-                        <div className="col-span-3"><input type="time" className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60" value={d.close} onChange={e=>setConfig(prev=>({...prev,hours:{...prev.hours,normal:{...prev.hours.normal,[day]:{...prev.hours.normal[day],close:e.target.value}}}}))} disabled={d.closed} /></div>
-                      </div>
-                    );})}
-                  </div>
-                </div>
-
-                <div className="mt-6">
-                  <div className="text-sm font-semibold text-gray-700 mb-2">Särskilda öppettider</div>
-                  <div className="space-y-2">
-                    {config.hours.special.map((sp,idx)=>(
-                      <div key={idx} className="grid grid-cols-12 items-center gap-2">
-                        <div className="col-span-3"><input type="date" className="w-full rounded-md border border-gray-300 px-2 py-1" value={sp.date} onChange={e=>setConfig(prev=>{const arr=prev.hours.special.slice(); arr[idx]={...arr[idx],date:e.target.value}; return {...prev,hours:{...prev.hours,special:arr}}})} /></div>
-                        <label className="col-span-2 inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={sp.closed} onChange={e=>setConfig(prev=>{const arr=prev.hours.special.slice(); arr[idx]={...arr[idx],closed:e.target.checked}; return {...prev,hours:{...prev.hours,special:arr}}})} />Stängt</label>
-                        <div className="col-span-3"><input type="time" className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60" value={sp.open} onChange={e=>setConfig(prev=>{const arr=prev.hours.special.slice(); arr[idx]={...arr[idx],open:e.target.value}; return {...prev,hours:{...prev.hours,special:arr}}})} disabled={sp.closed} /></div>
-                        <div className="col-span-3"><input type="time" className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60" value={sp.close} onChange={e=>setConfig(prev=>{const arr=prev.hours.special.slice(); arr[idx]={...arr[idx],close:e.target.value}; return {...prev,hours:{...prev.hours,special:arr}}})} disabled={sp.closed} /></div>
-                        <div className="col-span-1 text-right"><button className="px-2 py-1 rounded-md border hover:bg-gray-50" onClick={()=>setConfig(prev=>({...prev,hours:{...prev.hours,special:prev.hours.special.filter((_,i)=>i!==idx)}}))}>🗑️</button></div>
-                      </div>
-                    ))}
-                    <button className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-pink-300 text-pink-700 bg-white hover:bg-pink-50" onClick={()=>setConfig(prev=>({...prev,hours:{...prev.hours,special:[...prev.hours.special,{date:new Date().toISOString().slice(0,10),closed:false,open:"11:00",close:"17:00"}]}}))}>+ Lägg till dag</button>
-                  </div>
-                </div>
-              </section>
-
-              <section className="border border-pink-200 rounded-xl p-4 bg-white shadow-sm">
-                <h5 className="font-semibold mb-3 text-pink-700">Röda dagar (helgdagar)</h5>
-                <div className="space-y-2">
-                  {HOLIDAYS_2025.map(h => {
-                    const sp = config.hours.special.find(s => s.date === h.date) || { date: h.date, closed: true, open: "11:00", close: "17:00" };
-                    return (
-                      <div key={h.date} className="grid grid-cols-12 items-center gap-2">
-                        <div className="col-span-4">{h.name}<div className="text-xs text-gray-500">{h.date}</div></div>
-                        <label className="col-span-2 inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={sp.closed} onChange={e=>upsertSpecialByDate(h.date,{closed:e.target.checked})} />Stängt</label>
-                        <div className="col-span-3"><input type="time" className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60" value={sp.open} onChange={e=>upsertSpecialByDate(h.date,{open:e.target.value})} disabled={sp.closed} /></div>
-                        <div className="col-span-3"><input type="time" className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60" value={sp.close} onChange={e=>upsertSpecialByDate(h.date,{close:e.target.value})} disabled={sp.closed} /></div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <section className="border border-pink-200 rounded-xl p-4 bg-white shadow-sm">
-                <h5 className="font-semibold mb-3 text-pink-700">Policies</h5>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <label className="inline-flex items-center gap-2"><input type="checkbox" checked={config.policies.vegan} onChange={e=>setConfig({...config,policies:{...config.policies,vegan:e.target.checked}})} />Vegan</label>
-                  <label className="inline-flex items-center gap-2"><input type="checkbox" checked={config.policies.glutenFree} onChange={e=>setConfig({...config,policies:{...config.policies,glutenFree:e.target.checked}})} />Glutenfri</label>
-                  <label className="inline-flex items-center gap-2"><input type="checkbox" checked={config.policies.lactoseFree} onChange={e=>setConfig({...config,policies:{...config.policies,lactoseFree:e.target.checked}})} />Laktosfri</label>
-                  <label className="inline-flex items-center gap-2"><input type="checkbox" checked={config.policies.kidsMenu} onChange={e=>setConfig({...config,policies:{...config.policies,kidsMenu:e.target.checked}})} />Barnmeny</label>
-                  <label className="inline-flex items-center gap-2"><input type="checkbox" checked={config.policies.strollerAllowed} onChange={e=>setConfig({...config,policies:{...config.policies,strollerAllowed:e.target.checked}})} />Barnvagn tillåten</label>
-                  <label className="inline-flex items-center gap-2"><input type="checkbox" checked={config.policies.wheelchair} onChange={e=>setConfig({...config,policies:{...config.policies,wheelchair:e.target.checked}})} />Rullstolsvänligt</label>
-                  <label className="col-span-2 text-sm">Djur
-                    <select className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300" value={config.policies.pets} onChange={e=>setConfig({...config,policies:{...config.policies,pets:e.target.value as PetsPolicy}})}>
-                      <option value="none">Inga</option>
-                      <option value="terrace">Endast terrass</option>
-                      <option value="everywhere">Överallt</option>
-                    </select>
-                  </label>
-                </div>
-              </section>
-
-              <section className="border border-pink-200 rounded-xl p-4 bg-white shadow-sm">
-                <h5 className="font-semibold mb-3 text-pink-700">AI‑profil & kunskapsbas</h5>
-                <label className="block text-sm mb-2">Namn på assistent<input className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300" value={config.ai.name} onChange={e=>setConfig({...config, ai:{...config.ai, name:e.target.value}})} /></label>
-                <label className="block text-sm mb-2">Kunskapsbas (affärsinfo för bokning)<textarea rows={4} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300" ref={knowledgeRef} value={config.ai.knowledge} onChange={e=>setConfig({...config, ai:{...config.ai, knowledge:e.target.value}})} /></label>
-                <div className="text-sm">
-                  <div className="mb-2 text-gray-700">Vanliga frågor</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {faqItems.map((q,i)=>(
-                      <button key={i} type="button" className="border border-pink-300 rounded-lg p-3 bg-pink-50 text-gray-800 hover:bg-pink-100 hover:border-pink-400 transition text-left focus:outline-none focus:ring-2 focus:ring-pink-400" onClick={()=>insertFaqIntoKnowledge(q)} aria-label={`Använd FAQ: ${q}`}>{q}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <textarea rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2" placeholder="Skriv en fråga för att förhandsvisa svaret" value={aiMsg} onChange={e=>setAiMsg(e.target.value)} />
-                  <div className="mt-2 flex gap-2">
-                    <button className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow" onClick={()=>setAiPreview(aiRespond(aiMsg))}>Förhandsvisa</button>
-                    <button className="px-4 py-2 rounded-lg border" onClick={()=>setAiPreview("")}>Rensa</button>
-                  </div>
-                  {aiPreview && <div className="mt-3 p-3 rounded-lg border border-pink-200 bg-gray-50 text-sm text-gray-800 whitespace-pre-wrap"><div className="mb-1 font-semibold text-pink-700">Svar från {config.ai.name}</div>{aiPreview}</div>}
-                </div>
-              </section>
-
-              <section className="border border-pink-200 rounded-xl p-4 bg-white shadow-sm">
-                <h5 className="font-semibold mb-3 text-pink-700">Aviseringar</h5>
-                <label className="block text-sm">Mottagare<input className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300" value={config.notifications.to} onChange={e=>setConfig({...config, notifications:{...config.notifications, to:e.target.value}})} /></label>
-              </section>
-
-              <div className="flex justify-end gap-2"><button className="px-4 py-2 rounded-lg border" onClick={()=>setSettingsOpen(false)}>Stäng</button></div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <footer className="mt-12 text-center text-sm text-gray-400">© {new Date().getFullYear()} Bokäta</footer>
     </div>
+  );
+}
+
+function Faq({ q, a }) {
+  return (
+    <details className="group rounded-2xl border border-pink-100 p-5 open:bg-pink-50">
+      <summary className="cursor-pointer list-none flex items-center justify-between gap-4">
+        <span className="font-semibold text-gray-900">{q}</span>
+        <span className="shrink-0 rounded-full border border-pink-200 px-2 py-0.5 text-xs">Öppna</span>
+      </summary>
+      <p className="mt-3 text-gray-700">{a}</p>
+    </details>
   );
 }
