@@ -365,6 +365,36 @@ export default function ReservationDashboard() {
   const [aiMsg, setAiMsg] = useState("");
   const [aiPreview, setAiPreview] = useState("");
   const knowledgeRef = useRef<HTMLTextAreaElement>(null);
+  const [newFaq, setNewFaq] = useState<string>("");
+  const [faqSuccess, setFaqSuccess] = useState(false);
+  const faqTimeoutRef = useRef<number | null>(null);
+
+  const addFaq = () => {
+    const q = newFaq.trim();
+    if (!q) return;
+    let added = false;
+
+    setConfig((prev) => {
+      const lines = prev.ai.faq
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (lines.some((x) => x.toLowerCase() === q.toLowerCase())) return prev;
+
+      added = true;
+      return { ...prev, ai: { ...prev.ai, faq: [...lines, q].join("\n") } };
+    });
+
+    setNewFaq("");
+    if (added) {
+      if (faqTimeoutRef.current) window.clearTimeout(faqTimeoutRef.current);
+      setFaqSuccess(true);
+      faqTimeoutRef.current = window.setTimeout(() => {
+        setFaqSuccess(false);
+      }, 1000);
+    }
+  };
 
   const faqItems = useMemo(
     () => config.ai.faq.split("\n").map((s) => s.trim()).filter(Boolean),
@@ -489,6 +519,43 @@ export default function ReservationDashboard() {
       return { ...prev, hours: { ...prev.hours, special: arr } };
     });
   };
+  // --- Custom closures (manual dates / periods)
+  const [customClosureOpen, setCustomClosureOpen] = useState(false);
+  const [customClosureMode, setCustomClosureMode] = useState<"single" | "range">("single");
+  const [customClosureDate, setCustomClosureDate] = useState<string>("");
+  const [customClosureFrom, setCustomClosureFrom] = useState<string>("");
+  const [customClosureTo, setCustomClosureTo] = useState<string>("");
+
+  const addDaysISO = (iso: string, add: number) => {
+    const d = new Date(iso + "T00:00:00");
+    d.setDate(d.getDate() + add);
+    const y = d.getFullYear();
+    const m = pad2(d.getMonth() + 1);
+    const day = pad2(d.getDate());
+    return `${y}-${m}-${day}`;
+  };
+
+  const addCustomClosures = () => {
+    if (customClosureMode === "single") {
+      if (!customClosureDate) return;
+      upsertSpecialByDate(customClosureDate, { closed: true });
+      setCustomClosureDate("");
+      return;
+    }
+
+    if (!customClosureFrom || !customClosureTo) return;
+    const start = new Date(customClosureFrom + "T00:00:00").getTime();
+    const end = new Date(customClosureTo + "T00:00:00").getTime();
+    if (Number.isNaN(start) || Number.isNaN(end) || start > end) return;
+
+    let cur = customClosureFrom;
+    while (new Date(cur + "T00:00:00").getTime() <= end) {
+      upsertSpecialByDate(cur, { closed: true });
+      cur = addDaysISO(cur, 1);
+    }
+    setCustomClosureFrom("");
+    setCustomClosureTo("");
+  };
 
   // --- Calendar cells
   const monthDays = useMemo(() => new Date(year, month + 1, 0).getDate(), [year, month]);
@@ -500,6 +567,15 @@ export default function ReservationDashboard() {
     const days = Array.from({ length: monthDays }, (_, i) => ({ key: `d-${i + 1}`, day: i + 1 }));
     return [...blanks, ...days];
   }, [year, month, monthDays]);
+
+  const upcomingClosed = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return config.hours.special
+      .filter((s) => s.closed && new Date(s.date + "T00:00:00").getTime() >= today.getTime())
+      .map((s) => s.date)
+      .sort((a, b) => a.localeCompare(b));
+  }, [config.hours.special]);
 
   return (
     <div className="min-h-screen bg-pink-50 p-6">
@@ -597,19 +673,24 @@ export default function ReservationDashboard() {
               {calendarCells.map((c) => {
                 if (!c.day) return <div key={c.key} />;
                 const sel = c.day === selectedSafe;
+                const dateStr = `${year}-${pad2(month + 1)}-${pad2(c.day)}`;
+                const isClosed = config.hours.special.some((s) => s.date === dateStr && s.closed);
                 return (
                   <div
                     key={c.key}
                     onClick={() => setSelectedDay(c.day!)}
-                    className={`rounded-full w-8 h-8 flex items-center justify-center ${
+                    className={`rounded-lg w-9 h-11 flex flex-col items-center justify-center leading-none ${
                       sel
                         ? "bg-pink-500 text-white font-bold ring-2 ring-pink-700"
+                        : isClosed
+                        ? "bg-gray-100 text-gray-400 hover:bg-gray-100 cursor-pointer"
                         : "text-gray-800 hover:bg-gray-100 cursor-pointer"
                     }`}
                     role="button"
                     tabIndex={0}
                   >
-                    {c.day}
+                    <div className="text-sm font-semibold">{c.day}</div>
+                    {isClosed && <div className="text-[10px] text-gray-500">Fermé</div>}
                   </div>
                 );
               })}
@@ -904,8 +985,134 @@ export default function ReservationDashboard() {
                 </div>
               </div>
 
-              <div className="mt-6">
-                <div className="text-sm font-semibold text-gray-700 mb-2">Röda dagar (helgdagar)</div>
+                           <div className="mt-6">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-semibold text-gray-700">Röda dagar (helgdagar)</div>
+                  <button
+                    type="button"
+                    className="h-8 w-8 rounded-full border border-pink-300 text-pink-700 hover:bg-pink-50"
+                    onClick={() => setCustomClosureOpen((v) => !v)}
+                    aria-label="Lägg till manuellt stängt datum"
+                    title="Lägg till manuellt stängt datum"
+                  >
+                    +
+                  </button>
+                </div>
+
+                {customClosureOpen && (
+                  <div className="mb-3 rounded-lg border border-pink-200 bg-pink-50/40 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        className={`px-3 py-1 text-sm rounded border ${
+                          customClosureMode === "single"
+                            ? "bg-pink-100 border-pink-500 text-pink-700 font-bold"
+                            : "bg-white border-pink-300 text-pink-600 hover:bg-pink-50"
+                        }`}
+                        onClick={() => setCustomClosureMode("single")}
+                      >
+                        En dag
+                      </button>
+                      <button
+                        type="button"
+                        className={`px-3 py-1 text-sm rounded border ${
+                          customClosureMode === "range"
+                            ? "bg-pink-100 border-pink-500 text-pink-700 font-bold"
+                            : "bg-white border-pink-300 text-pink-600 hover:bg-pink-50"
+                        }`}
+                        onClick={() => setCustomClosureMode("range")}
+                      >
+                        Period
+                      </button>
+
+                      <div className="ml-auto text-xs text-gray-500">Lägg till extra stängda dagar (t.ex. semester)</div>
+                    </div>
+
+                    {customClosureMode === "single" ? (
+                      <div className="mt-3 grid grid-cols-12 items-end gap-2">
+                        <div className="col-span-8">
+                          <Field label="Datum">
+                            <input
+                              type="date"
+                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                              value={customClosureDate}
+                              onChange={(e) => setCustomClosureDate(e.target.value)}
+                            />
+                          </Field>
+                        </div>
+                        <div className="col-span-4">
+                          <button
+                            type="button"
+                            className="w-full px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
+                            onClick={addCustomClosures}
+                          >
+                            Lägg till
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-3 grid grid-cols-12 items-end gap-2">
+                        <div className="col-span-4">
+                          <Field label="Från">
+                            <input
+                              type="date"
+                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                              value={customClosureFrom}
+                              onChange={(e) => setCustomClosureFrom(e.target.value)}
+                            />
+                          </Field>
+                        </div>
+                        <div className="col-span-4">
+                          <Field label="Till">
+                            <input
+                              type="date"
+                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                              value={customClosureTo}
+                              onChange={(e) => setCustomClosureTo(e.target.value)}
+                            />
+                          </Field>
+                        </div>
+                        <div className="col-span-4">
+                          <button
+                            type="button"
+                            className="w-full px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
+                            onClick={addCustomClosures}
+                          >
+                            Lägg till
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="text-xs font-semibold text-gray-600 mb-2">Kommande stängda datum</div>
+                  {upcomingClosed.length ? (
+                    <div className="space-y-2">
+                      {upcomingClosed.map((date) => (
+                        <div key={date} className="flex items-center justify-between text-sm">
+                          <span className="text-gray-700">{date}</span>
+                          <button
+                            type="button"
+                            className="text-xs text-pink-700 hover:text-pink-800"
+                            onClick={() =>
+                              setConfig((prev) => ({
+                                ...prev,
+                                hours: { ...prev.hours, special: prev.hours.special.filter((s) => s.date !== date) },
+                              }))
+                            }
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-500">Aucune date fermée à venir.</div>
+                  )}
+                </div>
+
                 <div className="space-y-2">
                   {HOLIDAYS_2025.map((h) => {
                     const sp =
@@ -949,6 +1156,7 @@ export default function ReservationDashboard() {
                   })}
                 </div>
               </div>
+
             </Section>
 
             <Section title="Policies">
@@ -1013,20 +1221,45 @@ export default function ReservationDashboard() {
               </Field>
 
               <div className="text-sm">
-                <div className="mb-2 text-gray-700">Vanliga frågor</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {faqItems.map((q, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      className="border border-pink-300 rounded-lg p-3 bg-pink-50 text-gray-800 hover:bg-pink-100 hover:border-pink-400 transition text-left"
-                      onClick={() => insertFaqIntoKnowledge(q)}
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              </div>
+  <div className="mb-2 flex items-center justify-between gap-2">
+    <div className="text-gray-700">Vanliga frågor</div>
+
+    <div className="flex items-center gap-2">
+      <input
+        className="h-9 w-56 rounded-lg border border-gray-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+        placeholder="Lägg till fråga…"
+        value={newFaq}
+        onChange={(e) => setNewFaq(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") addFaq();
+        }}
+      />
+      <button
+        type="button"
+        className="h-9 w-9 rounded-lg border border-pink-300 bg-pink-50 text-pink-700 hover:bg-pink-100 hover:border-pink-400 transition"
+        onClick={addFaq}
+        aria-label="Lägg till fråga"
+        title="Lägg till"
+      >
+        +
+      </button>
+    </div>
+  </div>
+  {faqSuccess && <div className="mb-2 text-xs text-green-700">Question ajoutée</div>}
+
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+    {faqItems.map((q, i) => (
+      <button
+        key={i}
+        type="button"
+        className="border border-pink-300 rounded-lg p-3 bg-pink-50 text-gray-800 hover:bg-pink-100 hover:border-pink-400 transition text-left"
+        onClick={() => insertFaqIntoKnowledge(q)}
+      >
+        {q}
+      </button>
+    ))}
+  </div>
+</div>
 
               <div className="mt-4">
                 <textarea
@@ -1051,6 +1284,7 @@ export default function ReservationDashboard() {
 
                 {aiPreview && (
                   <div className="mt-3 p-3 rounded-lg border border-pink-200 bg-gray-50 text-sm text-gray-800 whitespace-pre-wrap">
+                    <div className="text-xs text-gray-500">Contexte : {dateSel} • 12:00</div>
                     <div className="mb-1 font-semibold text-pink-700">Svar från {config.ai.name}</div>
                     {aiPreview}
                   </div>
