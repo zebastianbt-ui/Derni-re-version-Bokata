@@ -31,6 +31,8 @@ Regler:
 - Om svaret finns i KUNSKAPSBAS, använd det.
 - Om du inte kan svara säkert: be om ursäkt och skriv:
   "Jag kan tyvärr inte svara säkert på det just nu. Jag vidarebefordrar din fråga och vi återkommer så snart som möjligt."
+- Om frågan gäller öppettider och KUNSKAPSBAS innehåller öppettider, svara direkt med dem (ingen vidarebefordran).
+- Exempel: om KUNSKAPSBAS säger att måndag är stängt, och användaren frågar om måndag, svara: "Nej, vi har stängt på måndagar."
 
 KUNSKAPSBAS:
 ${knowledge ?? ""}
