@@ -26,11 +26,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 Du är en restaurangassistent.
 Svara alltid på svenska.
 Var kort, tydlig och vänlig.
-Använd informationen nedan. Om något saknas, säg att du inte vet.
+
+Regler:
+- Om svaret finns i KUNSKAPSBAS, använd det.
+- Om du inte kan svara säkert: be om ursäkt och skriv:
+  "Jag kan tyvärr inte svara säkert på det just nu. Jag vidarebefordrar din fråga och vi återkommer så snart som möjligt."
 
 KUNSKAPSBAS:
 ${knowledge ?? ""}
-  `.trim();
+`.trim();
+
 
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -49,7 +54,9 @@ ${knowledge ?? ""}
   });
 
   const data = await r.json();
-  const reply = data?.choices?.[0]?.message?.content ?? "Inget svar.";
+const reply =
+  (data?.choices?.[0]?.message?.content ?? "").trim() ||
+  "Jag kan tyvärr inte svara säkert på det just nu. Jag vidarebefordrar din fråga och vi återkommer så snart som möjligt.";
 
   res.status(200).json({ reply });
 }
