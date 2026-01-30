@@ -1271,11 +1271,30 @@ export default function ReservationDashboard() {
                 />
                 <div className="mt-2 flex gap-2">
                   <button
-                    className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
-                    onClick={() => setAiPreview(aiRespond(aiMsg))}
-                  >
-                    Förhandsvisa
-                  </button>
+  className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
+  onClick={async () => {
+    setAiPreview("Tänker…");
+
+    try {
+      const r = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: aiMsg,
+          knowledge: config.ai?.knowledge ?? ""
+        }),
+      });
+
+      const data = await r.json();
+      setAiPreview(data.reply || "Inget svar.");
+    } catch (e) {
+      setAiPreview("Fel vid AI-anrop.");
+    }
+  }}
+>
+  Förhandsvisa
+</button>
+
                   <button className="px-4 py-2 rounded-lg border" onClick={() => setAiPreview("")}
                   >
                     Rensa
