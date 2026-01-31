@@ -38,6 +38,26 @@ KUNSKAPSBAS:
 ${knowledge ?? ""}
 `.trim();
 
+  const msg = message.toLowerCase();
+  const kb = (knowledge ?? "").toLowerCase();
+  const days = [
+    "måndag",
+    "tisdag",
+    "onsdag",
+    "torsdag",
+    "fredag",
+    "lördag",
+    "söndag",
+  ];
+  for (const d of days) {
+    const dayInMsg = msg.includes(d);
+    const closedInKb = new RegExp(`${d}\\s*[:\\-–]?\\s*stäng`, "i").test(kb);
+    if (dayInMsg && closedInKb) {
+      res.status(200).json({ reply: `Nej, vi har stängt på ${d}ar.` });
+      return;
+    }
+  }
+
 
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
