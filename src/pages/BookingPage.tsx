@@ -160,19 +160,17 @@ export default function BookingPage() {
 
       <main className={`max-w-5xl mx-auto px-4 py-8 ${created ? "" : "pb-28"}`}>
         {!created ? (
-          <section id="booking" className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            {/* Formulär */}
-            <div className="lg:col-span-3">
-              <div className="rounded-3xl bg-white shadow-sm border border-rose-100 p-6 md:p-8">
-                <form ref={formRef} onSubmit={submit} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <label className="block md:col-span-2">
+          <section id="booking">
+            <div className="rounded-3xl bg-white shadow-sm border border-rose-100 p-6 md:p-8">
+              <form ref={formRef} onSubmit={submit} className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <label className="block">
                       <span className="text-sm font-semibold text-gray-700">Datum</span>
-                      <div className="mt-1 rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
-                        <div className="flex items-center justify-between mb-3">
+                      <div className="mt-1 rounded-3xl border border-violet-200 bg-violet-50/70 p-6">
+                        <div className="flex items-center justify-between mb-4">
                           <button
                             type="button"
-                            className="h-9 w-9 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
+                            className="h-10 w-10 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
                             onClick={() => {
                               const nm = viewMonth === 0 ? 11 : viewMonth - 1;
                               const ny = viewMonth === 0 ? viewYear - 1 : viewYear;
@@ -182,12 +180,12 @@ export default function BookingPage() {
                           >
                             ‹
                           </button>
-                          <div className="text-base font-semibold text-violet-800">
+                          <div className="text-lg font-semibold text-violet-800">
                             {monthName(viewMonth)} {viewYear}
                           </div>
                           <button
                             type="button"
-                            className="h-9 w-9 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
+                            className="h-10 w-10 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
                             onClick={() => {
                               const nm = viewMonth === 11 ? 0 : viewMonth + 1;
                               const ny = viewMonth === 11 ? viewYear + 1 : viewYear;
@@ -198,14 +196,14 @@ export default function BookingPage() {
                             ›
                           </button>
                         </div>
-                        <div className="grid grid-cols-7 text-xs text-violet-700/80 mb-2">
+                        <div className="grid grid-cols-7 text-sm text-violet-700/80 mb-3">
                           {["M", "T", "O", "T", "F", "L", "S"].map((d) => (
                             <div key={d} className="text-center">{d}</div>
                           ))}
                         </div>
-                        <div className="grid grid-cols-7 gap-2">
+                        <div className="grid grid-cols-7 gap-3">
                           {calendarDays.map((c) => {
-                            if (!c.day) return <div key={c.key} className="h-8" />;
+                            if (!c.day) return <div key={c.key} className="h-10" />;
                             const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(c.day).padStart(2, "0")}`;
                             const isSel = iso === date;
                             return (
@@ -213,7 +211,7 @@ export default function BookingPage() {
                                 key={c.key}
                                 type="button"
                                 onClick={() => setDate(iso)}
-                                className={`h-10 rounded-xl text-sm font-semibold ${
+                                className={`h-12 rounded-2xl text-sm font-semibold ${
                                   isSel
                                     ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white"
                                     : "bg-white text-violet-700 border border-violet-200 hover:bg-violet-100"
@@ -226,36 +224,74 @@ export default function BookingPage() {
                         </div>
                       </div>
                       <div className="mt-2 text-xs text-gray-500">Valt datum: {date}</div>
-                    </label>
-                    <label className="block">
-                      <span className="text-sm font-semibold text-gray-700">Tid</span>
-                      <select
-                        value={time}
-                        onChange={(e) => setTime(e.target.value)}
-                        className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
-                      >
-                        <option value="">Välj…</option>
-                        {times.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="block">
-                      <span className="text-sm font-semibold text-gray-700">Antal gäster</span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={16}
-                        value={guests}
-                        onChange={(e) => setGuests(Number(e.target.value))}
-                        className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
-                      />
-                    </label>
-                  </div>
+                  </label>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <div className="rounded-3xl bg-white border border-violet-100 p-6 md:p-8">
+                      <h2 className="text-lg font-bold text-gray-800">Snabböversikt</h2>
+                      <p className="text-sm text-gray-600">{new Date(date).toLocaleDateString()} • {guests} gäster</p>
+
+                      <div className="mt-4 grid grid-cols-3 gap-2 max-h-[360px] overflow-auto pr-1">
+                        {times.map((t) => {
+                          const a = mockAvailability(date, t, guests);
+                          const isSel = t === time;
+                          const tag = a.canFit ? (a.available <= 2 ? "Snart full" : a.available <= 6 ? "Populär" : "") : "";
+                          return (
+                            <button
+                              key={t}
+                              onClick={() => setTime(t)}
+                              className={`text-sm rounded-xl px-3 py-2 border transition ${
+                                a.canFit
+                                  ? isSel
+                                    ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white border-violet-600"
+                                    : "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
+                                  : "bg-gray-50 text-gray-400 border-gray-200 line-through cursor-not-allowed"
+                              }`}
+                            >
+                              <div className="flex flex-col items-center leading-tight">
+                                <span>{t}</span>
+                                {tag && <span className="text-[10px] mt-0.5 opacity-80">{tag}</span>}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="mt-6 text-xs text-gray-500">Demoöversikt. Den verkliga kapaciteten kopplas till Dashboard.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-700">Tid</span>
+                    <select
+                      value={time}
+                      onChange={(e) => setTime(e.target.value)}
+                      className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                    >
+                      <option value="">Välj…</option>
+                      {times.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-700">Antal gäster</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={16}
+                      value={guests}
+                      onChange={(e) => setGuests(Number(e.target.value))}
+                      className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <label className="block">
                       <span className="text-sm font-semibold text-gray-700">Namn</span>
                       <input
@@ -277,7 +313,7 @@ export default function BookingPage() {
                     </label>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <label className="block">
                       <span className="text-sm font-semibold text-gray-700">Telefon (valfritt)</span>
                       <input
@@ -299,7 +335,7 @@ export default function BookingPage() {
                     </label>
                   </div>
 
-                  <div
+                <div
                     className={`rounded-2xl border p-4 transition ${
                       formReady ? "bg-gradient-to-r from-violet-50 to-pink-50 border-violet-200" : "bg-violet-50 border-violet-100"
                     }`}
@@ -313,7 +349,7 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between bg-violet-50 border border-violet-100 rounded-2xl p-4">
+                <div className="flex items-center justify-between bg-violet-50 border border-violet-100 rounded-2xl p-4">
                     <div>
                       <div className="text-sm font-semibold text-violet-700">Tillgänglighet</div>
                       <div className="text-xs text-violet-600">
@@ -334,46 +370,8 @@ export default function BookingPage() {
                     >
                       {submitting ? "Skickar…" : "Boka"}
                     </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-
-            {/* Tillgänglighetspanel */}
-            <div className="lg:col-span-2">
-              <div className="rounded-3xl bg-white shadow-sm border border-violet-100 p-6 md:p-8">
-                <h2 className="text-lg font-bold text-gray-800">Snabböversikt</h2>
-                <p className="text-sm text-gray-600">{new Date(date).toLocaleDateString()} • {guests} gäster</p>
-
-                <div className="mt-4 grid grid-cols-3 gap-2 max-h-[340px] overflow-auto pr-1">
-                  {times.map((t) => {
-                    const a = mockAvailability(date, t, guests);
-                    const isSel = t === time;
-                    const tag = a.canFit ? (a.available <= 2 ? "Snart full" : a.available <= 6 ? "Populär" : "") : "";
-                    return (
-                      <button
-                        key={t}
-                        onClick={() => setTime(t)}
-                        className={`text-sm rounded-xl px-3 py-2 border transition ${
-                          a.canFit
-                            ? isSel
-                              ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white border-violet-600"
-                              : "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
-                            : "bg-gray-50 text-gray-400 border-gray-200 line-through cursor-not-allowed"
-                        }`}
-                      >
-                        <div className="flex flex-col items-center leading-tight">
-                          <span>{t}</span>
-                          {tag && <span className="text-[10px] mt-0.5 opacity-80">{tag}</span>}
-                        </div>
-                      </button>
-                    );
-                  })}
                 </div>
-
-                <div className="mt-6 text-xs text-gray-500">Demoöversikt. Den verkliga kapaciteten kopplas till Dashboard.</div>
-              </div>
-
+              </form>
             </div>
           </section>
         ) : (
@@ -460,6 +458,12 @@ export default function BookingPage() {
         <div className="text-2xl md:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-pink-500 to-rose-500">
           Bokäta – Den lagar inte mat. Den lagar allt annat.
         </div>
+        <a
+          href="/"
+          className="mt-4 inline-flex items-center justify-center rounded-full border border-white/30 bg-white/10 px-5 py-2 text-sm font-semibold text-white/90 backdrop-blur hover:bg-white/20"
+        >
+          Driver du också restaurang? Upptäck Bokäta →
+        </a>
       </footer>
     </div>
   );
