@@ -218,7 +218,8 @@ export default function BookingPage() {
                     </label>
                     <label className="block">
                       <span className="text-sm font-semibold text-gray-700">Kommentar</span>
-                      <input
+                      <textarea
+                        rows={3}
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Allergier, barnvagn…"
@@ -233,7 +234,7 @@ export default function BookingPage() {
                       <div className="text-xs text-violet-600">
                         {time ? (
                           avail.canFit ? (
-                            <>Plats för {guests} gäster kl {time}. {avail.available} kvar.</>
+                            <>Plats för {guests} gäster kl {time}.</>
                           ) : (
                             <>Fullt kl {time}. Välj annan tid eller minska antal.</>
                           )
@@ -284,15 +285,6 @@ export default function BookingPage() {
                 <div className="mt-6 text-xs text-gray-500">Demoöversikt. Den verkliga kapaciteten kopplas till Dashboard.</div>
               </div>
 
-              <div className="mt-6 rounded-3xl bg-white shadow-sm border border-rose-100 p-6">
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-pink-100 text-pink-700 font-bold">i</span>
-                  <div>
-                    <div className="text-sm font-semibold text-gray-800">Villkor</div>
-                    <div className="text-xs text-gray-600">Avbokning senast 4h innan. No‑shows kan debiteras.</div>
-                  </div>
-                </div>
-              </div>
             </div>
           </section>
         ) : (
@@ -354,8 +346,10 @@ export default function BookingPage() {
         )}
       </main>
 
-      <footer className="mt-12 py-10 text-center text-xs text-gray-500">
-        Bokäta – Den lagar inte mat. Den lagar allt annat.
+      <footer className="mt-12 py-12 text-center">
+        <div className="text-2xl md:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-pink-500 to-rose-500">
+          Bokäta – Den lagar inte mat. Den lagar allt annat.
+        </div>
       </footer>
     </div>
   );
