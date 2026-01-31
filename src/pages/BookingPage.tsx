@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 
 /**
  * Bokäta – Bokningssida (v2, rosa+lila)
@@ -92,9 +92,25 @@ export default function BookingPage() {
   const [notes, setNotes] = useState("");
   const [created, setCreated] = useState<Reservation | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   const times = useMemo(() => genTimeSlots("11:00", "21:00", 30), []);
   const avail = useMemo(() => mockAvailability(date, time, guests), [date, time, guests]);
+  const formReady = Boolean(date && time && guests && name && email);
+  const [viewMonth, setViewMonth] = useState(() => Number(date.split("-")[1]) - 1);
+  const [viewYear, setViewYear] = useState(() => Number(date.split("-")[0]));
+
+  const monthName = (m: number) =>
+    ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"][m];
+  const daysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+  const startOffset = (y: number, m: number) => (new Date(y, m, 1).getDay() + 6) % 7; // Monday=0
+  const calendarDays = useMemo(() => {
+    const count = daysInMonth(viewYear, viewMonth);
+    const offset = startOffset(viewYear, viewMonth);
+    const blanks = Array.from({ length: offset }, (_, i) => ({ key: `b-${i}`, day: null as number | null }));
+    const days = Array.from({ length: count }, (_, i) => ({ key: `d-${i + 1}`, day: i + 1 }));
+    return [...blanks, ...days];
+  }, [viewYear, viewMonth]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -121,40 +137,95 @@ export default function BookingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-violet-50 via-pink-50 to-rose-50 text-gray-800">
-      <header className="sticky top-0 z-10 backdrop-blur bg-white/60 border-b border-violet-100">
+    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-[#2a0a4a] via-[#3b0a5e] to-[#5a0f6a] text-gray-800">
+      <div className="pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-full bg-fuchsia-400/30 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-40 -right-24 h-[28rem] w-[28rem] rounded-full bg-violet-400/30 blur-3xl" />
+
+      <header className="sticky top-0 z-10 backdrop-blur bg-white/10 border-b border-white/10">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <ForkLogo />
             <div>
-              <div className="text-xs uppercase tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-violet-600 to-pink-600 font-semibold">
+              <div className="text-xs uppercase tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-pink-200 to-violet-200 font-semibold">
                 Bokäta – Boka bord
               </div>
-              <div className="text-sm text-gray-600">{restaurantSlug}</div>
+              <div className="text-sm text-white/70">{restaurantSlug}</div>
             </div>
           </div>
-          <a href="#booking" className="text-sm font-medium text-violet-600 hover:text-pink-700">
+          <a href="#booking" className="text-sm font-medium text-white/80 hover:text-white">
             Till bokningen
           </a>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className={`max-w-5xl mx-auto px-4 py-8 ${created ? "" : "pb-28"}`}>
         {!created ? (
           <section id="booking" className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             {/* Formulär */}
             <div className="lg:col-span-3">
               <div className="rounded-3xl bg-white shadow-sm border border-rose-100 p-6 md:p-8">
-                <form onSubmit={submit} className="space-y-6">
+                <form ref={formRef} onSubmit={submit} className="space-y-6">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <label className="block">
+                    <label className="block sm:col-span-1">
                       <span className="text-sm font-semibold text-gray-700">Datum</span>
-                      <input
-                        type="date"
-                        value={date}
-                        onChange={(e) => setDate(e.target.value)}
-                        className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
-                      />
+                      <div className="mt-1 rounded-2xl border border-violet-200 bg-violet-50/60 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <button
+                            type="button"
+                            className="h-8 w-8 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
+                            onClick={() => {
+                              const nm = viewMonth === 0 ? 11 : viewMonth - 1;
+                              const ny = viewMonth === 0 ? viewYear - 1 : viewYear;
+                              setViewMonth(nm);
+                              setViewYear(ny);
+                            }}
+                          >
+                            ‹
+                          </button>
+                          <div className="text-sm font-semibold text-violet-800">
+                            {monthName(viewMonth)} {viewYear}
+                          </div>
+                          <button
+                            type="button"
+                            className="h-8 w-8 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
+                            onClick={() => {
+                              const nm = viewMonth === 11 ? 0 : viewMonth + 1;
+                              const ny = viewMonth === 11 ? viewYear + 1 : viewYear;
+                              setViewMonth(nm);
+                              setViewYear(ny);
+                            }}
+                          >
+                            ›
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-7 text-[11px] text-violet-700/80 mb-2">
+                          {["M", "T", "O", "T", "F", "L", "S"].map((d) => (
+                            <div key={d} className="text-center">{d}</div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-7 gap-1">
+                          {calendarDays.map((c) => {
+                            if (!c.day) return <div key={c.key} className="h-8" />;
+                            const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(c.day).padStart(2, "0")}`;
+                            const isSel = iso === date;
+                            return (
+                              <button
+                                key={c.key}
+                                type="button"
+                                onClick={() => setDate(iso)}
+                                className={`h-8 rounded-lg text-sm ${
+                                  isSel
+                                    ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white"
+                                    : "bg-white text-violet-700 border border-violet-200 hover:bg-violet-100"
+                                }`}
+                              >
+                                {c.day}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs text-gray-500">Valt datum: {date}</div>
                     </label>
                     <label className="block">
                       <span className="text-sm font-semibold text-gray-700">Tid</span>
@@ -216,16 +287,30 @@ export default function BookingPage() {
                         className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
                       />
                     </label>
-                    <label className="block">
+                    <label className="block sm:col-span-2">
                       <span className="text-sm font-semibold text-gray-700">Kommentar</span>
                       <textarea
-                        rows={3}
+                        rows={4}
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Allergier, barnvagn…"
                         className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
                       />
                     </label>
+                  </div>
+
+                  <div
+                    className={`rounded-2xl border p-4 transition ${
+                      formReady ? "bg-gradient-to-r from-violet-50 to-pink-50 border-violet-200" : "bg-violet-50 border-violet-100"
+                    }`}
+                  >
+                    <div className="text-sm font-semibold text-violet-700 mb-1">Din bokning</div>
+                    <div className="text-sm text-gray-700">
+                      {date ? date : "Välj datum"} • {time ? `kl ${time}` : "välj tid"} • {guests} gäster
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {name ? name : "Ditt namn"} • {email ? email : "din e‑post"}
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between bg-violet-50 border border-violet-100 rounded-2xl p-4">
@@ -264,6 +349,7 @@ export default function BookingPage() {
                   {times.map((t) => {
                     const a = mockAvailability(date, t, guests);
                     const isSel = t === time;
+                    const tag = a.canFit ? (a.available <= 2 ? "Snart full" : a.available <= 6 ? "Populär" : "") : "";
                     return (
                       <button
                         key={t}
@@ -276,7 +362,10 @@ export default function BookingPage() {
                             : "bg-gray-50 text-gray-400 border-gray-200 line-through cursor-not-allowed"
                         }`}
                       >
-                        {t}
+                        <div className="flex flex-col items-center leading-tight">
+                          <span>{t}</span>
+                          {tag && <span className="text-[10px] mt-0.5 opacity-80">{tag}</span>}
+                        </div>
                       </button>
                     );
                   })}
@@ -345,6 +434,27 @@ export default function BookingPage() {
           </section>
         )}
       </main>
+
+      {!created && (
+        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden">
+          <div className="mx-auto max-w-5xl px-4 pb-4">
+            <div className="rounded-2xl border border-white/10 bg-white/90 backdrop-blur shadow-lg p-3 flex items-center justify-between">
+              <div className="text-sm">
+                <div className="font-semibold text-gray-800">Din bokning</div>
+                <div className="text-xs text-gray-600">{date} • {time || "välj tid"} • {guests} gäster</div>
+              </div>
+              <button
+                type="button"
+                disabled={!formReady || submitting || !avail.canFit}
+                className="px-4 py-2 rounded-xl font-semibold text-white bg-gradient-to-r from-violet-600 via-pink-600 to-rose-600 disabled:opacity-50"
+                onClick={() => formRef.current?.requestSubmit()}
+              >
+                {submitting ? "Skickar…" : "Boka"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="mt-12 py-12 text-center">
         <div className="text-2xl md:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-pink-500 to-rose-500">
