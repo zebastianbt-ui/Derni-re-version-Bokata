@@ -555,6 +555,8 @@ export default function ReservationDashboard() {
   const [newFaq, setNewFaq] = useState<string>("");
   const [faqSuccess, setFaqSuccess] = useState(false);
   const faqTimeoutRef = useRef<number | null>(null);
+  const [testRunning, setTestRunning] = useState(false);
+  const [testResults, setTestResults] = useState<{ q: string; reply: string }[]>([]);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboarding, setOnboarding] = useState({
     restaurantName: "",
@@ -593,6 +595,49 @@ SVAR:
 FRÅGA: Tar ni emot kontanter?
 SVAR:
 `;
+
+  const commonFaqs = [
+    "Har ni öppet på måndagar?",
+    "Vilka är era öppettider per dag?",
+    "Tar ni emot kontanter?",
+    "Tar ni kort (Visa/Mastercard/Amex)?",
+    "Tar ni Swish?",
+    "Har ni veganska alternativ?",
+    "Har ni glutenfria alternativ?",
+    "Har ni laktosfria alternativ?",
+    "Kan ni hantera allergier?",
+    "Finns barnstolar?",
+    "Finns barnmeny?",
+    "Får man ta med hund?",
+    "Har ni uteservering?",
+    "Är lokalen rullstolsanpassad?",
+    "Finns parkering i närheten?",
+    "Hur tar man sig till er med kollektivtrafik?",
+    "Hur länge är en bordsbokning?",
+    "Kan man boka större sällskap?",
+    "Vad är max antal gäster per bokning?",
+    "Har ni take away?",
+    "Serverar ni alkohol?",
+    "Har ni lunchmeny?",
+    "Kan man boka bord online?",
+    "Vilken adress har ni?",
+    "Hur kontaktar man er?",
+  ];
+
+  const insertCommonFaqs = () => {
+    const blocks = commonFaqs.map((q) => `FRÅGA: ${q}\nSVAR: `).join("\n\n");
+    setConfig((prev) => {
+      const k = prev.ai.knowledge ?? "";
+      const toAdd = commonFaqs.filter((q) => !k.toLowerCase().includes(q.toLowerCase()));
+      if (!toAdd.length) return prev;
+      const addBlock = toAdd.map((q) => `FRÅGA: ${q}\nSVAR: `).join("\n\n");
+      const next = k.trim()
+        ? k.trim() + "\n\n" + addBlock + "\n"
+        : blocks + "\n";
+      return { ...prev, ai: { ...prev.ai, knowledge: next } };
+    });
+    setTimeout(() => knowledgeRef.current?.focus(), 0);
+  };
 
   const applyTemplate = () => {
     setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: prev.ai.knowledge?.trim() ? prev.ai.knowledge : knowledgeTemplate } }));
@@ -643,6 +688,69 @@ SVAR:
     const missing = checks.filter((c) => !c.ok).map((c) => c.key);
     return { score, missing };
   }, [config.ai.knowledge]);
+
+  const callAi = async (text: string) => {
+    const r = await fetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: text,
+        knowledge: config.ai?.knowledge ?? "",
+        context: {
+          baseDate: dateSel,
+          seating: {
+            maxGuests: config.seating.maxGuests,
+            maxGuestsPerReservation: config.escalation.maxGuestsPerReservation,
+            groupThreshold: config.seating.groupThreshold,
+            maxBookingDurationMin: config.seating.maxBookingDurationMin,
+          },
+          hours: {
+            normal: config.hours.normal,
+            special: config.hours.special,
+          },
+          tables: ENGINE.tables,
+          bookings: dayBookings.map((b) => ({
+            date: b.date,
+            time: b.time,
+            guests: b.guests,
+            durationMin: b.durationMin,
+            tableId: b.tableId ?? null,
+          })),
+        },
+      }),
+    });
+    const data = await r.json();
+    return data.reply || "Inget svar.";
+  };
+
+  const runAiTests = async () => {
+    const prompts = [
+      "öppet måndag?",
+      "Har ni öppet på Måndag?",
+      "Vegan?",
+      "Glutenfritt?",
+      "Parkering?",
+      "Tar ni Swish?",
+      "Finns barnstolar?",
+      "Hur länge är en bordsbokning?",
+      "Boka bord för 4 imorgon kl 19",
+      "Boka bord för 12 på fredag kl 18",
+      "Var ligger ni?",
+    ];
+    setTestRunning(true);
+    setTestResults([]);
+    const out: { q: string; reply: string }[] = [];
+    for (const q of prompts) {
+      try {
+        const reply = await callAi(q);
+        out.push({ q, reply });
+      } catch {
+        out.push({ q, reply: "Fel vid AI-anrop." });
+      }
+    }
+    setTestResults(out);
+    setTestRunning(false);
+  };
 
   const addFaq = () => {
     const q = newFaq.trim();
@@ -1646,6 +1754,9 @@ SVAR:
                 <button className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm" onClick={applyTemplate}>
                   Använd mall
                 </button>
+                <button className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm" onClick={insertCommonFaqs}>
+                  Lägg in vanliga frågor
+                </button>
                 <button
                   className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm"
                   onClick={() => setOnboardingOpen((v) => !v)}
@@ -1805,41 +1916,10 @@ SVAR:
   className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
   onClick={async () => {
     setAiPreview("Tänker…");
-
     try {
-      const r = await fetch("/api/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: aiMsg,
-          knowledge: config.ai?.knowledge ?? "",
-          context: {
-            baseDate: dateSel,
-            seating: {
-              maxGuests: config.seating.maxGuests,
-              maxGuestsPerReservation: config.escalation.maxGuestsPerReservation,
-              groupThreshold: config.seating.groupThreshold,
-              maxBookingDurationMin: config.seating.maxBookingDurationMin,
-            },
-            hours: {
-              normal: config.hours.normal,
-              special: config.hours.special,
-            },
-            tables: ENGINE.tables,
-            bookings: dayBookings.map((b) => ({
-              date: b.date,
-              time: b.time,
-              guests: b.guests,
-              durationMin: b.durationMin,
-              tableId: b.tableId ?? null,
-            })),
-          },
-        }),
-      });
-
-      const data = await r.json();
-      setAiPreview(data.reply || "Inget svar.");
-    } catch (e) {
+      const reply = await callAi(aiMsg);
+      setAiPreview(reply);
+    } catch {
       setAiPreview("Fel vid AI-anrop.");
     }
   }}
@@ -1860,6 +1940,27 @@ SVAR:
                     {aiPreview}
                   </div>
                 )}
+              </div>
+
+              <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="text-sm font-semibold text-gray-700 mb-2">Snabbtest (AI)</div>
+                <button
+                  className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm"
+                  onClick={runAiTests}
+                  disabled={testRunning}
+                >
+                  {testRunning ? "Testar..." : "Kör test"}
+                </button>
+                {testResults.length ? (
+                  <div className="mt-3 space-y-2 text-sm">
+                    {testResults.map((t, i) => (
+                      <div key={`${t.q}-${i}`} className="rounded-md border border-gray-200 bg-white p-2">
+                        <div className="text-gray-700"><strong>Q:</strong> {t.q}</div>
+                        <div className="text-gray-800"><strong>A:</strong> {t.reply}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </Section>
 

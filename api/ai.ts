@@ -164,7 +164,7 @@ ${knowledge ?? ""}
       const [y] = base.split("-").map(Number);
       if (d >= 1 && d <= 31 && m) return `${y}-${pad2(m)}-${pad2(d)}`;
     }
-    for (const d of days) {
+    for (const d of weekdaySv) {
       if (new RegExp(`\\b${d}\\b`, "i").test(txt)) {
         const baseDt = toUtcDate(base);
         if (!baseDt) return null;
@@ -222,9 +222,9 @@ ${knowledge ?? ""}
 
   if (context && isBookingIntent(message)) {
     const baseDate = context.baseDate;
-    const date = parseDate(msg, baseDate);
-    const time = parseTime(msg);
-    const guests = parseGuests(msg);
+    const date = parseDate(msgLower, baseDate);
+    const time = parseTime(msgLower);
+    const guests = parseGuests(msgLower);
 
     if (!guests) {
       res.status(200).json({ reply: "Hur många gäster gäller det?" });
