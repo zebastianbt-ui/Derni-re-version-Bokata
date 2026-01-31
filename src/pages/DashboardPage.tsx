@@ -555,6 +555,94 @@ export default function ReservationDashboard() {
   const [newFaq, setNewFaq] = useState<string>("");
   const [faqSuccess, setFaqSuccess] = useState(false);
   const faqTimeoutRef = useRef<number | null>(null);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboarding, setOnboarding] = useState({
+    restaurantName: "",
+    address: "",
+    phone: "",
+    email: "",
+    hours: "",
+    bookingDuration: "90",
+    maxGuests: "",
+    payment: "",
+    allergies: "",
+    kids: "",
+    pets: "",
+    parking: "",
+    transport: "",
+  });
+
+  const knowledgeTemplate = `INFOS:
+Namn:
+Adress:
+Telefon:
+E-post:
+Öppettider:
+Bordsbokningstid:
+Max gäster per bokning:
+Betalning:
+Allergier:
+Barn:
+Djurpolicy:
+Parkering:
+Kollektivtrafik:
+
+FRÅGA: Har ni öppet på måndagar?
+SVAR:
+
+FRÅGA: Tar ni emot kontanter?
+SVAR:
+`;
+
+  const applyTemplate = () => {
+    setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: prev.ai.knowledge?.trim() ? prev.ai.knowledge : knowledgeTemplate } }));
+    setTimeout(() => knowledgeRef.current?.focus(), 0);
+  };
+
+  const applyOnboarding = () => {
+    const lines = [
+      "INFOS:",
+      onboarding.restaurantName ? `Namn: ${onboarding.restaurantName}` : "",
+      onboarding.address ? `Adress: ${onboarding.address}` : "",
+      onboarding.phone ? `Telefon: ${onboarding.phone}` : "",
+      onboarding.email ? `E-post: ${onboarding.email}` : "",
+      onboarding.hours ? `Öppettider: ${onboarding.hours}` : "",
+      onboarding.bookingDuration ? `Bordsbokningstid: ${onboarding.bookingDuration} min` : "",
+      onboarding.maxGuests ? `Max gäster per bokning: ${onboarding.maxGuests}` : "",
+      onboarding.payment ? `Betalning: ${onboarding.payment}` : "",
+      onboarding.allergies ? `Allergier: ${onboarding.allergies}` : "",
+      onboarding.kids ? `Barn: ${onboarding.kids}` : "",
+      onboarding.pets ? `Djurpolicy: ${onboarding.pets}` : "",
+      onboarding.parking ? `Parkering: ${onboarding.parking}` : "",
+      onboarding.transport ? `Kollektivtrafik: ${onboarding.transport}` : "",
+      "",
+    ].filter(Boolean);
+    setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: lines.join("\n") } }));
+    setOnboardingOpen(false);
+    setTimeout(() => knowledgeRef.current?.focus(), 0);
+  };
+
+  const knowledgeScore = useMemo(() => {
+    const k = (config.ai.knowledge || "").toLowerCase();
+    const checks = [
+      { key: "Öppettider", ok: /öppettid|öppet|tider/.test(k) },
+      { key: "Adress", ok: /adress/.test(k) },
+      { key: "Telefon", ok: /telefon|tel|phone/.test(k) },
+      { key: "E-post", ok: /e-post|email|mail/.test(k) },
+      { key: "Bordsbokningstid", ok: /bokningstid|sittning|min/.test(k) },
+      { key: "Max gäster", ok: /max.*gäster|max.*guests/.test(k) },
+      { key: "Betalning", ok: /betala|kort|kontant|swish|visa|mastercard|amex/.test(k) },
+      { key: "Allergier", ok: /allergi|gluten|laktos|nöt/.test(k) },
+      { key: "Barn", ok: /barnstol|barnvagn|barnmeny|barn/.test(k) },
+      { key: "Djurpolicy", ok: /hund|djur|terrass/.test(k) },
+      { key: "Parkering", ok: /parkering/.test(k) },
+      { key: "Kollektivtrafik", ok: /kollektivtrafik|buss|tunnelbana|tram|spårvagn/.test(k) },
+    ];
+    const ok = checks.filter((c) => c.ok).length;
+    const score = Math.round((ok / checks.length) * 100);
+    const missing = checks.filter((c) => !c.ok).map((c) => c.key);
+    return { score, missing };
+  }, [config.ai.knowledge]);
 
   const addFaq = () => {
     const q = newFaq.trim();
@@ -1554,6 +1642,114 @@ export default function ReservationDashboard() {
                   onChange={(e) => setConfig({ ...config, ai: { ...config.ai, knowledge: e.target.value } })}
                 />
               </Field>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm" onClick={applyTemplate}>
+                  Använd mall
+                </button>
+                <button
+                  className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm"
+                  onClick={() => setOnboardingOpen((v) => !v)}
+                >
+                  {onboardingOpen ? "Stäng onboarding" : "Starta onboarding"}
+                </button>
+                <div className="text-xs text-gray-500 self-center">
+                  Kvalitet: {knowledgeScore.score}% {knowledgeScore.missing.length ? `• Saknas: ${knowledgeScore.missing.join(", ")}` : "• Bra!"}
+                </div>
+              </div>
+
+              {onboardingOpen && (
+                <div className="mt-3 rounded-lg border border-pink-200 bg-pink-50/30 p-3">
+                  <div className="text-sm font-semibold text-gray-700 mb-2">Snabb onboarding</div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="Namn på restaurang"
+                      value={onboarding.restaurantName}
+                      onChange={(e) => setOnboarding({ ...onboarding, restaurantName: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="Adress"
+                      value={onboarding.address}
+                      onChange={(e) => setOnboarding({ ...onboarding, address: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="Telefon"
+                      value={onboarding.phone}
+                      onChange={(e) => setOnboarding({ ...onboarding, phone: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="E‑post"
+                      value={onboarding.email}
+                      onChange={(e) => setOnboarding({ ...onboarding, email: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
+                      placeholder="Öppettider (ex: tis–sön 11:00–21:00, måndag stängt)"
+                      value={onboarding.hours}
+                      onChange={(e) => setOnboarding({ ...onboarding, hours: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="Bordsbokningstid (min)"
+                      value={onboarding.bookingDuration}
+                      onChange={(e) => setOnboarding({ ...onboarding, bookingDuration: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="Max gäster per bokning"
+                      value={onboarding.maxGuests}
+                      onChange={(e) => setOnboarding({ ...onboarding, maxGuests: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
+                      placeholder="Betalning (ex: kort, kontant, Swish)"
+                      value={onboarding.payment}
+                      onChange={(e) => setOnboarding({ ...onboarding, payment: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
+                      placeholder="Allergier (ex: gluten/laktos/nötter)"
+                      value={onboarding.allergies}
+                      onChange={(e) => setOnboarding({ ...onboarding, allergies: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="Barn (barnstol/barnmeny)"
+                      value={onboarding.kids}
+                      onChange={(e) => setOnboarding({ ...onboarding, kids: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="Djurpolicy"
+                      value={onboarding.pets}
+                      onChange={(e) => setOnboarding({ ...onboarding, pets: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="Parkering"
+                      value={onboarding.parking}
+                      onChange={(e) => setOnboarding({ ...onboarding, parking: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="Kollektivtrafik"
+                      value={onboarding.transport}
+                      onChange={(e) => setOnboarding({ ...onboarding, transport: e.target.value })}
+                    />
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button className="px-3 py-1.5 rounded-lg bg-pink-500 text-white" onClick={applyOnboarding}>
+                      Generera kunskapsbas
+                    </button>
+                    <button className="px-3 py-1.5 rounded-lg border" onClick={() => setOnboardingOpen(false)}>
+                      Avbryt
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="text-sm">
   <div className="mb-2 flex items-center justify-between gap-2">
@@ -1616,7 +1812,28 @@ export default function ReservationDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: aiMsg,
-          knowledge: config.ai?.knowledge ?? ""
+          knowledge: config.ai?.knowledge ?? "",
+          context: {
+            baseDate: dateSel,
+            seating: {
+              maxGuests: config.seating.maxGuests,
+              maxGuestsPerReservation: config.escalation.maxGuestsPerReservation,
+              groupThreshold: config.seating.groupThreshold,
+              maxBookingDurationMin: config.seating.maxBookingDurationMin,
+            },
+            hours: {
+              normal: config.hours.normal,
+              special: config.hours.special,
+            },
+            tables: ENGINE.tables,
+            bookings: dayBookings.map((b) => ({
+              date: b.date,
+              time: b.time,
+              guests: b.guests,
+              durationMin: b.durationMin,
+              tableId: b.tableId ?? null,
+            })),
+          },
         }),
       });
 
