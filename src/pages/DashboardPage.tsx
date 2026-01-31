@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "../supabaseClient";
 
 // NOTE: Tu as collé un bloc très long avec plein de caractères cassés (×, retours, underscores, etc.).
 // Cette version est une *reconstruction fidèle* du dashboard que tu décris (calendrier + timeline + modals + settings + preview IA),
@@ -33,7 +35,14 @@ const DAYS_ORDER: DayName[] = ["måndag", "tisdag", "onsdag", "torsdag", "fredag
 
 type Settings = {
   info: { email: string };
-  seating: { groupThreshold: number; highChairs: number; allowCombineTables: boolean };
+  seating: {
+    groupThreshold: number;
+    highChairs: number;
+    allowCombineTables: boolean;
+    maxGuests: number;
+    maxTables: number;
+    maxBookingDurationMin: 60 | 90 | 120;
+  };
   policies: {
     vegan: boolean;
     glutenFree: boolean;
@@ -165,10 +174,9 @@ function assignTablesForDate(date: string, input: Booking[]): Booking[] {
   return [...input.filter((b) => b.date !== date), ...out];
 }
 
-function findAvailableTable(args: { date: string; time: string; guests: number; bookings: Booking[] }): number | null {
+function findAvailableTable(args: { date: string; time: string; guests: number; bookings: Booking[]; durationMin: number }): number | null {
   const when = round30(args.time);
-  const meal = mealFor(when);
-  const dur = meal in ENGINE.durations ? ENGINE.durations[meal as keyof typeof ENGINE.durations] : 90;
+  const dur = args.durationMin;
   const s = timeToMin(when);
   const e = s + dur;
 
@@ -193,6 +201,21 @@ function findAvailableTable(args: { date: string; time: string; guests: number; 
 }
 
 export default function ReservationDashboard() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authMsg, setAuthMsg] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
+  const [restaurantId, setRestaurantId] = useState<string | null>(null);
+  const [restaurantName, setRestaurantName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteMsg, setInviteMsg] = useState<string | null>(null);
+  const [members, setMembers] = useState<{ name: string; email: string; role: string }[]>([]);
+  const [settingsReady, setSettingsReady] = useState(false);
+  const saveTimer = useRef<number | null>(null);
+  const profileTimer = useRef<number | null>(null);
+
   const [activeMeal, setActiveMeal] = useState<Meal>("Lunch");
   const [openBooking, setOpenBooking] = useState<Booking | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -206,7 +229,14 @@ export default function ReservationDashboard() {
   const defaultSettings: Settings = useMemo(
     () => ({
       info: { email: "bookings@example.se" },
-      seating: { groupThreshold: 6, highChairs: 3, allowCombineTables: false },
+      seating: {
+        groupThreshold: 6,
+        highChairs: 3,
+        allowCombineTables: false,
+        maxGuests: 60,
+        maxTables: 20,
+        maxBookingDurationMin: 90,
+      },
       policies: {
         vegan: true,
         glutenFree: true,
@@ -261,8 +291,112 @@ export default function ReservationDashboard() {
 
   const [config, setConfig] = useState<Settings>(defaultSettings);
 
-  const seed: Booking[] = useMemo(
-    () => [
+  useEffect(() => {
+    let active = true;
+
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
+      setSession(data.session ?? null);
+      if (data.session?.user?.email) setProfileEmail(data.session.user.email);
+    };
+
+    init();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
+      setSession(sess);
+      setProfileEmail(sess?.user?.email ?? "");
+      if (!sess) setSettingsReady(false);
+    });
+
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!session?.user?.id) return;
+      const userId = session.user.id;
+      const userEmail = session.user.email ?? "";
+
+      const { data: pendingInvites } = await supabase
+        .from("invites")
+        .select("id,restaurant_id")
+        .eq("email", userEmail)
+        .is("accepted_at", null);
+
+      if (pendingInvites?.length) {
+        for (const inv of pendingInvites) {
+          await supabase.from("memberships").insert({ restaurant_id: inv.restaurant_id, user_id: userId, role: "member" });
+          await supabase.from("invites").update({ accepted_at: new Date().toISOString() }).eq("id", inv.id);
+        }
+      }
+
+      let membership = await supabase
+        .from("memberships")
+        .select("restaurant_id,role")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (!membership.data) {
+        const baseName = profileName.trim() ? `${profileName.trim()} Restaurant` : "Bokäta Restaurant";
+        const { data: rest } = await supabase
+          .from("restaurants")
+          .insert({ name: baseName, owner_id: userId })
+          .select("id,name")
+          .single();
+
+        if (rest?.id) {
+          await supabase.from("memberships").insert({ restaurant_id: rest.id, user_id: userId, role: "owner" });
+          membership = { data: { restaurant_id: rest.id, role: "owner" } } as typeof membership;
+        }
+      }
+
+      if (membership.data) {
+        setRestaurantId(membership.data.restaurant_id);
+        const { data: rest } = await supabase
+          .from("restaurants")
+          .select("name")
+          .eq("id", membership.data.restaurant_id)
+          .maybeSingle();
+        setRestaurantName(rest?.name ?? "");
+      }
+
+      const [{ data: profile }, { data: settings }] = await Promise.all([
+        supabase.from("profiles").select("full_name,email").eq("user_id", userId).maybeSingle(),
+        membership.data?.restaurant_id
+          ? supabase.from("ai_settings").select("knowledge,assistant_name").eq("restaurant_id", membership.data.restaurant_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+
+      if (profile) {
+        if (profile.full_name) setProfileName(profile.full_name);
+        if (profile.email) setProfileEmail(profile.email);
+      } else if (session.user.email) {
+        setProfileEmail(session.user.email);
+      }
+
+      if (settings) {
+        setConfig((prev) => ({
+          ...prev,
+          ai: {
+            ...prev.ai,
+            knowledge: settings.knowledge ?? prev.ai.knowledge,
+            name: settings.assistant_name ?? prev.ai.name,
+          },
+        }));
+      }
+
+      setSettingsReady(true);
+    };
+
+    load();
+  }, [session?.user?.id]);
+
+  const seed: Booking[] = useMemo(() => {
+    const base: Booking[] = [
       {
         id: uid(),
         date: "2025-09-05",
@@ -278,9 +412,10 @@ export default function ReservationDashboard() {
       { id: uid(), date: "2025-09-05", time: "12:30", name: "Henrik Holm", guests: 6, color: "bg-purple-200" },
       { id: uid(), date: "2025-09-05", time: "13:00", name: "Familjen Sjögren", guests: 4, color: "bg-green-200", note: true, notes: "Barnstol. Hörnbord om möjligt." },
       { id: uid(), date: "2025-09-05", time: "18:00", name: "Familjen Karlsson", guests: 8, color: "bg-yellow-200", note: true, notes: "Jordnöt – inga spår." },
-    ],
-    []
-  );
+    ];
+    const durationMin = defaultSettings.seating.maxBookingDurationMin;
+    return base.map((b) => ({ ...b, durationMin }));
+  }, [defaultSettings.seating.maxBookingDurationMin]);
 
   const [bookings, setBookings] = useState<Booking[]>(() => assignTablesForDate(dateSel, seed));
 
@@ -288,6 +423,58 @@ export default function ReservationDashboard() {
     setBookings((prev) => assignTablesForDate(dateSel, prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateSel]);
+
+  useEffect(() => {
+    setBookings((prev) => {
+      const updated = prev.map((b) => ({ ...b, durationMin: config.seating.maxBookingDurationMin }));
+      const dates = Array.from(new Set<string>(updated.map((b) => b.date)));
+      let out = updated;
+      for (const d of dates) out = assignTablesForDate(d, out);
+      return out;
+    });
+  }, [config.seating.maxBookingDurationMin]);
+
+  useEffect(() => {
+    if (!session?.user?.id || !settingsReady || !restaurantId) return;
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+
+    saveTimer.current = window.setTimeout(async () => {
+      await supabase.from("ai_settings").upsert(
+        {
+          restaurant_id: restaurantId,
+          knowledge: config.ai.knowledge,
+          assistant_name: config.ai.name,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "restaurant_id" }
+      );
+    }, 600);
+
+    return () => {
+      if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    };
+  }, [config.ai.knowledge, config.ai.name, session?.user?.id, settingsReady, restaurantId]);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    if (profileTimer.current) window.clearTimeout(profileTimer.current);
+
+    profileTimer.current = window.setTimeout(async () => {
+      await supabase.from("profiles").upsert(
+        {
+          user_id: session.user.id,
+          full_name: profileName || null,
+          email: profileEmail || session.user.email || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
+    }, 600);
+
+    return () => {
+      if (profileTimer.current) window.clearTimeout(profileTimer.current);
+    };
+  }, [profileName, profileEmail, session?.user?.id]);
 
   const ALL_TIMES = useMemo(() => {
     const mins = [MEAL_RANGES.Frukost[0], MEAL_RANGES.Lunch[0], MEAL_RANGES.Middag[0]].map(timeToMin);
@@ -433,7 +620,13 @@ export default function ReservationDashboard() {
     if (guests > config.escalation.maxGuestsPerReservation)
       return `Tack! För ${guests} gäster behöver vi manuell bekräftelse. Vi återkommer snarast.`;
 
-    const tableId = findAvailableTable({ date: dateSel, time: "12:00", guests, bookings });
+    const tableId = findAvailableTable({
+      date: dateSel,
+      time: "12:00",
+      guests,
+      bookings,
+      durationMin: config.seating.maxBookingDurationMin,
+    });
     const can = tableId != null;
     return can
       ? `Ja, det finns plats. Jag kan boka för ${guests} gäster. (Förslag: ${dateSel} kl 12:00.)`
@@ -467,10 +660,10 @@ export default function ReservationDashboard() {
     if (d.guests > config.escalation.maxGuestsPerReservation) return { ok: false, error: "Kräver manuell bekräftelse (grupp)." };
 
     const when = round30(d.time);
-    const tableId = findAvailableTable({ date: d.date, time: when, guests: d.guests, bookings });
+    const durationMin = config.seating.maxBookingDurationMin;
+    const tableId = findAvailableTable({ date: d.date, time: when, guests: d.guests, bookings, durationMin });
     if (tableId == null) return { ok: false, error: "Ingen ledig passande bord i detta tidsintervall." };
 
-    const dur = (mealFor(when) in ENGINE.durations ? ENGINE.durations[mealFor(when) as keyof typeof ENGINE.durations] : 90) as number;
     const colors = ["bg-green-200", "bg-blue-200", "bg-yellow-200", "bg-pink-200", "bg-purple-200"];
 
     const b: Booking = {
@@ -483,7 +676,7 @@ export default function ReservationDashboard() {
       note: !!d.notes,
       color: colors[Math.floor(Math.random() * colors.length)],
       tableId,
-      durationMin: dur,
+      durationMin,
       status: "confirmed",
       source: "web",
     };
@@ -576,6 +769,87 @@ export default function ReservationDashboard() {
       .map((s) => s.date)
       .sort((a, b) => a.localeCompare(b));
   }, [config.hours.special]);
+
+  const handleLogin = async () => {
+    const email = authEmail.trim();
+    if (!email) return;
+    setAuthLoading(true);
+    setAuthMsg(null);
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+    });
+    setAuthLoading(false);
+    setAuthMsg(
+      error
+        ? `Inloggning misslyckades: ${error.message}`
+        : "Länk skickad! Kolla din e‑post och klicka på länken för att logga in."
+    );
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
+  const refreshMembers = async (rid: string) => {
+    const { data } = await supabase
+      .from("memberships")
+      .select("role,profiles(full_name,email)")
+      .eq("restaurant_id", rid);
+    if (data) {
+      setMembers(
+        data.map((m) => {
+          const p = (m as { profiles?: { full_name?: string; email?: string } }).profiles;
+          return { role: m.role ?? "member", name: p?.full_name ?? "", email: p?.email ?? "" };
+        })
+      );
+    }
+  };
+
+  const handleInvite = async () => {
+    if (!restaurantId) return;
+    const email = inviteEmail.trim();
+    if (!email) return;
+    const { error } = await supabase.from("invites").insert({
+      restaurant_id: restaurantId,
+      email,
+      invited_by: session?.user?.id ?? null,
+    });
+    setInviteMsg(error ? `Fel: ${error.message}` : "Inbjudan skickad.");
+    if (!error) setInviteEmail("");
+    if (!error) refreshMembers(restaurantId);
+  };
+
+  useEffect(() => {
+    if (!restaurantId) return;
+    refreshMembers(restaurantId);
+  }, [restaurantId]);
+
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-pink-50 p-6 flex items-center justify-center">
+        <div className="w-full max-w-md rounded-2xl border border-pink-200 bg-white p-6 shadow-lg">
+          <h1 className="text-2xl font-bold text-gray-900">Logga in</h1>
+          <p className="mt-1 text-sm text-gray-600">Skriv din e‑post för att få en inloggningslänk.</p>
+          <label className="mt-4 block text-sm font-semibold text-gray-700">E‑post</label>
+          <input
+            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+            value={authEmail}
+            onChange={(e) => setAuthEmail(e.target.value)}
+            placeholder="name@restaurant.se"
+          />
+          <button
+            className="mt-4 w-full rounded-lg bg-pink-600 px-4 py-2 font-semibold text-white hover:bg-pink-700 disabled:opacity-60"
+            onClick={handleLogin}
+            disabled={authLoading}
+          >
+            Skicka magisk länk
+          </button>
+          {authMsg ? <div className="mt-3 text-sm text-gray-700">{authMsg}</div> : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-pink-50 p-6">
@@ -866,6 +1140,51 @@ export default function ReservationDashboard() {
 
             <Section title="Kapacitet & tider">
               <div className="grid grid-cols-2 gap-3">
+                <Field label="Max gäster i restaurangen">
+                  <input
+                    type="number"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    value={config.seating.maxGuests}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        seating: { ...config.seating, maxGuests: Math.max(1, Number(e.target.value) || 1) },
+                      })
+                    }
+                  />
+                </Field>
+
+                <Field label="Max antal bord">
+                  <input
+                    type="number"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    value={config.seating.maxTables}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        seating: { ...config.seating, maxTables: Math.max(1, Number(e.target.value) || 1) },
+                      })
+                    }
+                  />
+                </Field>
+
+                <Field label="Max gäster per bokning">
+                  <input
+                    type="number"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    value={config.escalation.maxGuestsPerReservation}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        escalation: {
+                          ...config.escalation,
+                          maxGuestsPerReservation: Math.max(1, Number(e.target.value) || 1),
+                        },
+                      })
+                    }
+                  />
+                </Field>
+
                 <Field label="Gräns för grupp">
                   <input
                     type="number"
@@ -880,6 +1199,23 @@ export default function ReservationDashboard() {
                   />
                 </Field>
 
+                <Field label="Max tid per bokning (minuter)">
+                  <select
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    value={config.seating.maxBookingDurationMin}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        seating: { ...config.seating, maxBookingDurationMin: Number(e.target.value) as 60 | 90 | 120 },
+                      })
+                    }
+                  >
+                    <option value={60}>60</option>
+                    <option value={90}>90</option>
+                    <option value={120}>120</option>
+                  </select>
+                </Field>
+
                 <Field label="Barnstolar">
                   <input
                     type="number"
@@ -889,23 +1225,6 @@ export default function ReservationDashboard() {
                       setConfig({
                         ...config,
                         seating: { ...config.seating, highChairs: Math.max(0, Number(e.target.value) || 0) },
-                      })
-                    }
-                  />
-                </Field>
-
-                <Field label="Max gäster per bokning" className="col-span-2">
-                  <input
-                    type="number"
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                    value={config.escalation.maxGuestsPerReservation}
-                    onChange={(e) =>
-                      setConfig({
-                        ...config,
-                        escalation: {
-                          ...config.escalation,
-                          maxGuestsPerReservation: Math.max(1, Number(e.target.value) || 1),
-                        },
                       })
                     }
                   />
@@ -1202,6 +1521,22 @@ export default function ReservationDashboard() {
             </Section>
 
             <Section title="AI-profil & kunskapsbas">
+              <div className="mb-3 text-sm text-gray-600 flex items-center justify-between gap-2">
+                <div>Inloggad: {profileEmail || "—"}</div>
+                <button className="text-pink-700 hover:text-pink-900" onClick={handleLogout}>
+                  Logga ut
+                </button>
+              </div>
+
+              <Field label="Namn (kundprofil)">
+                <input
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  placeholder="Förnamn Efternamn"
+                />
+              </Field>
+
               <Field label="Namn på assistent">
                 <input
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
@@ -1210,7 +1545,7 @@ export default function ReservationDashboard() {
                 />
               </Field>
 
-              <Field label="Kunskapsbas (affärsinfo för bokning)">
+              <Field label="Kunskapsbas (affärsinfo för bokning)" className="mt-3">
                 <textarea
                   rows={4}
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
@@ -1308,6 +1643,48 @@ export default function ReservationDashboard() {
                     {aiPreview}
                   </div>
                 )}
+              </div>
+            </Section>
+
+            <Section title="Team & åtkomst">
+              <div className="text-sm text-gray-600 mb-3">Restaurang: {restaurantName || "—"}</div>
+
+              <Field label="Bjud in via e‑post">
+                <div className="mt-1 flex gap-2">
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="kollega@restaurant.se"
+                  />
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600"
+                    onClick={handleInvite}
+                  >
+                    Bjud in
+                  </button>
+                </div>
+              </Field>
+              {inviteMsg ? <div className="mt-2 text-sm text-gray-700">{inviteMsg}</div> : null}
+
+              <div className="mt-4 text-sm">
+                <div className="font-semibold text-gray-700 mb-2">Medlemmar</div>
+                <div className="space-y-2">
+                  {members.length ? (
+                    members.map((m, i) => (
+                      <div key={`${m.email}-${i}`} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+                        <div>
+                          <div className="text-gray-800">{m.name || "—"}</div>
+                          <div className="text-xs text-gray-500">{m.email || "—"}</div>
+                        </div>
+                        <div className="text-xs text-gray-500">{m.role}</div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-xs text-gray-500">Inga medlemmar ännu.</div>
+                  )}
+                </div>
               </div>
             </Section>
 
