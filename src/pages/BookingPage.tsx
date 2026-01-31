@@ -137,9 +137,9 @@ export default function BookingPage() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-[#2a0a4a] via-[#3b0a5e] to-[#5a0f6a] text-gray-800">
-      <div className="pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-full bg-fuchsia-400/30 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-40 -right-24 h-[28rem] w-[28rem] rounded-full bg-violet-400/30 blur-3xl" />
+    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-gray-800">
+      <div className="pointer-events-none absolute -top-40 -left-40 h-[34rem] w-[34rem] rounded-full bg-fuchsia-400/25 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-52 -right-28 h-[32rem] w-[32rem] rounded-full bg-violet-400/25 blur-3xl" />
 
       <header className="sticky top-0 z-10 backdrop-blur bg-white/10 border-b border-white/10">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -165,14 +165,14 @@ export default function BookingPage() {
             <div className="lg:col-span-3">
               <div className="rounded-3xl bg-white shadow-sm border border-rose-100 p-6 md:p-8">
                 <form ref={formRef} onSubmit={submit} className="space-y-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <label className="block sm:col-span-1">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <label className="block md:col-span-2">
                       <span className="text-sm font-semibold text-gray-700">Datum</span>
-                      <div className="mt-1 rounded-2xl border border-violet-200 bg-violet-50/60 p-3">
-                        <div className="flex items-center justify-between mb-2">
+                      <div className="mt-1 rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
+                        <div className="flex items-center justify-between mb-3">
                           <button
                             type="button"
-                            className="h-8 w-8 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
+                            className="h-9 w-9 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
                             onClick={() => {
                               const nm = viewMonth === 0 ? 11 : viewMonth - 1;
                               const ny = viewMonth === 0 ? viewYear - 1 : viewYear;
@@ -182,12 +182,12 @@ export default function BookingPage() {
                           >
                             ‹
                           </button>
-                          <div className="text-sm font-semibold text-violet-800">
+                          <div className="text-base font-semibold text-violet-800">
                             {monthName(viewMonth)} {viewYear}
                           </div>
                           <button
                             type="button"
-                            className="h-8 w-8 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
+                            className="h-9 w-9 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
                             onClick={() => {
                               const nm = viewMonth === 11 ? 0 : viewMonth + 1;
                               const ny = viewMonth === 11 ? viewYear + 1 : viewYear;
@@ -198,12 +198,12 @@ export default function BookingPage() {
                             ›
                           </button>
                         </div>
-                        <div className="grid grid-cols-7 text-[11px] text-violet-700/80 mb-2">
+                        <div className="grid grid-cols-7 text-xs text-violet-700/80 mb-2">
                           {["M", "T", "O", "T", "F", "L", "S"].map((d) => (
                             <div key={d} className="text-center">{d}</div>
                           ))}
                         </div>
-                        <div className="grid grid-cols-7 gap-1">
+                        <div className="grid grid-cols-7 gap-2">
                           {calendarDays.map((c) => {
                             if (!c.day) return <div key={c.key} className="h-8" />;
                             const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(c.day).padStart(2, "0")}`;
@@ -213,7 +213,7 @@ export default function BookingPage() {
                                 key={c.key}
                                 type="button"
                                 onClick={() => setDate(iso)}
-                                className={`h-8 rounded-lg text-sm ${
+                                className={`h-10 rounded-xl text-sm font-semibold ${
                                   isSel
                                     ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white"
                                     : "bg-white text-violet-700 border border-violet-200 hover:bg-violet-100"
