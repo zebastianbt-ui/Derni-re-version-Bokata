@@ -213,8 +213,11 @@ export default function ReservationDashboard() {
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
   const [members, setMembers] = useState<{ name: string; email: string; role: string }[]>([]);
   const [settingsReady, setSettingsReady] = useState(false);
+  const [aiSaveState, setAiSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [aiSaveMessage, setAiSaveMessage] = useState<string>("");
   const saveTimer = useRef<number | null>(null);
   const profileTimer = useRef<number | null>(null);
+  const bookingSaveTimer = useRef<number | null>(null);
 
   const [activeMeal, setActiveMeal] = useState<Meal>("Lunch");
   const [openBooking, setOpenBooking] = useState<Booking | null>(null);
@@ -439,7 +442,9 @@ export default function ReservationDashboard() {
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
 
     saveTimer.current = window.setTimeout(async () => {
-      await supabase.from("ai_settings").upsert(
+      setAiSaveState("saving");
+      setAiSaveMessage("");
+      const { error } = await supabase.from("ai_settings").upsert(
         {
           restaurant_id: restaurantId,
           knowledge: config.ai.knowledge,
@@ -448,12 +453,65 @@ export default function ReservationDashboard() {
         },
         { onConflict: "restaurant_id" }
       );
+      if (error) {
+        setAiSaveState("error");
+        setAiSaveMessage(error.message);
+      } else {
+        setAiSaveState("saved");
+        setAiSaveMessage("Sparad");
+      }
     }, 600);
 
     return () => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
     };
   }, [config.ai.knowledge, config.ai.name, session?.user?.id, settingsReady, restaurantId]);
+
+  const saveAiNow = async () => {
+    if (!restaurantId) return;
+    setAiSaveState("saving");
+    setAiSaveMessage("");
+    const { error } = await supabase.from("ai_settings").upsert(
+      {
+        restaurant_id: restaurantId,
+        knowledge: config.ai.knowledge,
+        assistant_name: config.ai.name,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "restaurant_id" }
+    );
+    if (error) {
+      setAiSaveState("error");
+      setAiSaveMessage(error.message);
+    } else {
+      setAiSaveState("saved");
+      setAiSaveMessage("Sparad");
+    }
+  };
+
+  useEffect(() => {
+    if (!session?.user?.id || !settingsReady || !restaurantId) return;
+    if (bookingSaveTimer.current) window.clearTimeout(bookingSaveTimer.current);
+    bookingSaveTimer.current = window.setTimeout(async () => {
+      await supabase.from("booking_public_settings").upsert(
+        {
+          public_id: restaurantId,
+          hours: config.hours,
+          seating: {
+            maxGuests: config.seating.maxGuests,
+            maxGuestsPerReservation: config.escalation.maxGuestsPerReservation,
+            groupThreshold: config.seating.groupThreshold,
+            maxBookingDurationMin: config.seating.maxBookingDurationMin,
+          },
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "public_id" }
+      );
+    }, 700);
+    return () => {
+      if (bookingSaveTimer.current) window.clearTimeout(bookingSaveTimer.current);
+    };
+  }, [config.hours, config.seating, config.escalation.maxGuestsPerReservation, restaurantId, settingsReady]);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -1763,9 +1821,17 @@ SVAR:
                 >
                   {onboardingOpen ? "Stäng onboarding" : "Starta onboarding"}
                 </button>
+                <button className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm" onClick={saveAiNow}>
+                  Spara nu
+                </button>
                 <div className="text-xs text-gray-500 self-center">
                   Kvalitet: {knowledgeScore.score}% {knowledgeScore.missing.length ? `• Saknas: ${knowledgeScore.missing.join(", ")}` : "• Bra!"}
                 </div>
+              </div>
+              <div className="mt-1 text-xs text-gray-500">
+                {aiSaveState === "saving" && "Sparar…"}
+                {aiSaveState === "saved" && `Sparad`}
+                {aiSaveState === "error" && `Kunde inte spara: ${aiSaveMessage}`}
               </div>
 
               {onboardingOpen && (
