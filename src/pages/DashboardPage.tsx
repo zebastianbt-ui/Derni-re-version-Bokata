@@ -99,16 +99,38 @@ const MONTHS = [
 const WD_SHORT = ["Må", "Ti", "On", "To", "Fr", "Lö", "Sö"];
 const WD_FULL = ["Söndag", "Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag"];
 
-const HOLIDAYS_2025 = [
-  { date: "2025-01-01", name: "Nyårsdagen" },
-  { date: "2025-01-06", name: "Trettondedag jul" },
-  { date: "2025-05-01", name: "Första maj" },
-  { date: "2025-05-29", name: "Kristi himmelsfärdsdag" },
-  { date: "2025-06-06", name: "Nationaldagen" },
-  { date: "2025-06-21", name: "Midsommardagen" },
-  { date: "2025-12-25", name: "Juldagen" },
-  { date: "2025-12-26", name: "Annandag jul" },
-];
+const HOLIDAYS_BY_YEAR: Record<number, { date: string; name: string }[]> = {
+  2026: [
+    { date: "2026-01-01", name: "Nyårsdagen" },
+    { date: "2026-01-06", name: "Trettondedag" },
+    { date: "2026-04-03", name: "Långfredagen" },
+    { date: "2026-04-05", name: "Påskdagen" },
+    { date: "2026-04-06", name: "Annandag påsk" },
+    { date: "2026-05-01", name: "Första maj" },
+    { date: "2026-05-14", name: "Kristi himmelsfärdsdag" },
+    { date: "2026-05-24", name: "Pingstdagen" },
+    { date: "2026-06-06", name: "Nationaldagen" },
+    { date: "2026-06-20", name: "Midsommardagen" },
+    { date: "2026-10-31", name: "Alla helgons dag" },
+    { date: "2026-12-25", name: "Juldagen" },
+    { date: "2026-12-26", name: "Annandag jul" },
+  ],
+  2027: [
+    { date: "2027-01-01", name: "Nyårsdagen" },
+    { date: "2027-01-06", name: "Trettondedag" },
+    { date: "2027-03-26", name: "Långfredagen" },
+    { date: "2027-03-28", name: "Påskdagen" },
+    { date: "2027-03-29", name: "Annandag påsk" },
+    { date: "2027-05-01", name: "Första maj" },
+    { date: "2027-05-06", name: "Kristi himmelsfärdsdag" },
+    { date: "2027-05-16", name: "Pingstdagen" },
+    { date: "2027-06-06", name: "Nationaldagen" },
+    { date: "2027-06-26", name: "Midsommardagen" },
+    { date: "2027-11-06", name: "Alla helgons dag" },
+    { date: "2027-12-25", name: "Juldagen" },
+    { date: "2027-12-26", name: "Annandag jul" },
+  ],
+};
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const timeToMin = (t: string) => {
@@ -594,6 +616,8 @@ export default function ReservationDashboard() {
   const faqTimeoutRef = useRef<number | null>(null);
   const [testRunning, setTestRunning] = useState(false);
   const [testResults, setTestResults] = useState<{ q: string; reply: string }[]>([]);
+  const currentYear = new Date().getFullYear();
+  const [holidayYear, setHolidayYear] = useState<number>(currentYear);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboarding, setOnboarding] = useState({
     restaurantName: "",
@@ -984,7 +1008,53 @@ SVAR:
     return [...blanks, ...days];
   }, [year, month, monthDays]);
 
-  const upcomingClosed = useMemo(() => [], []);
+  const closedRanges = useMemo(() => {
+    const dates = config.hours.special
+      .filter((s) => s.closed)
+      .map((s) => s.date)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    if (!dates.length) return [] as { from: string; to: string; count: number }[];
+    const out: { from: string; to: string; count: number }[] = [];
+    let start = dates[0];
+    let prev = dates[0];
+    let count = 1;
+    const toDate = (iso: string) => new Date(iso + "T00:00:00");
+    const nextDay = (iso: string) => {
+      const d = toDate(iso);
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().slice(0, 10);
+    };
+    for (let i = 1; i < dates.length; i++) {
+      const d = dates[i];
+      if (d === nextDay(prev)) {
+        prev = d;
+        count += 1;
+      } else {
+        out.push({ from: start, to: prev, count });
+        start = d;
+        prev = d;
+        count = 1;
+      }
+    }
+    out.push({ from: start, to: prev, count });
+    return out;
+  }, [config.hours.special]);
+
+  const removeClosedRange = (from: string, to: string) => {
+    setConfig((prev) => {
+      const toDate = (iso: string) => new Date(iso + "T00:00:00");
+      const start = toDate(from);
+      const end = toDate(to);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return prev;
+      const keep = prev.hours.special.filter((s) => {
+        if (!s.closed) return true;
+        const d = toDate(s.date);
+        return d < start || d > end;
+      });
+      return { ...prev, hours: { ...prev.hours, special: keep } };
+    });
+  };
 
   const handleLogin = async () => {
     const email = authEmail.trim();
@@ -1448,7 +1518,7 @@ SVAR:
               </div>
 
               <div className="mt-6">
-                <div className="text-sm font-semibold text-gray-700 mb-2">Öppettider (normala)</div>
+                <div className="text-base font-bold text-gray-800 mb-2">Öppettider (normala)</div>
                 <div className="divide-y rounded-lg border border-pink-200 bg-pink-50/40">
                   {DAYS_ORDER.map((day) => {
                     const d = config.hours.normal[day];
@@ -1521,10 +1591,23 @@ SVAR:
               </div>
 
               <div className="mt-6">
-                <div className="text-sm font-semibold text-gray-700 mb-2">Röda dagar (helgdagar)</div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-base font-bold text-gray-800">Röda dagar (helgdagar)</div>
+                  <select
+                    className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm"
+                    value={holidayYear}
+                    onChange={(e) => setHolidayYear(Number(e.target.value))}
+                  >
+                    {[currentYear, currentYear + 1].map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
                 <div className="space-y-2">
-                  {HOLIDAYS_2025.map((h) => {
+                  {(HOLIDAYS_BY_YEAR[holidayYear] ?? []).map((h) => {
                     const sp =
                       config.hours.special.find((s) => s.date === h.date) ||
                       ({ date: h.date, closed: true, open: "11:00", close: "17:00" } as const);
@@ -1567,7 +1650,7 @@ SVAR:
                 </div>
 
                 <div className="mt-6 rounded-lg border border-pink-200 bg-pink-50/40 p-3">
-                  <div className="text-sm font-semibold text-gray-700 mb-2">Stängda perioder</div>
+                  <div className="text-base font-bold text-gray-800 mb-2">Stängda perioder</div>
                   <div className="grid grid-cols-12 items-end gap-2">
                     <div className="col-span-4">
                       <Field label="Från">
@@ -1600,6 +1683,27 @@ SVAR:
                     </div>
                   </div>
                   <div className="mt-2 text-xs text-gray-500">Ex: semester 15–31 juli</div>
+
+                  <div className="mt-3 space-y-2">
+                    {closedRanges.length ? (
+                      closedRanges.map((r) => (
+                        <div key={`${r.from}-${r.to}`} className="flex items-center justify-between text-sm bg-white/70 border border-pink-200 rounded-lg px-3 py-2">
+                          <div className="text-gray-800">
+                            {r.from === r.to ? r.from : `${r.from} → ${r.to}`} <span className="text-xs text-gray-500">({r.count} dagar)</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="text-xs text-pink-700 hover:text-pink-800"
+                            onClick={() => removeClosedRange(r.from, r.to)}
+                          >
+                            Ta bort
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-xs text-gray-500">Inga stängda perioder sparade.</div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1613,7 +1717,7 @@ SVAR:
                 </button>
               </div>
 
-              <Field label="Namn (kundprofil)">
+              <Field label="Namn (kundprofil)" labelClassName="text-base font-bold text-gray-800">
                 <input
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
                   value={profileName}
@@ -1622,7 +1726,7 @@ SVAR:
                 />
               </Field>
 
-              <Field label="Namn på assistent">
+              <Field label="Namn på assistent" labelClassName="text-base font-bold text-gray-800">
                 <input
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
                   value={config.ai.name}
@@ -1978,10 +2082,20 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+function Field({
+  label,
+  children,
+  className,
+  labelClassName,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+  labelClassName?: string;
+}) {
   return (
     <label className={`block text-sm ${className ?? ""}`}>
-      <span className="text-gray-600">{label}</span>
+      <span className={`text-gray-600 ${labelClassName ?? ""}`}>{label}</span>
       {children}
     </label>
   );
