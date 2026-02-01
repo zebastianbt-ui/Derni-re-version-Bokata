@@ -247,9 +247,10 @@ export default function ReservationDashboard() {
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const [month, setMonth] = useState(8); // Sep (0-index)
-  const [year, setYear] = useState(2025);
-  const [selectedDay, setSelectedDay] = useState(5);
+  const today = useMemo(() => new Date(), []);
+  const [month, setMonth] = useState(today.getMonth());
+  const [year, setYear] = useState(today.getFullYear());
+  const [selectedDay, setSelectedDay] = useState(today.getDate());
   const dateSel = `${year}-${pad2(month + 1)}-${pad2(selectedDay)}`;
 
   const defaultSettings: Settings = useMemo(
@@ -401,10 +402,13 @@ export default function ReservationDashboard() {
         setRestaurantName(rest?.name ?? "");
       }
 
-      const [{ data: profile }, { data: settings }] = await Promise.all([
+      const [{ data: profile }, { data: settings }, { data: bookingSettings }] = await Promise.all([
         supabase.from("profiles").select("full_name,email").eq("user_id", userId).maybeSingle(),
         membership.data?.restaurant_id
           ? supabase.from("ai_settings").select("knowledge,assistant_name").eq("restaurant_id", membership.data.restaurant_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        membership.data?.restaurant_id
+          ? supabase.from("booking_public_settings").select("hours,seating").eq("public_id", membership.data.restaurant_id).maybeSingle()
           : Promise.resolve({ data: null }),
       ]);
 
@@ -422,6 +426,23 @@ export default function ReservationDashboard() {
             ...prev.ai,
             knowledge: settings.knowledge ?? prev.ai.knowledge,
             name: settings.assistant_name ?? prev.ai.name,
+          },
+        }));
+      }
+
+      if (bookingSettings?.hours || bookingSettings?.seating) {
+        setConfig((prev) => ({
+          ...prev,
+          hours: bookingSettings.hours ?? prev.hours,
+          seating: {
+            ...prev.seating,
+            maxGuests: bookingSettings.seating?.maxGuests ?? prev.seating.maxGuests,
+            maxBookingDurationMin: bookingSettings.seating?.maxBookingDurationMin ?? prev.seating.maxBookingDurationMin,
+            groupThreshold: bookingSettings.seating?.groupThreshold ?? prev.seating.groupThreshold,
+          },
+          escalation: {
+            ...prev.escalation,
+            maxGuestsPerReservation: bookingSettings.seating?.maxGuestsPerReservation ?? prev.escalation.maxGuestsPerReservation,
           },
         }));
       }
@@ -830,6 +851,7 @@ export default function ReservationDashboard() {
         knowledge: config.ai?.knowledge ?? "",
         context: {
           baseDate: dateSel,
+          nowTime: `${pad2(new Date().getHours())}:${pad2(new Date().getMinutes())}`,
           seating: {
             maxGuests: config.seating.maxGuests,
             maxGuestsPerReservation: config.escalation.maxGuestsPerReservation,

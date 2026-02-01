@@ -11,6 +11,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     knowledge?: string;
     context?: {
       baseDate?: string;
+      nowTime?: string;
       seating?: {
         maxGuests?: number;
         maxGuestsPerReservation?: number;
@@ -118,12 +119,99 @@ ${dashboardFacts}
   };
 
   const msgLower = message.toLowerCase();
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const knowledgeText = (knowledge ?? "").trim();
+  const knowledgeLines = knowledgeText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const getField = (label: string) => {
+    const line = knowledgeLines.find((l) => l.toLowerCase().startsWith(label.toLowerCase() + ":"));
+    return line ? line.split(":").slice(1).join(":").trim() : "";
+  };
+  const kbInfo = {
+    name: getField("Namn"),
+    address: getField("Adress"),
+    phone: getField("Telefon"),
+    email: getField("E-post"),
+    payment: getField("Betalning"),
+    allergies: getField("Allergier"),
+    kids: getField("Barn"),
+    pets: getField("Djurpolicy"),
+    parking: getField("Parkering"),
+    transport: getField("Kollektivtrafik"),
+  };
+  const kbFaqs = (() => {
+    const out: { q: string; a: string }[] = [];
+    let q: string | null = null;
+    for (const l of knowledgeLines) {
+      if (l.toLowerCase().startsWith("fråga:")) {
+        q = l.slice(6).trim();
+        continue;
+      }
+      if (l.toLowerCase().startsWith("svar:") && q) {
+        out.push({ q, a: l.slice(5).trim() });
+        q = null;
+      }
+    }
+    return out;
+  })();
   const isRestaurantTopic =
     /(boka|bokning|reservation|reservera|bord|table|öppet|öppettider|tider|adress|hitta|kontakt|telefon|email|e-post|meny|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|tillgäng|wheelchair)/i.test(
       msgLower
     );
   if (!isRestaurantTopic) {
     res.status(200).json({ reply: "Jag kan tyvärr bara svara på frågor om restaurangen." });
+    return;
+  }
+
+  const normMsg = normalize(message);
+  for (const qa of kbFaqs) {
+    const qn = normalize(qa.q);
+    if (qn && (normMsg.includes(qn) || qn.includes(normMsg)) && qa.a) {
+      res.status(200).json({ reply: qa.a });
+      return;
+    }
+  }
+
+  const addressMatch = /(adress|var ligger|hitta|vägbeskrivning)/i.test(msgLower);
+  if (addressMatch && kbInfo.address) {
+    res.status(200).json({ reply: `Vi finns på ${kbInfo.address}.` });
+    return;
+  }
+  if (/(telefon|ring|tel)/i.test(msgLower) && kbInfo.phone) {
+    res.status(200).json({ reply: `Du kan nå oss på ${kbInfo.phone}.` });
+    return;
+  }
+  if (/(e-post|email|mail)/i.test(msgLower) && kbInfo.email) {
+    res.status(200).json({ reply: `Du kan maila oss på ${kbInfo.email}.` });
+    return;
+  }
+  if (/(betal|kort|kontant|swish)/i.test(msgLower) && kbInfo.payment) {
+    res.status(200).json({ reply: `Vi tar ${kbInfo.payment}.` });
+    return;
+  }
+  if (/(allerg|gluten|laktos|nöt)/i.test(msgLower) && kbInfo.allergies) {
+    res.status(200).json({ reply: `Vi kan hjälpa till med: ${kbInfo.allergies}.` });
+    return;
+  }
+  if (/(barn|barnstol|barnmeny|barnvagn)/i.test(msgLower) && kbInfo.kids) {
+    res.status(200).json({ reply: `För barn gäller: ${kbInfo.kids}.` });
+    return;
+  }
+  if (/(hund|djur|terrass)/i.test(msgLower) && kbInfo.pets) {
+    res.status(200).json({ reply: `Djurpolicy: ${kbInfo.pets}.` });
+    return;
+  }
+  if (/parkering/i.test(msgLower) && kbInfo.parking) {
+    res.status(200).json({ reply: `Parkering: ${kbInfo.parking}.` });
+    return;
+  }
+  if (/(kollektiv|buss|tåg|spårvagn|tunnelbana)/i.test(msgLower) && kbInfo.transport) {
+    res.status(200).json({ reply: `Kollektivtrafik: ${kbInfo.transport}.` });
     return;
   }
 
@@ -199,6 +287,79 @@ ${dashboardFacts}
     }
     return null;
   };
+
+  const isClosedDate = (iso?: string | null) => {
+    if (!iso) return false;
+    return !!context?.hours?.special?.some((s) => s.date === iso && s.closed);
+  };
+
+  const getDayHours = (iso?: string | null) => {
+    if (!iso || !context?.hours?.normal) return null;
+    const dt = toUtcDate(iso);
+    if (!dt) return null;
+    const dayName = weekdaySv[dt.getUTCDay()];
+    const d = context.hours.normal[dayName];
+    if (!d) return null;
+    return { dayName, ...d };
+  };
+
+  const isHoursQuestion = /(öppet|öppettider|öppettid|stängt|stängda)/i.test(msgLower);
+  if (isHoursQuestion) {
+    const base = context?.baseDate ?? fmtDate(new Date());
+    if (/nästa vecka/i.test(msgLower)) {
+      const baseDt = toUtcDate(base) ?? new Date();
+      const cur = baseDt.getUTCDay();
+      const deltaToNextMon = ((1 - cur + 7) % 7) || 7;
+      const start = addDays(base, deltaToNextMon);
+      const days: string[] = [];
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(start ?? base, i);
+        if (d) days.push(d);
+      }
+      const openDays: string[] = [];
+      const closedDays: string[] = [];
+      for (const d of days) {
+        const hours = getDayHours(d);
+        if (!hours || hours.closed || isClosedDate(d)) {
+          closedDays.push(`${hours?.dayName ?? d}`);
+        } else {
+          openDays.push(`${hours.dayName} ${hours.open}–${hours.close}`);
+        }
+      }
+      if (!openDays.length) {
+        res.status(200).json({ reply: "Vi har stängt hela nästa vecka." });
+        return;
+      }
+      res.status(200).json({
+        reply: `Nästa vecka har vi öppet: ${openDays.join(", ")}.${closedDays.length ? ` Stängt: ${closedDays.join(", ")}.` : ""}`,
+      });
+      return;
+    }
+
+    const date = parseDate(msgLower, base);
+    if (date) {
+      const hours = getDayHours(date);
+      if (!hours || hours.closed || isClosedDate(date)) {
+        res.status(200).json({ reply: `Vi har stängt ${hours?.dayName ? `på ${hours.dayName}` : "den dagen"}.` });
+        return;
+      }
+      if (/idag|nu|just nu/i.test(msgLower) && context?.nowTime) {
+        const nowMin = timeToMin(context.nowTime);
+        const openMin = timeToMin(hours.open);
+        const closeMin = timeToMin(hours.close);
+        if (nowMin < openMin) {
+          res.status(200).json({ reply: `Vi öppnar kl ${hours.open} idag.` });
+          return;
+        }
+        if (nowMin > closeMin) {
+          res.status(200).json({ reply: `Vi har stängt för idag. Vi stängde kl ${hours.close}.` });
+          return;
+        }
+      }
+      res.status(200).json({ reply: `Vi har öppet ${hours.open}–${hours.close}.` });
+      return;
+    }
+  }
 
   const parseGuests = (txt: string) => {
     const m = txt.match(/\b(\d{1,3})\s*(gäster|pers|personer|person|guests)\b/i);
