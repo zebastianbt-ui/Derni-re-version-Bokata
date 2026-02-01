@@ -844,7 +844,7 @@ export default function ReservationDashboard() {
         .maybeSingle();
       if (membershipError) {
         setAiSaveState("error");
-        setAiSaveMessage("Kunde inte läsa medlemskap. Försök igen.");
+        setAiSaveMessage(`Kunde inte läsa medlemskap: ${membershipError.message}`);
         return;
       }
       restId = membership?.restaurant_id ?? null;
@@ -863,7 +863,7 @@ export default function ReservationDashboard() {
             .single();
           if (createError) {
             setAiSaveState("error");
-            setAiSaveMessage("Kunde inte skapa restaurang. Kontrollera behörigheter.");
+            setAiSaveMessage(`Kunde inte skapa restaurang: ${createError.message}`);
             return;
           }
           restId = created?.id ?? null;
@@ -874,7 +874,7 @@ export default function ReservationDashboard() {
             .insert({ restaurant_id: restId, user_id: userId, role: "owner" });
           if (memberInsertError) {
             setAiSaveState("error");
-            setAiSaveMessage("Kunde inte skapa medlemskap. Kontrollera policies.");
+            setAiSaveMessage(`Kunde inte skapa medlemskap: ${memberInsertError.message}`);
             return;
           }
         }
