@@ -6,9 +6,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { message, knowledge, context } = (req.body ?? {}) as {
+  const { message, knowledge, context, history } = (req.body ?? {}) as {
     message?: string;
     knowledge?: string;
+    history?: { role: "user" | "assistant"; content: string }[];
     context?: {
       baseDate?: string;
       nowTime?: string;
@@ -163,7 +164,15 @@ ${dashboardFacts}
     /(boka|bokning|reservation|reservera|bord|table|öppet|öppettider|tider|stängt|adress|hitta|var ligger|ligger|kontakt|telefon|email|e-post|meny|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|tillgäng|wheelchair)/i.test(
       msgLower
     );
-  if (!isRestaurantTopic) {
+  const lastAssistant = history?.slice().reverse().find((h) => h.role === "assistant")?.content || "";
+  const isFollowUp =
+    /^(varför|varfor|var|hur|vad|vilken|vilket|vilka|och|då|sa|så|ok|okej|tack)\b/i.test(msgLower) ||
+    msgLower.length <= 12;
+  if (!isRestaurantTopic && !isFollowUp) {
+    res.status(200).json({ reply: "Jag kan tyvärr bara svara på frågor om restaurangen." });
+    return;
+  }
+  if (!isRestaurantTopic && isFollowUp && !lastAssistant) {
     res.status(200).json({ reply: "Jag kan tyvärr bara svara på frågor om restaurangen." });
     return;
   }
@@ -480,6 +489,7 @@ ${dashboardFacts}
       temperature: 0.2,
       messages: [
         { role: "system", content: systemPrompt },
+        ...(history ?? []),
         { role: "user", content: message },
       ],
     }),

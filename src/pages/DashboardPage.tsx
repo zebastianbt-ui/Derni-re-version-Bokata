@@ -644,6 +644,7 @@ export default function ReservationDashboard() {
   // --- AI preview (MVP, deterministic)
   const [aiMsg, setAiMsg] = useState("");
   const [aiPreview, setAiPreview] = useState("");
+  const [aiHistory, setAiHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [newFaq, setNewFaq] = useState<string>("");
   const [faqSuccess, setFaqSuccess] = useState(false);
   const faqTimeoutRef = useRef<number | null>(null);
@@ -849,6 +850,7 @@ export default function ReservationDashboard() {
       body: JSON.stringify({
         message: text,
         knowledge: config.ai?.knowledge ?? "",
+        history: aiHistory,
         context: {
           baseDate: dateSel,
           nowTime: `${pad2(new Date().getHours())}:${pad2(new Date().getMinutes())}`,
@@ -2145,6 +2147,7 @@ export default function ReservationDashboard() {
     try {
       const reply = await callAi(aiMsg);
       setAiPreview(reply);
+      setAiHistory((prev) => [...prev, { role: "user", content: aiMsg }, { role: "assistant", content: reply }].slice(-12));
     } catch (err) {
       setAiPreview(`Fel vid AI-anrop. ${err instanceof Error ? err.message : ""}`.trim());
     }
@@ -2153,7 +2156,13 @@ export default function ReservationDashboard() {
   Förhandsvisa
 </button>
 
-                  <button className="px-4 py-2 rounded-lg border" onClick={() => setAiPreview("")}
+                  <button
+                    className="px-4 py-2 rounded-lg border"
+                    onClick={() => {
+                      setAiPreview("");
+                      setAiMsg("");
+                      setAiHistory([]);
+                    }}
                   >
                     Rensa
                   </button>
