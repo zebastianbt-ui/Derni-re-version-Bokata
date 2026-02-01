@@ -363,7 +363,18 @@ export default function ReservationDashboard() {
         .from("memberships")
         .select("restaurant_id,role")
         .eq("user_id", userId)
+        .eq("role", "owner")
+        .limit(1)
         .maybeSingle();
+
+      if (!membership.data) {
+        membership = await supabase
+          .from("memberships")
+          .select("restaurant_id,role")
+          .eq("user_id", userId)
+          .limit(1)
+          .maybeSingle();
+      }
 
       if (!membership.data) {
         const baseName = profileName.trim() ? `${profileName.trim()} Restaurant` : "Bokäta Restaurant";
@@ -636,6 +647,27 @@ export default function ReservationDashboard() {
   const [onboardingFaqs, setOnboardingFaqs] = useState<{ q: string; a: string }[]>([]);
   const onboardInitRef = useRef(false);
 
+  const fetchRestaurantIdForUser = async (userId: string) => {
+    const { data: ownerMembership, error: ownerErr } = await supabase
+      .from("memberships")
+      .select("restaurant_id,role")
+      .eq("user_id", userId)
+      .eq("role", "owner")
+      .limit(1)
+      .maybeSingle();
+    if (ownerErr) return { restaurantId: null, error: ownerErr };
+    if (ownerMembership?.restaurant_id) return { restaurantId: ownerMembership.restaurant_id, error: null };
+
+    const { data: anyMembership, error: anyErr } = await supabase
+      .from("memberships")
+      .select("restaurant_id,role")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+    if (anyErr) return { restaurantId: null, error: anyErr };
+    return { restaurantId: anyMembership?.restaurant_id ?? null, error: null };
+  };
+
   const commonFaqs = [
     "Har ni öppet på måndagar?",
     "Vilka är era öppettider per dag?",
@@ -837,22 +869,19 @@ export default function ReservationDashboard() {
     let restId = restaurantId;
     if (!restId) {
       const userId = session.user.id;
-      const { data: membership, error: membershipError } = await supabase
-        .from("memberships")
-        .select("restaurant_id,role")
-        .eq("user_id", userId)
-        .maybeSingle();
+      const { restaurantId: foundId, error: membershipError } = await fetchRestaurantIdForUser(userId);
       if (membershipError) {
         setAiSaveState("error");
         setAiSaveMessage(`Kunde inte läsa medlemskap: ${membershipError.message}`);
         return;
       }
-      restId = membership?.restaurant_id ?? null;
+      restId = foundId;
       if (!restId) {
         const { data: owned } = await supabase
           .from("restaurants")
           .select("id")
           .eq("owner_id", userId)
+          .limit(1)
           .maybeSingle();
         restId = owned?.id ?? null;
         if (!restId) {
