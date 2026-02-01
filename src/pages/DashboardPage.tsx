@@ -829,7 +829,11 @@ export default function ReservationDashboard() {
   };
 
   const saveKnowledgeNow = async () => {
-    if (!session?.user?.id || !settingsReady || !restaurantId) return;
+    if (!session?.user?.id || !restaurantId) {
+      setAiSaveState("error");
+      setAiSaveMessage("Du måste vara inloggad för att spara.");
+      return;
+    }
     const next = buildKnowledge(onboarding, onboardingFaqs);
     setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: next } }));
     setAiSaveState("saving");
@@ -849,7 +853,7 @@ export default function ReservationDashboard() {
       return;
     }
     setAiSaveState("saved");
-    setAiSaveMessage("Sparad");
+    setAiSaveMessage("Sparad!");
     setOnboardingDirty(false);
   };
 
@@ -1907,7 +1911,23 @@ export default function ReservationDashboard() {
                 </div>
 
                 <div className="mt-3">
-                  <div className="text-sm font-semibold text-gray-700 mb-2">Frågor & svar</div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm font-semibold text-gray-700">Frågor & svar</div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow disabled:opacity-60"
+                        onClick={saveKnowledgeNow}
+                        disabled={aiSaveState === "saving"}
+                      >
+                        {aiSaveState === "saving" ? "Sparar..." : "Spara nu"}
+                      </button>
+                      <div className={`text-xs ${aiSaveState === "error" ? "text-red-600" : "text-gray-500"}`}>
+                        {aiSaveState === "saved" && (aiSaveMessage || "Sparad")}
+                        {aiSaveState === "error" && aiSaveMessage}
+                      </div>
+                    </div>
+                  </div>
                   {onboardingFaqs.length ? (
                     <div className="space-y-2">
                       {onboardingFaqs.map((f, i) => (
@@ -1947,25 +1967,16 @@ export default function ReservationDashboard() {
               <div className="mt-2 text-xs text-gray-500">
                 Kvalitet: {knowledgeScore.score}% {knowledgeScore.missing.length ? `• Saknas: ${knowledgeScore.missing.join(", ")}` : "• Bra!"}
               </div>
-              <div className="mt-2 flex items-center gap-3">
-                <button
-                  type="button"
-                  className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
-                  onClick={saveKnowledgeNow}
-                >
-                  Spara nu
-                </button>
-                <div className="text-xs text-gray-500">
+              <div className="mt-2 text-xs text-gray-500">
                 {aiSaveState === "saving" && "Autosparar…"}
-                {aiSaveState === "saved" && (aiSaveMessage || "Autosparat")}
+                {aiSaveState === "saved" && "Autosparat"}
                 {aiSaveState === "error" && `Kunde inte spara: ${aiSaveMessage}`}
-              </div>
               </div>
 
               <div className="text-sm mt-2">
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex items-center gap-2 w-full">
                   <input
-                    className="h-9 w-64 rounded-lg border border-gray-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    className="h-9 flex-1 rounded-lg border border-gray-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
                     placeholder="Lägg till fråga…"
                     value={newFaq}
                     onChange={(e) => setNewFaq(e.target.value)}
@@ -2065,14 +2076,14 @@ export default function ReservationDashboard() {
               <Field label="Bjud in via e‑post">
                 <div className="mt-1 flex gap-2">
                   <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
                     placeholder="kollega@restaurant.se"
                   />
                   <button
                     type="button"
-                    className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600"
+                    className="px-6 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600"
                     onClick={handleInvite}
                   >
                     Bjud in
