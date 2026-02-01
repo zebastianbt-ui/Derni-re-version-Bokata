@@ -634,6 +634,7 @@ export default function ReservationDashboard() {
     transport: "",
   });
   const [onboardingFaqs, setOnboardingFaqs] = useState<{ q: string; a: string }[]>([]);
+  const onboardInitRef = useRef(false);
 
   const commonFaqs = [
     "Har ni öppet på måndagar?",
@@ -662,6 +663,24 @@ export default function ReservationDashboard() {
     "Vilken adress har ni?",
     "Hur kontaktar man er?",
   ];
+  const extendedFaqs = [
+    "Har ni brunch på helgerna?",
+    "Kan vi boka ett fönsterbord?",
+    "Finns det tystare bord för möten?",
+    "Har ni barnvänliga rätter?",
+    "Har ni en fast meny?",
+    "Kan man få kvitto via e‑post?",
+    "Finns det laddning för elbil i närheten?",
+    "Är ni öppna på helgdagar?",
+    "Har ni presentkort?",
+    "Tar ni emot företagsevent?",
+    "Kan man ändra eller avboka en bokning?",
+    "Hur långt i förväg kan man boka?",
+    "Är köket öppet hela öppettiden?",
+    "Finns det allergivänliga alternativ?",
+    "Kan vi ta med egen tårta?",
+    "Har ni privat rum?",
+  ];
 
   const addOnboardingFaq = (q: string) => {
     const trimmed = q.trim();
@@ -675,10 +694,10 @@ export default function ReservationDashboard() {
 
   const generateCommonQuestion = () => {
     const existing = new Set(onboardingFaqs.map((x) => x.q.toLowerCase()));
-    const available = commonFaqs.filter((q) => !existing.has(q.toLowerCase()));
-    const pick = available.length
-      ? available[Math.floor(Math.random() * available.length)]
-      : commonFaqs[Math.floor(Math.random() * commonFaqs.length)];
+    const common = new Set(commonFaqs.map((x) => x.toLowerCase()));
+    const available = extendedFaqs.filter((q) => !existing.has(q.toLowerCase()) && !common.has(q.toLowerCase()));
+    const pool = available.length ? available : extendedFaqs.filter((q) => !existing.has(q.toLowerCase()));
+    const pick = pool.length ? pool[Math.floor(Math.random() * pool.length)] : extendedFaqs[Math.floor(Math.random() * extendedFaqs.length)];
     addOnboardingFaq(pick);
   };
 
@@ -709,6 +728,49 @@ export default function ReservationDashboard() {
     const next = buildKnowledge(onboarding, onboardingFaqs);
     setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: next } }));
   }, [onboarding, onboardingFaqs, onboardingDirty]);
+
+  useEffect(() => {
+    if (onboardingDirty) return;
+    if (onboardInitRef.current) return;
+    const k = config.ai.knowledge || "";
+    if (!k.trim()) return;
+    const lines = k.split(/\r?\n/).map((l) => l.trim());
+    const data = { ...onboarding };
+    const mapField = (label: string) => {
+      const line = lines.find((l) => l.toLowerCase().startsWith(label.toLowerCase() + ":"));
+      return line ? line.split(":").slice(1).join(":").trim() : "";
+    };
+    data.restaurantName = mapField("Namn");
+    data.address = mapField("Adress");
+    data.phone = mapField("Telefon");
+    data.email = mapField("E-post");
+    data.hours = mapField("Öppettider");
+    data.bookingDuration = mapField("Bordsbokningstid")?.replace(/\s*min.*/i, "") || data.bookingDuration;
+    data.maxGuests = mapField("Max gäster per bokning");
+    data.payment = mapField("Betalning");
+    data.allergies = mapField("Allergier");
+    data.kids = mapField("Barn");
+    data.pets = mapField("Djurpolicy");
+    data.parking = mapField("Parkering");
+    data.transport = mapField("Kollektivtrafik");
+
+    const faqs: { q: string; a: string }[] = [];
+    let curQ: string | null = null;
+    for (const l of lines) {
+      if (l.toLowerCase().startsWith("fråga:")) {
+        curQ = l.slice(6).trim();
+        continue;
+      }
+      if (l.toLowerCase().startsWith("svar:") && curQ) {
+        const ans = l.slice(5).trim();
+        faqs.push({ q: curQ, a: ans });
+        curQ = null;
+      }
+    }
+    setOnboarding(data);
+    setOnboardingFaqs(faqs);
+    onboardInitRef.current = true;
+  }, [config.ai.knowledge, onboardingDirty]);
 
   const knowledgeScore = useMemo(() => {
     const k = (config.ai.knowledge || "").toLowerCase();
@@ -766,6 +828,31 @@ export default function ReservationDashboard() {
     return data.reply || "Inget svar.";
   };
 
+  const saveKnowledgeNow = async () => {
+    if (!session?.user?.id || !settingsReady || !restaurantId) return;
+    const next = buildKnowledge(onboarding, onboardingFaqs);
+    setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: next } }));
+    setAiSaveState("saving");
+    setAiSaveMessage("");
+    const { error } = await supabase.from("ai_settings").upsert(
+      {
+        restaurant_id: restaurantId,
+        knowledge: next,
+        assistant_name: config.ai.name,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "restaurant_id" }
+    );
+    if (error) {
+      setAiSaveState("error");
+      setAiSaveMessage(error.message);
+      return;
+    }
+    setAiSaveState("saved");
+    setAiSaveMessage("Sparad");
+    setOnboardingDirty(false);
+  };
+
   const runAiTests = async () => {
     const prompts = [
       "öppet måndag?",
@@ -819,8 +906,6 @@ export default function ReservationDashboard() {
       setFaqSuccess(false);
     }, 1000);
   };
-
-  const faqItems = useMemo(() => commonFaqs, []);
 
   function isBookingIntent(txt: string) {
     const t = txt.toLowerCase();
@@ -1827,7 +1912,19 @@ export default function ReservationDashboard() {
                     <div className="space-y-2">
                       {onboardingFaqs.map((f, i) => (
                         <div key={`${f.q}-${i}`} className="rounded-lg border border-gray-200 bg-white p-2">
-                          <div className="text-sm font-semibold text-gray-800">{f.q}</div>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-sm font-semibold text-gray-800">{f.q}</div>
+                            <button
+                              type="button"
+                              className="text-xs text-pink-700 hover:text-pink-800"
+                              onClick={() => {
+                                setOnboardingFaqs((prev) => prev.filter((_, idx) => idx !== i));
+                                setOnboardingDirty(true);
+                              }}
+                            >
+                              Ta bort
+                            </button>
+                          </div>
                           <input
                             className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1 text-sm"
                             placeholder="Skriv svar..."
@@ -1850,59 +1947,51 @@ export default function ReservationDashboard() {
               <div className="mt-2 text-xs text-gray-500">
                 Kvalitet: {knowledgeScore.score}% {knowledgeScore.missing.length ? `• Saknas: ${knowledgeScore.missing.join(", ")}` : "• Bra!"}
               </div>
-              <div className="mt-1 text-xs text-gray-500">
+              <div className="mt-2 flex items-center gap-3">
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
+                  onClick={saveKnowledgeNow}
+                >
+                  Spara nu
+                </button>
+                <div className="text-xs text-gray-500">
                 {aiSaveState === "saving" && "Autosparar…"}
-                {aiSaveState === "saved" && `Autosparat`}
+                {aiSaveState === "saved" && (aiSaveMessage || "Autosparat")}
                 {aiSaveState === "error" && `Kunde inte spara: ${aiSaveMessage}`}
               </div>
+              </div>
 
-              <div className="text-sm">
-  <div className="mb-2 flex items-center justify-between gap-2">
-    <div className="text-gray-700">Vanliga frågor</div>
-
-    <div className="flex items-center gap-2">
-      <input
-        className="h-9 w-56 rounded-lg border border-gray-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-        placeholder="Lägg till fråga…"
-        value={newFaq}
-        onChange={(e) => setNewFaq(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") addFaq();
-        }}
-      />
-      <button
-        type="button"
-        className="h-9 w-9 rounded-lg border border-pink-300 bg-pink-50 text-pink-700 hover:bg-pink-100 hover:border-pink-400 transition"
-        onClick={addFaq}
-        aria-label="Lägg till fråga"
-        title="Lägg till"
-      >
-        +
-      </button>
-      <button
-        type="button"
-        className="h-9 px-3 rounded-lg border border-gray-300 text-xs"
-        onClick={generateCommonQuestion}
-      >
-        Generera fråga
-      </button>
-    </div>
-  </div>
-  {faqSuccess && <div className="mb-2 text-xs text-green-700">Question ajoutée</div>}
-
-  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-    {faqItems.map((q, i) => (
-      <button
-        key={i}
-        type="button"
-        className="border border-pink-300 rounded-lg p-3 bg-pink-50 text-gray-800 hover:bg-pink-100 hover:border-pink-400 transition text-left"
-        onClick={() => addOnboardingFaq(q)}
-      >
-        {q}
-      </button>
-    ))}
-  </div>
-</div>
+              <div className="text-sm mt-2">
+                <div className="flex items-center justify-center gap-2">
+                  <input
+                    className="h-9 w-64 rounded-lg border border-gray-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    placeholder="Lägg till fråga…"
+                    value={newFaq}
+                    onChange={(e) => setNewFaq(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") addFaq();
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="h-9 w-9 rounded-lg border border-pink-300 bg-pink-50 text-pink-700 hover:bg-pink-100 hover:border-pink-400 transition"
+                    onClick={addFaq}
+                    aria-label="Lägg till fråga"
+                    title="Lägg till"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    className="h-9 px-3 rounded-lg border border-gray-300 text-xs"
+                    onClick={generateCommonQuestion}
+                  >
+                    Generera fråga
+                  </button>
+                </div>
+                {faqSuccess && <div className="mt-2 text-center text-xs text-green-700">Fråga tillagd</div>}
+              </div>
 
               <div className="mt-4">
                 <textarea
