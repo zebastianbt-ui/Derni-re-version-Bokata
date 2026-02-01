@@ -829,9 +829,61 @@ export default function ReservationDashboard() {
   };
 
   const saveKnowledgeNow = async () => {
-    if (!session?.user?.id || !restaurantId) {
+    if (!session?.user?.id) {
       setAiSaveState("error");
       setAiSaveMessage("Du måste vara inloggad för att spara.");
+      return;
+    }
+    let restId = restaurantId;
+    if (!restId) {
+      const userId = session.user.id;
+      const { data: membership, error: membershipError } = await supabase
+        .from("memberships")
+        .select("restaurant_id,role")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (membershipError) {
+        setAiSaveState("error");
+        setAiSaveMessage("Kunde inte läsa medlemskap. Försök igen.");
+        return;
+      }
+      restId = membership?.restaurant_id ?? null;
+      if (!restId) {
+        const { data: owned } = await supabase
+          .from("restaurants")
+          .select("id")
+          .eq("owner_id", userId)
+          .maybeSingle();
+        restId = owned?.id ?? null;
+        if (!restId) {
+          const { data: created, error: createError } = await supabase
+            .from("restaurants")
+            .insert({ name: profileName?.trim() ? `${profileName.trim()} Restaurant` : "Bokäta Restaurant", owner_id: userId })
+            .select("id")
+            .single();
+          if (createError) {
+            setAiSaveState("error");
+            setAiSaveMessage("Kunde inte skapa restaurang. Kontrollera behörigheter.");
+            return;
+          }
+          restId = created?.id ?? null;
+        }
+        if (restId) {
+          const { error: memberInsertError } = await supabase
+            .from("memberships")
+            .insert({ restaurant_id: restId, user_id: userId, role: "owner" });
+          if (memberInsertError) {
+            setAiSaveState("error");
+            setAiSaveMessage("Kunde inte skapa medlemskap. Kontrollera policies.");
+            return;
+          }
+        }
+      }
+      if (restId) setRestaurantId(restId);
+    }
+    if (!restId) {
+      setAiSaveState("error");
+      setAiSaveMessage("Restaurang saknas. Försök logga ut/in igen.");
       return;
     }
     const next = buildKnowledge(onboarding, onboardingFaqs);
@@ -840,7 +892,7 @@ export default function ReservationDashboard() {
     setAiSaveMessage("");
     const { error } = await supabase.from("ai_settings").upsert(
       {
-        restaurant_id: restaurantId,
+        restaurant_id: restId,
         knowledge: next,
         assistant_name: config.ai.name,
         updated_at: new Date().toISOString(),
