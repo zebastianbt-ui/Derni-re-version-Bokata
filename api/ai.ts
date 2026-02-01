@@ -160,7 +160,7 @@ ${dashboardFacts}
     return out;
   })();
   const isRestaurantTopic =
-    /(boka|bokning|reservation|reservera|bord|table|öppet|öppettider|tider|adress|hitta|kontakt|telefon|email|e-post|meny|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|tillgäng|wheelchair)/i.test(
+    /(boka|bokning|reservation|reservera|bord|table|öppet|öppettider|tider|stängt|adress|hitta|var ligger|ligger|kontakt|telefon|email|e-post|meny|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|tillgäng|wheelchair)/i.test(
       msgLower
     );
   if (!isRestaurantTopic) {
@@ -275,13 +275,15 @@ ${dashboardFacts}
       const [y] = base.split("-").map(Number);
       if (d >= 1 && d <= 31 && m) return `${y}-${pad2(m)}-${pad2(d)}`;
     }
+    const hasNext = /nästa/i.test(txt);
     for (const d of weekdaySv) {
       if (new RegExp(`\\b${d}\\b`, "i").test(txt)) {
         const baseDt = toUtcDate(base);
         if (!baseDt) return null;
         const cur = baseDt.getUTCDay();
         const target = weekdayIndex[d];
-        const delta = (target - cur + 7) % 7;
+        let delta = (target - cur + 7) % 7;
+        if (hasNext) delta = delta === 0 ? 7 : delta + 7;
         return addDays(base, delta);
       }
     }
