@@ -323,9 +323,18 @@ ${dashboardFacts}
   });
 
   const data = await r.json();
-const reply =
-  (data?.choices?.[0]?.message?.content ?? "").trim() ||
-  "Jag kan tyvärr inte svara säkert på det just nu. Jag vidarebefordrar din fråga och vi återkommer så snart som möjligt.";
+  if (!r.ok) {
+    const msg =
+      data?.error?.message ||
+      data?.error ||
+      `OpenAI error (${r.status})`;
+    res.status(500).json({ error: msg });
+    return;
+  }
+
+  const reply =
+    (data?.choices?.[0]?.message?.content ?? "").trim() ||
+    "Jag kan tyvärr inte svara säkert på det just nu. Jag vidarebefordrar din fråga och vi återkommer så snart som möjligt.";
 
   res.status(200).json({ reply });
 }

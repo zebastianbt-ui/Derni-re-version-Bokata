@@ -852,6 +852,9 @@ export default function ReservationDashboard() {
       }),
     });
     const data = await r.json();
+    if (!r.ok) {
+      throw new Error(data?.error || "AI error");
+    }
     return data.reply || "Inget svar.";
   };
 
@@ -971,10 +974,11 @@ export default function ReservationDashboard() {
         const ok =
           !/Jag kan tyvärr bara svara på frågor om restaurangen\./i.test(reply) &&
           !/Jag kan tyvärr inte svara säkert/i.test(reply) &&
-          reply !== "Fel vid AI-anrop.";
+          !/Fel vid AI-anrop\./i.test(reply);
         out.push({ q, reply, ok });
-      } catch {
-        out.push({ q, reply: "Fel vid AI-anrop.", ok: false });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "AI error";
+        out.push({ q, reply: `Fel vid AI-anrop. ${msg}`.trim(), ok: false });
       }
     }
     setTestResults(out);
@@ -2119,8 +2123,8 @@ export default function ReservationDashboard() {
     try {
       const reply = await callAi(aiMsg);
       setAiPreview(reply);
-    } catch {
-      setAiPreview("Fel vid AI-anrop.");
+    } catch (err) {
+      setAiPreview(`Fel vid AI-anrop. ${err instanceof Error ? err.message : ""}`.trim());
     }
   }}
 >
