@@ -467,27 +467,6 @@ export default function ReservationDashboard() {
     };
   }, [config.ai.knowledge, config.ai.name, session?.user?.id, settingsReady, restaurantId]);
 
-  const saveAiNow = async () => {
-    if (!restaurantId) return;
-    setAiSaveState("saving");
-    setAiSaveMessage("");
-    const { error } = await supabase.from("ai_settings").upsert(
-      {
-        restaurant_id: restaurantId,
-        knowledge: config.ai.knowledge,
-        assistant_name: config.ai.name,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "restaurant_id" }
-    );
-    if (error) {
-      setAiSaveState("error");
-      setAiSaveMessage(error.message);
-    } else {
-      setAiSaveState("saved");
-      setAiSaveMessage("Sparad");
-    }
-  };
 
   useEffect(() => {
     if (!session?.user?.id || !settingsReady || !restaurantId) return;
@@ -967,9 +946,6 @@ SVAR:
     });
   };
   // --- Custom closures (manual dates / periods)
-  const [customClosureOpen, setCustomClosureOpen] = useState(false);
-  const [customClosureMode, setCustomClosureMode] = useState<"single" | "range">("single");
-  const [customClosureDate, setCustomClosureDate] = useState<string>("");
   const [customClosureFrom, setCustomClosureFrom] = useState<string>("");
   const [customClosureTo, setCustomClosureTo] = useState<string>("");
 
@@ -983,13 +959,6 @@ SVAR:
   };
 
   const addCustomClosures = () => {
-    if (customClosureMode === "single") {
-      if (!customClosureDate) return;
-      upsertSpecialByDate(customClosureDate, { closed: true });
-      setCustomClosureDate("");
-      return;
-    }
-
     if (!customClosureFrom || !customClosureTo) return;
     const start = new Date(customClosureFrom + "T00:00:00").getTime();
     const end = new Date(customClosureTo + "T00:00:00").getTime();
@@ -1015,14 +984,7 @@ SVAR:
     return [...blanks, ...days];
   }, [year, month, monthDays]);
 
-  const upcomingClosed = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return config.hours.special
-      .filter((s) => s.closed && new Date(s.date + "T00:00:00").getTime() >= today.getTime())
-      .map((s) => s.date)
-      .sort((a, b) => a.localeCompare(b));
-  }, [config.hours.special]);
+  const upcomingClosed = useMemo(() => [], []);
 
   const handleLogin = async () => {
     const email = authEmail.trim();
@@ -1558,133 +1520,8 @@ SVAR:
                 </div>
               </div>
 
-                           <div className="mt-6">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-sm font-semibold text-gray-700">Röda dagar (helgdagar)</div>
-                  <button
-                    type="button"
-                    className="h-8 w-8 rounded-full border border-pink-300 text-pink-700 hover:bg-pink-50"
-                    onClick={() => setCustomClosureOpen((v) => !v)}
-                    aria-label="Lägg till manuellt stängt datum"
-                    title="Lägg till manuellt stängt datum"
-                  >
-                    +
-                  </button>
-                </div>
-
-                {customClosureOpen && (
-                  <div className="mb-3 rounded-lg border border-pink-200 bg-pink-50/40 p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        className={`px-3 py-1 text-sm rounded border ${
-                          customClosureMode === "single"
-                            ? "bg-pink-100 border-pink-500 text-pink-700 font-bold"
-                            : "bg-white border-pink-300 text-pink-600 hover:bg-pink-50"
-                        }`}
-                        onClick={() => setCustomClosureMode("single")}
-                      >
-                        En dag
-                      </button>
-                      <button
-                        type="button"
-                        className={`px-3 py-1 text-sm rounded border ${
-                          customClosureMode === "range"
-                            ? "bg-pink-100 border-pink-500 text-pink-700 font-bold"
-                            : "bg-white border-pink-300 text-pink-600 hover:bg-pink-50"
-                        }`}
-                        onClick={() => setCustomClosureMode("range")}
-                      >
-                        Period
-                      </button>
-
-                      <div className="ml-auto text-xs text-gray-500">Lägg till extra stängda dagar (t.ex. semester)</div>
-                    </div>
-
-                    {customClosureMode === "single" ? (
-                      <div className="mt-3 grid grid-cols-12 items-end gap-2">
-                        <div className="col-span-8">
-                          <Field label="Datum">
-                            <input
-                              type="date"
-                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                              value={customClosureDate}
-                              onChange={(e) => setCustomClosureDate(e.target.value)}
-                            />
-                          </Field>
-                        </div>
-                        <div className="col-span-4">
-                          <button
-                            type="button"
-                            className="w-full px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
-                            onClick={addCustomClosures}
-                          >
-                            Lägg till
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="mt-3 grid grid-cols-12 items-end gap-2">
-                        <div className="col-span-4">
-                          <Field label="Från">
-                            <input
-                              type="date"
-                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                              value={customClosureFrom}
-                              onChange={(e) => setCustomClosureFrom(e.target.value)}
-                            />
-                          </Field>
-                        </div>
-                        <div className="col-span-4">
-                          <Field label="Till">
-                            <input
-                              type="date"
-                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                              value={customClosureTo}
-                              onChange={(e) => setCustomClosureTo(e.target.value)}
-                            />
-                          </Field>
-                        </div>
-                        <div className="col-span-4">
-                          <button
-                            type="button"
-                            className="w-full px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
-                            onClick={addCustomClosures}
-                          >
-                            Lägg till
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                  <div className="text-xs font-semibold text-gray-600 mb-2">Kommande stängda datum</div>
-                  {upcomingClosed.length ? (
-                    <div className="space-y-2">
-                      {upcomingClosed.map((date) => (
-                        <div key={date} className="flex items-center justify-between text-sm">
-                          <span className="text-gray-700">{date}</span>
-                          <button
-                            type="button"
-                            className="text-xs text-pink-700 hover:text-pink-800"
-                            onClick={() =>
-                              setConfig((prev) => ({
-                                ...prev,
-                                hours: { ...prev.hours, special: prev.hours.special.filter((s) => s.date !== date) },
-                              }))
-                            }
-                          >
-                            Supprimer
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-gray-500">Aucune date fermée à venir.</div>
-                  )}
-                </div>
+              <div className="mt-6">
+                <div className="text-sm font-semibold text-gray-700 mb-2">Röda dagar (helgdagar)</div>
 
                 <div className="space-y-2">
                   {HOLIDAYS_2025.map((h) => {
@@ -1728,50 +1565,44 @@ SVAR:
                     );
                   })}
                 </div>
+
+                <div className="mt-6 rounded-lg border border-pink-200 bg-pink-50/40 p-3">
+                  <div className="text-sm font-semibold text-gray-700 mb-2">Stängda perioder</div>
+                  <div className="grid grid-cols-12 items-end gap-2">
+                    <div className="col-span-4">
+                      <Field label="Från">
+                        <input
+                          type="date"
+                          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                          value={customClosureFrom}
+                          onChange={(e) => setCustomClosureFrom(e.target.value)}
+                        />
+                      </Field>
+                    </div>
+                    <div className="col-span-4">
+                      <Field label="Till">
+                        <input
+                          type="date"
+                          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                          value={customClosureTo}
+                          onChange={(e) => setCustomClosureTo(e.target.value)}
+                        />
+                      </Field>
+                    </div>
+                    <div className="col-span-4">
+                      <button
+                        type="button"
+                        className="w-full px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
+                        onClick={addCustomClosures}
+                      >
+                        Lägg till period
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500">Ex: semester 15–31 juli</div>
+                </div>
               </div>
 
-            </Section>
-
-            <Section title="Policies">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <Toggle label="Vegan" checked={config.policies.vegan} onChange={(v) => setConfig({ ...config, policies: { ...config.policies, vegan: v } })} />
-                <Toggle
-                  label="Glutenfri"
-                  checked={config.policies.glutenFree}
-                  onChange={(v) => setConfig({ ...config, policies: { ...config.policies, glutenFree: v } })}
-                />
-                <Toggle
-                  label="Laktosfri"
-                  checked={config.policies.lactoseFree}
-                  onChange={(v) => setConfig({ ...config, policies: { ...config.policies, lactoseFree: v } })}
-                />
-                <Toggle
-                  label="Barnmeny"
-                  checked={config.policies.kidsMenu}
-                  onChange={(v) => setConfig({ ...config, policies: { ...config.policies, kidsMenu: v } })}
-                />
-                <Toggle
-                  label="Barnvagn tillåten"
-                  checked={config.policies.strollerAllowed}
-                  onChange={(v) => setConfig({ ...config, policies: { ...config.policies, strollerAllowed: v } })}
-                />
-                <Toggle
-                  label="Rullstolsvänligt"
-                  checked={config.policies.wheelchair}
-                  onChange={(v) => setConfig({ ...config, policies: { ...config.policies, wheelchair: v } })}
-                />
-                <Field label="Djur" className="col-span-2">
-                  <select
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                    value={config.policies.pets}
-                    onChange={(e) => setConfig({ ...config, policies: { ...config.policies, pets: e.target.value as PetsPolicy } })}
-                  >
-                    <option value="none">Inga</option>
-                    <option value="terrace">Endast terrass</option>
-                    <option value="everywhere">Överallt</option>
-                  </select>
-                </Field>
-              </div>
             </Section>
 
             <Section title="AI-profil & kunskapsbas">
@@ -1799,7 +1630,11 @@ SVAR:
                 />
               </Field>
 
-              <Field label="Kunskapsbas (affärsinfo för bokning)" className="mt-3">
+              <div className="mt-3 text-sm text-gray-600">
+                Skriv korta fakta om restaurangen. Exempel: öppettider, adress, betalning, allergier.
+              </div>
+
+              <Field label="Kunskapsbas" className="mt-2">
                 <textarea
                   rows={4}
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
@@ -1821,16 +1656,13 @@ SVAR:
                 >
                   {onboardingOpen ? "Stäng onboarding" : "Starta onboarding"}
                 </button>
-                <button className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm" onClick={saveAiNow}>
-                  Spara nu
-                </button>
                 <div className="text-xs text-gray-500 self-center">
                   Kvalitet: {knowledgeScore.score}% {knowledgeScore.missing.length ? `• Saknas: ${knowledgeScore.missing.join(", ")}` : "• Bra!"}
                 </div>
               </div>
               <div className="mt-1 text-xs text-gray-500">
-                {aiSaveState === "saving" && "Sparar…"}
-                {aiSaveState === "saved" && `Sparad`}
+                {aiSaveState === "saving" && "Autosparar…"}
+                {aiSaveState === "saved" && `Autosparat`}
                 {aiSaveState === "error" && `Kunde inte spara: ${aiSaveMessage}`}
               </div>
 
