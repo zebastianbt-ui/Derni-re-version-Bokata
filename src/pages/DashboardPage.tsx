@@ -610,15 +610,14 @@ export default function ReservationDashboard() {
   // --- AI preview (MVP, deterministic)
   const [aiMsg, setAiMsg] = useState("");
   const [aiPreview, setAiPreview] = useState("");
-  const knowledgeRef = useRef<HTMLTextAreaElement>(null);
   const [newFaq, setNewFaq] = useState<string>("");
   const [faqSuccess, setFaqSuccess] = useState(false);
   const faqTimeoutRef = useRef<number | null>(null);
   const [testRunning, setTestRunning] = useState(false);
-  const [testResults, setTestResults] = useState<{ q: string; reply: string }[]>([]);
+  const [testResults, setTestResults] = useState<{ q: string; reply: string; ok: boolean }[]>([]);
   const currentYear = new Date().getFullYear();
   const [holidayYear, setHolidayYear] = useState<number>(currentYear);
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingDirty, setOnboardingDirty] = useState(false);
   const [onboarding, setOnboarding] = useState({
     restaurantName: "",
     address: "",
@@ -634,28 +633,7 @@ export default function ReservationDashboard() {
     parking: "",
     transport: "",
   });
-
-  const knowledgeTemplate = `INFOS:
-Namn:
-Adress:
-Telefon:
-E-post:
-Öppettider:
-Bordsbokningstid:
-Max gäster per bokning:
-Betalning:
-Allergier:
-Barn:
-Djurpolicy:
-Parkering:
-Kollektivtrafik:
-
-FRÅGA: Har ni öppet på måndagar?
-SVAR:
-
-FRÅGA: Tar ni emot kontanter?
-SVAR:
-`;
+  const [onboardingFaqs, setOnboardingFaqs] = useState<{ q: string; a: string }[]>([]);
 
   const commonFaqs = [
     "Har ni öppet på måndagar?",
@@ -685,48 +663,52 @@ SVAR:
     "Hur kontaktar man er?",
   ];
 
-  const insertCommonFaqs = () => {
-    const blocks = commonFaqs.map((q) => `FRÅGA: ${q}\nSVAR: `).join("\n\n");
-    setConfig((prev) => {
-      const k = prev.ai.knowledge ?? "";
-      const toAdd = commonFaqs.filter((q) => !k.toLowerCase().includes(q.toLowerCase()));
-      if (!toAdd.length) return prev;
-      const addBlock = toAdd.map((q) => `FRÅGA: ${q}\nSVAR: `).join("\n\n");
-      const next = k.trim()
-        ? k.trim() + "\n\n" + addBlock + "\n"
-        : blocks + "\n";
-      return { ...prev, ai: { ...prev.ai, knowledge: next } };
+  const addOnboardingFaq = (q: string) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    setOnboardingFaqs((prev) => {
+      if (prev.some((x) => x.q.toLowerCase() === trimmed.toLowerCase())) return prev;
+      return [...prev, { q: trimmed, a: "" }];
     });
-    setTimeout(() => knowledgeRef.current?.focus(), 0);
+    setOnboardingDirty(true);
   };
 
-  const applyTemplate = () => {
-    setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: prev.ai.knowledge?.trim() ? prev.ai.knowledge : knowledgeTemplate } }));
-    setTimeout(() => knowledgeRef.current?.focus(), 0);
+  const generateCommonQuestion = () => {
+    const existing = new Set(onboardingFaqs.map((x) => x.q.toLowerCase()));
+    const available = commonFaqs.filter((q) => !existing.has(q.toLowerCase()));
+    const pick = available.length
+      ? available[Math.floor(Math.random() * available.length)]
+      : commonFaqs[Math.floor(Math.random() * commonFaqs.length)];
+    addOnboardingFaq(pick);
   };
 
-  const applyOnboarding = () => {
+  const buildKnowledge = (data: typeof onboarding, faqs: { q: string; a: string }[]) => {
     const lines = [
       "INFOS:",
-      onboarding.restaurantName ? `Namn: ${onboarding.restaurantName}` : "",
-      onboarding.address ? `Adress: ${onboarding.address}` : "",
-      onboarding.phone ? `Telefon: ${onboarding.phone}` : "",
-      onboarding.email ? `E-post: ${onboarding.email}` : "",
-      onboarding.hours ? `Öppettider: ${onboarding.hours}` : "",
-      onboarding.bookingDuration ? `Bordsbokningstid: ${onboarding.bookingDuration} min` : "",
-      onboarding.maxGuests ? `Max gäster per bokning: ${onboarding.maxGuests}` : "",
-      onboarding.payment ? `Betalning: ${onboarding.payment}` : "",
-      onboarding.allergies ? `Allergier: ${onboarding.allergies}` : "",
-      onboarding.kids ? `Barn: ${onboarding.kids}` : "",
-      onboarding.pets ? `Djurpolicy: ${onboarding.pets}` : "",
-      onboarding.parking ? `Parkering: ${onboarding.parking}` : "",
-      onboarding.transport ? `Kollektivtrafik: ${onboarding.transport}` : "",
+      data.restaurantName ? `Namn: ${data.restaurantName}` : "",
+      data.address ? `Adress: ${data.address}` : "",
+      data.phone ? `Telefon: ${data.phone}` : "",
+      data.email ? `E-post: ${data.email}` : "",
+      data.hours ? `Öppettider: ${data.hours}` : "",
+      data.bookingDuration ? `Bordsbokningstid: ${data.bookingDuration} min` : "",
+      data.maxGuests ? `Max gäster per bokning: ${data.maxGuests}` : "",
+      data.payment ? `Betalning: ${data.payment}` : "",
+      data.allergies ? `Allergier: ${data.allergies}` : "",
+      data.kids ? `Barn: ${data.kids}` : "",
+      data.pets ? `Djurpolicy: ${data.pets}` : "",
+      data.parking ? `Parkering: ${data.parking}` : "",
+      data.transport ? `Kollektivtrafik: ${data.transport}` : "",
       "",
-    ].filter(Boolean);
-    setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: lines.join("\n") } }));
-    setOnboardingOpen(false);
-    setTimeout(() => knowledgeRef.current?.focus(), 0);
+    ].filter((x) => x !== "");
+    const qa = faqs.flatMap((f) => [`FRÅGA: ${f.q}`, `SVAR: ${f.a || ""}`, ""]);
+    return [...lines, ...qa].join("\n").trim();
   };
+
+  useEffect(() => {
+    if (!onboardingDirty) return;
+    const next = buildKnowledge(onboarding, onboardingFaqs);
+    setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: next } }));
+  }, [onboarding, onboardingFaqs, onboardingDirty]);
 
   const knowledgeScore = useMemo(() => {
     const k = (config.ai.knowledge || "").toLowerCase();
@@ -788,25 +770,37 @@ SVAR:
     const prompts = [
       "öppet måndag?",
       "Har ni öppet på Måndag?",
+      "Öppettider?",
       "Vegan?",
+      "Har ni veganska alternativ?",
       "Glutenfritt?",
+      "Laktosfritt?",
       "Parkering?",
       "Tar ni Swish?",
+      "Tar ni kontanter?",
+      "Tar ni kort?",
       "Finns barnstolar?",
+      "Barnvagn?",
+      "Hundar tillåtna?",
       "Hur länge är en bordsbokning?",
       "Boka bord för 4 imorgon kl 19",
       "Boka bord för 12 på fredag kl 18",
       "Var ligger ni?",
+      "Vad heter ägaren till OpenAI?",
     ];
     setTestRunning(true);
     setTestResults([]);
-    const out: { q: string; reply: string }[] = [];
+    const out: { q: string; reply: string; ok: boolean }[] = [];
     for (const q of prompts) {
       try {
         const reply = await callAi(q);
-        out.push({ q, reply });
+        const ok =
+          !/Jag kan tyvärr bara svara på frågor om restaurangen\./i.test(reply) &&
+          !/Jag kan tyvärr inte svara säkert/i.test(reply) &&
+          reply !== "Fel vid AI-anrop.";
+        out.push({ q, reply, ok });
       } catch {
-        out.push({ q, reply: "Fel vid AI-anrop." });
+        out.push({ q, reply: "Fel vid AI-anrop.", ok: false });
       }
     }
     setTestResults(out);
@@ -816,50 +810,17 @@ SVAR:
   const addFaq = () => {
     const q = newFaq.trim();
     if (!q) return;
-    let added = false;
-
-    setConfig((prev) => {
-      const lines = prev.ai.faq
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean);
-
-      if (lines.some((x) => x.toLowerCase() === q.toLowerCase())) return prev;
-
-      added = true;
-      return { ...prev, ai: { ...prev.ai, faq: [...lines, q].join("\n") } };
-    });
+    addOnboardingFaq(q);
 
     setNewFaq("");
-    if (added) {
-      if (faqTimeoutRef.current) window.clearTimeout(faqTimeoutRef.current);
-      setFaqSuccess(true);
-      faqTimeoutRef.current = window.setTimeout(() => {
-        setFaqSuccess(false);
-      }, 1000);
-    }
+    if (faqTimeoutRef.current) window.clearTimeout(faqTimeoutRef.current);
+    setFaqSuccess(true);
+    faqTimeoutRef.current = window.setTimeout(() => {
+      setFaqSuccess(false);
+    }, 1000);
   };
 
-  const faqItems = useMemo(
-    () => config.ai.faq.split("\n").map((s) => s.trim()).filter(Boolean),
-    [config.ai.faq]
-  );
-
-  const insertFaqIntoKnowledge = (q: string) => {
-    const block = `Fråga: ${q}\nSvar: \n\n`;
-    setConfig((prev) => {
-      const exists = prev.ai.knowledge.includes(q);
-      const kn = exists
-        ? prev.ai.knowledge
-        : prev.ai.knowledge
-        ? prev.ai.knowledge.endsWith("\n")
-          ? prev.ai.knowledge + block
-          : prev.ai.knowledge + "\n" + block
-        : block;
-      return { ...prev, ai: { ...prev.ai, knowledge: kn } };
-    });
-    setTimeout(() => knowledgeRef.current?.focus(), 0);
-  };
+  const faqItems = useMemo(() => commonFaqs, []);
 
   function isBookingIntent(txt: string) {
     const t = txt.toLowerCase();
@@ -1735,134 +1696,165 @@ SVAR:
               </Field>
 
               <div className="mt-3 text-sm text-gray-600">
-                Skriv korta fakta om restaurangen. Exempel: öppettider, adress, betalning, allergier.
+                Fyll i fakta om restaurangen. Svar sparas automatiskt.
               </div>
 
-              <Field label="Kunskapsbas" className="mt-2">
-                <textarea
-                  rows={4}
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                  ref={knowledgeRef}
-                  value={config.ai.knowledge}
-                  onChange={(e) => setConfig({ ...config, ai: { ...config.ai, knowledge: e.target.value } })}
-                />
-              </Field>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm" onClick={applyTemplate}>
-                  Använd mall
-                </button>
-                <button className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm" onClick={insertCommonFaqs}>
-                  Lägg in vanliga frågor
-                </button>
-                <button
-                  className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm"
-                  onClick={() => setOnboardingOpen((v) => !v)}
-                >
-                  {onboardingOpen ? "Stäng onboarding" : "Starta onboarding"}
-                </button>
-                <div className="text-xs text-gray-500 self-center">
-                  Kvalitet: {knowledgeScore.score}% {knowledgeScore.missing.length ? `• Saknas: ${knowledgeScore.missing.join(", ")}` : "• Bra!"}
+              <div className="mt-2 rounded-lg border border-pink-200 bg-pink-50/30 p-3">
+                <div className="text-sm font-semibold text-gray-700 mb-2">Kunskapsbas</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Namn på restaurang"
+                    value={onboarding.restaurantName}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, restaurantName: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Adress"
+                    value={onboarding.address}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, address: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Telefon"
+                    value={onboarding.phone}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, phone: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="E‑post"
+                    value={onboarding.email}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, email: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
+                    placeholder="Öppettider (ex: tis–sön 11:00–21:00, måndag stängt)"
+                    value={onboarding.hours}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, hours: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Bordsbokningstid (min)"
+                    value={onboarding.bookingDuration}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, bookingDuration: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Max gäster per bokning"
+                    value={onboarding.maxGuests}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, maxGuests: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
+                    placeholder="Betalning (ex: kort, kontant, Swish)"
+                    value={onboarding.payment}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, payment: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
+                    placeholder="Allergier (ex: gluten/laktos/nötter)"
+                    value={onboarding.allergies}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, allergies: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Barn (barnstol/barnmeny)"
+                    value={onboarding.kids}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, kids: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Djurpolicy"
+                    value={onboarding.pets}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, pets: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Parkering"
+                    value={onboarding.parking}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, parking: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Kollektivtrafik"
+                    value={onboarding.transport}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, transport: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
                 </div>
+
+                <div className="mt-3">
+                  <div className="text-sm font-semibold text-gray-700 mb-2">Frågor & svar</div>
+                  {onboardingFaqs.length ? (
+                    <div className="space-y-2">
+                      {onboardingFaqs.map((f, i) => (
+                        <div key={`${f.q}-${i}`} className="rounded-lg border border-gray-200 bg-white p-2">
+                          <div className="text-sm font-semibold text-gray-800">{f.q}</div>
+                          <input
+                            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1 text-sm"
+                            placeholder="Skriv svar..."
+                            value={f.a}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setOnboardingFaqs((prev) => prev.map((x, idx) => (idx === i ? { ...x, a: v } : x)));
+                              setOnboardingDirty(true);
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-500">Lägg till en fråga nedan för att skriva svar.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-2 text-xs text-gray-500">
+                Kvalitet: {knowledgeScore.score}% {knowledgeScore.missing.length ? `• Saknas: ${knowledgeScore.missing.join(", ")}` : "• Bra!"}
               </div>
               <div className="mt-1 text-xs text-gray-500">
                 {aiSaveState === "saving" && "Autosparar…"}
                 {aiSaveState === "saved" && `Autosparat`}
                 {aiSaveState === "error" && `Kunde inte spara: ${aiSaveMessage}`}
               </div>
-
-              {onboardingOpen && (
-                <div className="mt-3 rounded-lg border border-pink-200 bg-pink-50/30 p-3">
-                  <div className="text-sm font-semibold text-gray-700 mb-2">Snabb onboarding</div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                    <input
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                      placeholder="Namn på restaurang"
-                      value={onboarding.restaurantName}
-                      onChange={(e) => setOnboarding({ ...onboarding, restaurantName: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                      placeholder="Adress"
-                      value={onboarding.address}
-                      onChange={(e) => setOnboarding({ ...onboarding, address: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                      placeholder="Telefon"
-                      value={onboarding.phone}
-                      onChange={(e) => setOnboarding({ ...onboarding, phone: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                      placeholder="E‑post"
-                      value={onboarding.email}
-                      onChange={(e) => setOnboarding({ ...onboarding, email: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
-                      placeholder="Öppettider (ex: tis–sön 11:00–21:00, måndag stängt)"
-                      value={onboarding.hours}
-                      onChange={(e) => setOnboarding({ ...onboarding, hours: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                      placeholder="Bordsbokningstid (min)"
-                      value={onboarding.bookingDuration}
-                      onChange={(e) => setOnboarding({ ...onboarding, bookingDuration: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                      placeholder="Max gäster per bokning"
-                      value={onboarding.maxGuests}
-                      onChange={(e) => setOnboarding({ ...onboarding, maxGuests: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
-                      placeholder="Betalning (ex: kort, kontant, Swish)"
-                      value={onboarding.payment}
-                      onChange={(e) => setOnboarding({ ...onboarding, payment: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
-                      placeholder="Allergier (ex: gluten/laktos/nötter)"
-                      value={onboarding.allergies}
-                      onChange={(e) => setOnboarding({ ...onboarding, allergies: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                      placeholder="Barn (barnstol/barnmeny)"
-                      value={onboarding.kids}
-                      onChange={(e) => setOnboarding({ ...onboarding, kids: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                      placeholder="Djurpolicy"
-                      value={onboarding.pets}
-                      onChange={(e) => setOnboarding({ ...onboarding, pets: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                      placeholder="Parkering"
-                      value={onboarding.parking}
-                      onChange={(e) => setOnboarding({ ...onboarding, parking: e.target.value })}
-                    />
-                    <input
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                      placeholder="Kollektivtrafik"
-                      value={onboarding.transport}
-                      onChange={(e) => setOnboarding({ ...onboarding, transport: e.target.value })}
-                    />
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <button className="px-3 py-1.5 rounded-lg bg-pink-500 text-white" onClick={applyOnboarding}>
-                      Generera kunskapsbas
-                    </button>
-                    <button className="px-3 py-1.5 rounded-lg border" onClick={() => setOnboardingOpen(false)}>
-                      Avbryt
-                    </button>
-                  </div>
-                </div>
-              )}
 
               <div className="text-sm">
   <div className="mb-2 flex items-center justify-between gap-2">
@@ -1887,6 +1879,13 @@ SVAR:
       >
         +
       </button>
+      <button
+        type="button"
+        className="h-9 px-3 rounded-lg border border-gray-300 text-xs"
+        onClick={generateCommonQuestion}
+      >
+        Generera fråga
+      </button>
     </div>
   </div>
   {faqSuccess && <div className="mb-2 text-xs text-green-700">Question ajoutée</div>}
@@ -1897,7 +1896,7 @@ SVAR:
         key={i}
         type="button"
         className="border border-pink-300 rounded-lg p-3 bg-pink-50 text-gray-800 hover:bg-pink-100 hover:border-pink-400 transition text-left"
-        onClick={() => insertFaqIntoKnowledge(q)}
+        onClick={() => addOnboardingFaq(q)}
       >
         {q}
       </button>
@@ -1957,7 +1956,12 @@ SVAR:
                   <div className="mt-3 space-y-2 text-sm">
                     {testResults.map((t, i) => (
                       <div key={`${t.q}-${i}`} className="rounded-md border border-gray-200 bg-white p-2">
-                        <div className="text-gray-700"><strong>Q:</strong> {t.q}</div>
+                        <div className="flex items-center justify-between text-gray-700">
+                          <div><strong>Q:</strong> {t.q}</div>
+                          <span className={`text-xs font-semibold ${t.ok ? "text-green-600" : "text-amber-600"}`}>
+                            {t.ok ? "OK" : "À améliorer"}
+                          </span>
+                        </div>
                         <div className="text-gray-800"><strong>A:</strong> {t.reply}</div>
                       </div>
                     ))}
