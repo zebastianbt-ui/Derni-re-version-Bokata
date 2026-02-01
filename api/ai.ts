@@ -37,6 +37,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  const hoursSummary = (() => {
+    const normal = context?.hours?.normal;
+    if (!normal) return "";
+    const order = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"];
+    const lines = order.map((d) => {
+      const day = normal[d];
+      if (!day) return null;
+      return day.closed ? `${d}: stängt` : `${d}: ${day.open}–${day.close}`;
+    });
+    return lines.filter(Boolean).join(", ");
+  })();
+
+  const dashboardFacts = [
+    hoursSummary ? `Öppettider (från dashboard): ${hoursSummary}` : "",
+    context?.seating?.maxBookingDurationMin ? `Bordsbokningstid: ${context.seating.maxBookingDurationMin} min` : "",
+    context?.seating?.maxGuests ? `Max gäster i restaurangen: ${context.seating.maxGuests}` : "",
+    context?.seating?.maxGuestsPerReservation ? `Max gäster per bokning: ${context.seating.maxGuestsPerReservation}` : "",
+  ].filter(Boolean).join("\n");
+
   const systemPrompt = `
 Du är en restaurangassistent för Bokäta.
 Svara alltid på svenska.
@@ -49,6 +68,7 @@ Viktig policy:
 
 Kunskapsbas:
 - Använd informationen i KUNSKAPSBAS som primär källa.
+- Om KUNSKAPSBAS saknar svaret, använd FAKTA FRÅN DASHBOARD.
 - Tolka olika formuleringar som betyder samma sak.
 - Om något är oklart, ställ en kort följdfråga istället för att vägra.
 
@@ -57,6 +77,9 @@ Tolkningsregel:
 
 KUNSKAPSBAS:
 ${knowledge ?? ""}
+
+FAKTA FRÅN DASHBOARD:
+${dashboardFacts}
 `.trim();
 
   const pad2 = (n: number) => String(n).padStart(2, "0");

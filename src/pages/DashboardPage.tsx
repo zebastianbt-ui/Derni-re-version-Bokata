@@ -238,6 +238,7 @@ export default function ReservationDashboard() {
   const [aiSaveState, setAiSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [aiSaveMessage, setAiSaveMessage] = useState<string>("");
   const saveTimer = useRef<number | null>(null);
+  const saveFlashTimer = useRef<number | null>(null);
   const profileTimer = useRef<number | null>(null);
   const bookingSaveTimer = useRef<number | null>(null);
 
@@ -492,6 +493,7 @@ export default function ReservationDashboard() {
       } else {
         setAiSaveState("saved");
         setAiSaveMessage("Sparad");
+        triggerSaveFlash();
       }
     }, 600);
 
@@ -629,14 +631,12 @@ export default function ReservationDashboard() {
   const currentYear = new Date().getFullYear();
   const [holidayYear, setHolidayYear] = useState<number>(currentYear);
   const [onboardingDirty, setOnboardingDirty] = useState(false);
+  const [saveFlash, setSaveFlash] = useState(false);
   const [onboarding, setOnboarding] = useState({
     restaurantName: "",
     address: "",
     phone: "",
     email: "",
-    hours: "",
-    bookingDuration: "90",
-    maxGuests: "",
     payment: "",
     allergies: "",
     kids: "",
@@ -740,9 +740,6 @@ export default function ReservationDashboard() {
       data.address ? `Adress: ${data.address}` : "",
       data.phone ? `Telefon: ${data.phone}` : "",
       data.email ? `E-post: ${data.email}` : "",
-      data.hours ? `Öppettider: ${data.hours}` : "",
-      data.bookingDuration ? `Bordsbokningstid: ${data.bookingDuration} min` : "",
-      data.maxGuests ? `Max gäster per bokning: ${data.maxGuests}` : "",
       data.payment ? `Betalning: ${data.payment}` : "",
       data.allergies ? `Allergier: ${data.allergies}` : "",
       data.kids ? `Barn: ${data.kids}` : "",
@@ -776,9 +773,6 @@ export default function ReservationDashboard() {
     data.address = mapField("Adress");
     data.phone = mapField("Telefon");
     data.email = mapField("E-post");
-    data.hours = mapField("Öppettider");
-    data.bookingDuration = mapField("Bordsbokningstid")?.replace(/\s*min.*/i, "") || data.bookingDuration;
-    data.maxGuests = mapField("Max gäster per bokning");
     data.payment = mapField("Betalning");
     data.allergies = mapField("Allergier");
     data.kids = mapField("Barn");
@@ -806,13 +800,14 @@ export default function ReservationDashboard() {
 
   const knowledgeScore = useMemo(() => {
     const k = (config.ai.knowledge || "").toLowerCase();
+    const anyOpenDay = DAYS_ORDER.some((d) => !config.hours.normal[d].closed);
     const checks = [
-      { key: "Öppettider", ok: /öppettid|öppet|tider/.test(k) },
+      { key: "Öppettider", ok: anyOpenDay },
       { key: "Adress", ok: /adress/.test(k) },
       { key: "Telefon", ok: /telefon|tel|phone/.test(k) },
       { key: "E-post", ok: /e-post|email|mail/.test(k) },
-      { key: "Bordsbokningstid", ok: /bokningstid|sittning|min/.test(k) },
-      { key: "Max gäster", ok: /max.*gäster|max.*guests/.test(k) },
+      { key: "Bordsbokningstid", ok: config.seating.maxBookingDurationMin > 0 },
+      { key: "Max gäster", ok: config.seating.maxGuests > 0 },
       { key: "Betalning", ok: /betala|kort|kontant|swish|visa|mastercard|amex/.test(k) },
       { key: "Allergier", ok: /allergi|gluten|laktos|nöt/.test(k) },
       { key: "Barn", ok: /barnstol|barnvagn|barnmeny|barn/.test(k) },
@@ -858,6 +853,12 @@ export default function ReservationDashboard() {
     });
     const data = await r.json();
     return data.reply || "Inget svar.";
+  };
+
+  const triggerSaveFlash = () => {
+    if (saveFlashTimer.current) window.clearTimeout(saveFlashTimer.current);
+    setSaveFlash(true);
+    saveFlashTimer.current = window.setTimeout(() => setSaveFlash(false), 900);
   };
 
   const saveKnowledgeNow = async () => {
@@ -935,6 +936,7 @@ export default function ReservationDashboard() {
     }
     setAiSaveState("saved");
     setAiSaveMessage("Sparad!");
+    triggerSaveFlash();
     setOnboardingDirty(false);
   };
 
@@ -1910,33 +1912,6 @@ export default function ReservationDashboard() {
                   />
                   <input
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
-                    placeholder="Öppettider (ex: tis–sön 11:00–21:00, måndag stängt)"
-                    value={onboarding.hours}
-                    onChange={(e) => {
-                      setOnboarding({ ...onboarding, hours: e.target.value });
-                      setOnboardingDirty(true);
-                    }}
-                  />
-                  <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                    placeholder="Bordsbokningstid (min)"
-                    value={onboarding.bookingDuration}
-                    onChange={(e) => {
-                      setOnboarding({ ...onboarding, bookingDuration: e.target.value });
-                      setOnboardingDirty(true);
-                    }}
-                  />
-                  <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                    placeholder="Max gäster per bokning"
-                    value={onboarding.maxGuests}
-                    onChange={(e) => {
-                      setOnboarding({ ...onboarding, maxGuests: e.target.value });
-                      setOnboardingDirty(true);
-                    }}
-                  />
-                  <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
                     placeholder="Betalning (ex: kort, kontant, Swish)"
                     value={onboarding.payment}
                     onChange={(e) => {
@@ -1993,25 +1968,27 @@ export default function ReservationDashboard() {
 
                 <div className="mt-3">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-semibold text-gray-700">Frågor & svar</div>
+                    <div className="text-sm font-semibold text-gray-700">Sparade frågor (kunskapsbas)</div>
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
-                        className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow disabled:opacity-60"
+                        className={`px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow disabled:opacity-60 ${saveFlash ? "animate-pulse" : ""}`}
                         onClick={saveKnowledgeNow}
                         disabled={aiSaveState === "saving"}
                       >
                         {aiSaveState === "saving" ? "Sparar..." : "Spara nu"}
                       </button>
-                      <div className={`text-xs ${aiSaveState === "error" ? "text-red-600" : "text-gray-500"}`}>
+                      <div className={`text-xs min-w-[120px] text-right ${aiSaveState === "error" ? "text-red-600" : "text-gray-500"}`}>
                         {aiSaveState === "saved" && (aiSaveMessage || "Sparad")}
                         {aiSaveState === "error" && aiSaveMessage}
                       </div>
                     </div>
                   </div>
-                  {onboardingFaqs.length ? (
+                  {onboardingFaqs.filter((f) => f.a?.trim()).length ? (
                     <div className="space-y-2">
-                      {onboardingFaqs.map((f, i) => (
+                      {onboardingFaqs
+                        .filter((f) => f.a?.trim())
+                        .map((f, i) => (
                         <div key={`${f.q}-${i}`} className="rounded-lg border border-gray-200 bg-white p-2">
                           <div className="flex items-center justify-between gap-2">
                             <div className="text-sm font-semibold text-gray-800">{f.q}</div>
@@ -2019,11 +1996,11 @@ export default function ReservationDashboard() {
                               type="button"
                               className="text-xs text-pink-700 hover:text-pink-800"
                               onClick={() => {
-                                setOnboardingFaqs((prev) => prev.filter((_, idx) => idx !== i));
+                                setOnboardingFaqs((prev) => prev.filter((x) => x.q !== f.q));
                                 setOnboardingDirty(true);
                               }}
                             >
-                              Ta bort
+                              Ta bort fråga
                             </button>
                           </div>
                           <input
@@ -2032,7 +2009,9 @@ export default function ReservationDashboard() {
                             value={f.a}
                             onChange={(e) => {
                               const v = e.target.value;
-                              setOnboardingFaqs((prev) => prev.map((x, idx) => (idx === i ? { ...x, a: v } : x)));
+                              setOnboardingFaqs((prev) =>
+                                prev.map((x) => (x.q === f.q ? { ...x, a: v } : x))
+                              );
                               setOnboardingDirty(true);
                             }}
                           />
@@ -2040,7 +2019,7 @@ export default function ReservationDashboard() {
                       ))}
                     </div>
                   ) : (
-                    <div className="text-xs text-gray-500">Lägg till en fråga nedan för att skriva svar.</div>
+                    <div className="text-xs text-gray-500">Inga sparade frågor ännu.</div>
                   )}
                 </div>
               </div>
@@ -2084,6 +2063,45 @@ export default function ReservationDashboard() {
                 </div>
                 {faqSuccess && <div className="mt-2 text-center text-xs text-green-700">Fråga tillagd</div>}
               </div>
+
+              {onboardingFaqs.filter((f) => !f.a?.trim()).length ? (
+                <div className="mt-3 rounded-lg border border-gray-200 bg-white p-2">
+                  <div className="text-sm font-semibold text-gray-700 mb-2">Utkast (lägg till svar och spara)</div>
+                  <div className="space-y-2">
+                    {onboardingFaqs
+                      .filter((f) => !f.a?.trim())
+                      .map((f, i) => (
+                        <div key={`${f.q}-${i}`} className="rounded-lg border border-gray-200 bg-white p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-sm font-semibold text-gray-800">{f.q}</div>
+                            <button
+                              type="button"
+                              className="text-xs text-pink-700 hover:text-pink-800"
+                              onClick={() => {
+                                setOnboardingFaqs((prev) => prev.filter((x) => x.q !== f.q));
+                                setOnboardingDirty(true);
+                              }}
+                            >
+                              Ta bort fråga
+                            </button>
+                          </div>
+                          <input
+                            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1 text-sm"
+                            placeholder="Skriv svar..."
+                            value={f.a}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setOnboardingFaqs((prev) =>
+                                prev.map((x) => (x.q === f.q ? { ...x, a: v } : x))
+                              );
+                              setOnboardingDirty(true);
+                            }}
+                          />
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="mt-4">
                 <textarea
