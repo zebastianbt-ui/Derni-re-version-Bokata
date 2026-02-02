@@ -161,7 +161,7 @@ ${dashboardFacts}
     return out;
   })();
   const isRestaurantTopic =
-    /(boka|bokning|reservation|reservera|bord|table|öppet|öppettider|tider|stängt|adress|hitta|var ligger|ligger|kontakt|telefon|email|e-post|meny|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|tillgäng|wheelchair)/i.test(
+    /(boka|bokning|reservation|reservera|bord|table|öppet|öppettider|tider|stängt|adress|address|hitta|var ligger|ligger|kontakt|telefon|email|e-post|meny|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|parking|tillgäng|wheelchair)/i.test(
       msgLower
     );
   const lastAssistant = history?.slice().reverse().find((h) => h.role === "assistant")?.content || "";
@@ -233,7 +233,7 @@ ${dashboardFacts}
     }
   }
 
-  const addressMatch = /(adress|var ligger|hitta|vägbeskrivning)/i.test(msgLower);
+  const addressMatch = /(adress|address|var ligger|hitta|vägbeskrivning)/i.test(msgLower);
   if (addressMatch && kbInfo.address) {
     res.status(200).json({ reply: `Vi finns på ${kbInfo.address}.` });
     return;

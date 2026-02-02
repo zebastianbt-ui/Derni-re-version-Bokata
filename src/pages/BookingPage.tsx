@@ -124,10 +124,14 @@ function mockAvailability(date: string, time: string, guests: number) {
 }
 
 export default function BookingPage() {
-  const restaurantSlug = useMemo(() => {
-    if (typeof window === "undefined") return "demo";
+  const [restaurantSlug, setRestaurantSlug] = useState("demo");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    return params.get("r") || "demo";
+    const fromQuery = params.get("r");
+    const fromLocal = window.localStorage.getItem("bokata_restaurant_id");
+    setRestaurantSlug(fromQuery || fromLocal || "demo");
   }, []);
 
   const [date, setDate] = useState<string>(toISODateInputValue());

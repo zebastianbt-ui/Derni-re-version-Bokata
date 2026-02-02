@@ -432,6 +432,9 @@ export default function ReservationDashboard() {
 
       if (membership.data) {
         setRestaurantId(membership.data.restaurant_id);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("bokata_restaurant_id", membership.data.restaurant_id);
+        }
         const { data: rest } = await supabase
           .from("restaurants")
           .select("name")
@@ -638,7 +641,7 @@ export default function ReservationDashboard() {
     if (!session?.user?.id || !settingsReady || !restaurantId) return;
     if (bookingSaveTimer.current) window.clearTimeout(bookingSaveTimer.current);
     bookingSaveTimer.current = window.setTimeout(async () => {
-      await supabase.from("booking_public_settings").upsert(
+      const { error } = await supabase.from("booking_public_settings").upsert(
         {
           public_id: restaurantId,
           hours: config.hours,
@@ -656,6 +659,9 @@ export default function ReservationDashboard() {
         },
         { onConflict: "public_id" }
       );
+      if (error) {
+        console.error("booking_public_settings upsert failed", error.message);
+      }
     }, 700);
     return () => {
       if (bookingSaveTimer.current) window.clearTimeout(bookingSaveTimer.current);
