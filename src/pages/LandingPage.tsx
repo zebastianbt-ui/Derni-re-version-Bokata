@@ -97,7 +97,7 @@ export default function Page() {
             </a>
           </div>
           <p className="mt-6 text-sm opacity-90">
-            🌟 Early adopters: De 100 första restaurangerna får lanseringspris och prioriterad support.
+            🌟 Early adopters: De 100 första restaurangerna får 14 dagars gratis provperiod.
           </p>
         </div>
       </section>
@@ -210,9 +210,97 @@ export default function Page() {
         </div>
       </section>
 
-      <footer className="py-10 text-center text-sm text-gray-500">
-        © 2026 Bokäta. Stockholm, Sweden. All rights reserved.
-      </footer>
+      <section className="bg-white px-6 py-10" id="integritet">
+        <div className="max-w-4xl mx-auto text-gray-800 space-y-4">
+          <h3 className="text-2xl font-bold text-gray-900">Integritetspolicy – Bokäta</h3>
+          <p>Bokäta värnar om din integritet. Denna integritetspolicy beskriver hur vi samlar in, använder och skyddar personuppgifter när du använder vår tjänst.</p>
+          <div>
+            <p className="font-semibold text-gray-900">Vilka uppgifter samlar vi in?</p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Namn och kontaktuppgifter (t.ex. e-postadress)</li>
+              <li>Bokningsinformation</li>
+              <li>Meddelanden som skickas via tjänsten</li>
+              <li>Teknisk information (t.ex. IP-adress, webbläsare)</li>
+            </ul>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">Hur används uppgifterna?</p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Tillhandahålla och förbättra Bokätas tjänster</li>
+              <li>Hantera bokningar och kommunikation med gäster</li>
+              <li>Möjliggöra AI-baserade automatiska svar</li>
+              <li>Skicka viktig information om tjänsten</li>
+              <li>Uppfylla rättsliga skyldigheter</li>
+            </ul>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">AI och automatiserade svar</p>
+            <p>Bokäta använder artificiell intelligens för att automatiskt besvara frågor och hantera bokningsförfrågningar. AI-svaren baseras på den information som restaurangen själv tillhandahåller.</p>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">Delning av uppgifter</p>
+            <p>Vi delar inte personuppgifter med tredje part, förutom när det krävs för:</p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Betalningar (via betaltjänstleverantör, t.ex. Stripe)</li>
+              <li>Drift och säkerhet av tjänsten</li>
+              <li>Rättsliga krav</li>
+            </ul>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">Lagring av uppgifter</p>
+            <p>Personuppgifter sparas endast så länge det är nödvändigt för att tillhandahålla tjänsten eller enligt lag.</p>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">Dina rättigheter</p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Begära tillgång till dina uppgifter</li>
+              <li>Begära rättelse eller radering</li>
+              <li>Invända mot behandling</li>
+              <li>Kontakta oss om du har frågor om integritet</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white px-6 py-10" id="villkor">
+        <div className="max-w-4xl mx-auto text-gray-800 space-y-4">
+          <h3 className="text-2xl font-bold text-gray-900">Villkor – Bokäta</h3>
+          <div>
+            <p className="font-semibold text-gray-900">Tjänsten</p>
+            <p>Bokäta är en digital boknings- och AI-assistenttjänst för restauranger. Tjänsten tillhandahålls i befintligt skick och kan förändras över tid.</p>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">Användarens ansvar</p>
+            <p>Användaren ansvarar för:</p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Korrekt information som anges i systemet</li>
+              <li>Hur Bokäta används gentemot gäster</li>
+              <li>Efterlevnad av gällande lagar och regler</li>
+            </ul>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">AI-funktioner</p>
+            <p>Bokäta använder AI för att automatisera svar och bokningshantering. AI-svaren är vägledande och Bokäta kan inte garantera fullständig korrekthet i alla situationer.</p>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">Betalning och uppsägning</p>
+            <p>Betalning sker enligt vald plan. Abonnemang kan avslutas enligt villkoren för respektive plan. Ingen återbetalning sker för påbörjad period om inget annat anges.</p>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">Ansvarsbegränsning</p>
+            <p>Bokäta ansvarar inte för:</p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Förlorade intäkter</li>
+              <li>Felaktiga bokningar</li>
+              <li>Indirekta skador eller följdskador</li>
+            </ul>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">Ändringar</p>
+            <p>Bokäta förbehåller sig rätten att uppdatera dessa villkor. Uppdaterade villkor publiceras på webbplatsen.</p>
+          </div>
+        </div>
+      </section>
 
       {/* Footer */}
       <footer className="bg-white border-t border-pink-100 text-center text-xs text-gray-500 py-6">
@@ -220,8 +308,8 @@ export default function Page() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
             <p>© {new Date().getFullYear()} Bokäta</p>
             <div className="flex flex-wrap items-center gap-4">
-              <a href="#" className="hover:text-pink-700">Integritet</a>
-              <a href="#" className="hover:text-pink-700">Villkor</a>
+              <a href="#integritet" onClick={(e)=>onAnchorClick(e,'#integritet')} className="hover:text-pink-700">Integritetspolicy</a>
+              <a href="#villkor" onClick={(e)=>onAnchorClick(e,'#villkor')} className="hover:text-pink-700">Villkor</a>
             </div>
           </div>
         </div>
