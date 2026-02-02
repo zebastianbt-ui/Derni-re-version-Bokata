@@ -63,6 +63,13 @@ type Settings = {
     languages: string[];
     knowledge: string;
     faq: string;
+    webSearch: {
+      enabled: boolean;
+      siteUrl: string;
+      googleMapsUrl: string;
+      facebookUrl: string;
+      instagramUrl: string;
+    };
   };
   escalation: { maxGuestsPerReservation: number; manualReviewKeywords: string[] };
   notifications: { to: string };
@@ -309,6 +316,13 @@ export default function ReservationDashboard() {
           "Hundpolicy (ej/terrass/överallt)?",
           "Max antal gäster per bokning?",
         ].join("\n"),
+        webSearch: {
+          enabled: false,
+          siteUrl: "",
+          googleMapsUrl: "",
+          facebookUrl: "",
+          instagramUrl: "",
+        },
       },
       escalation: { maxGuestsPerReservation: 22, manualReviewKeywords: ["privat event", "bröllop", "afterwork"] },
       notifications: { to: "bookings@example.se" },
@@ -405,7 +419,11 @@ export default function ReservationDashboard() {
       const [{ data: profile }, { data: settings }, { data: bookingSettings }] = await Promise.all([
         supabase.from("profiles").select("full_name,email").eq("user_id", userId).maybeSingle(),
         membership.data?.restaurant_id
-          ? supabase.from("ai_settings").select("knowledge,assistant_name").eq("restaurant_id", membership.data.restaurant_id).maybeSingle()
+          ? supabase
+              .from("ai_settings")
+              .select("knowledge,assistant_name,web_search_enabled,site_url,google_maps_url,facebook_url,instagram_url")
+              .eq("restaurant_id", membership.data.restaurant_id)
+              .maybeSingle()
           : Promise.resolve({ data: null }),
         membership.data?.restaurant_id
           ? supabase.from("booking_public_settings").select("hours,seating").eq("public_id", membership.data.restaurant_id).maybeSingle()
@@ -426,6 +444,13 @@ export default function ReservationDashboard() {
             ...prev.ai,
             knowledge: settings.knowledge ?? prev.ai.knowledge,
             name: settings.assistant_name ?? prev.ai.name,
+            webSearch: {
+              enabled: settings.web_search_enabled ?? prev.ai.webSearch.enabled,
+              siteUrl: settings.site_url ?? prev.ai.webSearch.siteUrl,
+              googleMapsUrl: settings.google_maps_url ?? prev.ai.webSearch.googleMapsUrl,
+              facebookUrl: settings.facebook_url ?? prev.ai.webSearch.facebookUrl,
+              instagramUrl: settings.instagram_url ?? prev.ai.webSearch.instagramUrl,
+            },
           },
         }));
       }
@@ -476,6 +501,7 @@ export default function ReservationDashboard() {
   }, [defaultSettings.seating.maxBookingDurationMin]);
 
   const [bookings, setBookings] = useState<Booking[]>(() => assignTablesForDate(dateSel, seed));
+  const [editBookingDraft, setEditBookingDraft] = useState<Booking | null>(null);
 
   useEffect(() => {
     setBookings((prev) => assignTablesForDate(dateSel, prev));
@@ -504,6 +530,11 @@ export default function ReservationDashboard() {
           restaurant_id: restaurantId,
           knowledge: config.ai.knowledge,
           assistant_name: config.ai.name,
+          web_search_enabled: config.ai.webSearch.enabled,
+          site_url: config.ai.webSearch.siteUrl || null,
+          google_maps_url: config.ai.webSearch.googleMapsUrl || null,
+          facebook_url: config.ai.webSearch.facebookUrl || null,
+          instagram_url: config.ai.webSearch.instagramUrl || null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "restaurant_id" }
@@ -521,7 +552,18 @@ export default function ReservationDashboard() {
     return () => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
     };
-  }, [config.ai.knowledge, config.ai.name, session?.user?.id, settingsReady, restaurantId]);
+  }, [
+    config.ai.knowledge,
+    config.ai.name,
+    config.ai.webSearch.enabled,
+    config.ai.webSearch.siteUrl,
+    config.ai.webSearch.googleMapsUrl,
+    config.ai.webSearch.facebookUrl,
+    config.ai.webSearch.instagramUrl,
+    session?.user?.id,
+    settingsReady,
+    restaurantId,
+  ]);
 
 
   useEffect(() => {
@@ -952,6 +994,11 @@ export default function ReservationDashboard() {
         restaurant_id: restId,
         knowledge: next,
         assistant_name: config.ai.name,
+        web_search_enabled: config.ai.webSearch.enabled,
+        site_url: config.ai.webSearch.siteUrl || null,
+        google_maps_url: config.ai.webSearch.googleMapsUrl || null,
+        facebook_url: config.ai.webSearch.facebookUrl || null,
+        instagram_url: config.ai.webSearch.instagramUrl || null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "restaurant_id" }
@@ -1461,12 +1508,22 @@ export default function ReservationDashboard() {
                             <div
                               key={`${time}-${idx}`}
                               className={`px-2 py-1 rounded shadow border text-sm text-gray-700 ${b.color ?? "bg-pink-100"} ${
-                                b.note ? "cursor-pointer hover:brightness-95" : ""
+                                "cursor-pointer hover:brightness-95"
                               }`}
-                              onClick={b.note ? () => setOpenBooking(b) : undefined}
-                              title={b.note ? "Visa anteckning" : undefined}
+                              onClick={() => setOpenBooking(b)}
+                              title={b.note ? "Visa anteckning" : "Redigera bokning"}
                             >
-                              <div className="font-medium">{b.name}</div>
+                              <div className="flex items-center gap-2 font-medium">
+                                <span>{b.name}</span>
+                                {b.note && (
+                                  <span
+                                    className="inline-flex items-center rounded-full bg-pink-200 text-pink-800 text-[10px] px-2 py-0.5 font-semibold"
+                                    title={b.notes || "Särskilt önskemål"}
+                                  >
+                                    !
+                                  </span>
+                                )}
+                              </div>
                               <div className="text-xs text-gray-600">{b.guests} gäster{b.tableId ? ` • Bord ${b.tableId}` : ""}</div>
                             </div>
                           ))}
@@ -1481,7 +1538,7 @@ export default function ReservationDashboard() {
       </div>
 
       {/* Note modal */}
-      {openBooking && (
+  {openBooking && (
         <Modal onClose={() => setOpenBooking(null)}>
           <h4 className="text-lg font-bold text-gray-800">
             {openBooking.name} – {openBooking.time}
@@ -1492,10 +1549,109 @@ export default function ReservationDashboard() {
           <div className="bg-pink-50 border border-pink-200 rounded-lg p-3 text-gray-800 whitespace-pre-wrap">
             {openBooking.notes || "(Ingen anteckning)"}
           </div>
-          <div className="mt-5 flex justify-end">
-            <button className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow" onClick={() => setOpenBooking(null)}>
-              OK
+
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Field label="Datum">
+              <input
+                type="date"
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                value={editBookingDraft?.date ?? openBooking.date}
+                onChange={(e) =>
+                  setEditBookingDraft((prev) => ({ ...(prev ?? openBooking), date: e.target.value }))
+                }
+              />
+            </Field>
+            <Field label="Tid">
+              <select
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                value={editBookingDraft?.time ?? openBooking.time}
+                onChange={(e) =>
+                  setEditBookingDraft((prev) => ({ ...(prev ?? openBooking), time: e.target.value }))
+                }
+              >
+                {ALL_TIMES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Namn">
+              <input
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                value={editBookingDraft?.name ?? openBooking.name}
+                onChange={(e) =>
+                  setEditBookingDraft((prev) => ({ ...(prev ?? openBooking), name: e.target.value }))
+                }
+              />
+            </Field>
+            <Field label="Gäster">
+              <input
+                type="number"
+                min={1}
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                value={editBookingDraft?.guests ?? openBooking.guests}
+                onChange={(e) =>
+                  setEditBookingDraft((prev) => ({
+                    ...(prev ?? openBooking),
+                    guests: Number(e.target.value || 1),
+                  }))
+                }
+              />
+            </Field>
+            <Field label="Kommentar / önskemål">
+              <textarea
+                rows={3}
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                value={editBookingDraft?.notes ?? openBooking.notes ?? ""}
+                onChange={(e) =>
+                  setEditBookingDraft((prev) => ({ ...(prev ?? openBooking), notes: e.target.value }))
+                }
+              />
+            </Field>
+          </div>
+
+          <div className="mt-5 flex flex-wrap justify-between gap-2">
+            <button
+              className="px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+              onClick={() => {
+                if (!window.confirm("Ta bort bokningen?")) return;
+                setBookings((prev) => prev.filter((b) => b.id !== openBooking.id));
+                setOpenBooking(null);
+              }}
+            >
+              Ta bort
             </button>
+            <div className="flex gap-2">
+              <button
+                className="px-4 py-2 rounded-lg border"
+                onClick={() => {
+                  setEditBookingDraft(null);
+                  setOpenBooking(null);
+                }}
+              >
+                Stäng
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
+                onClick={() => {
+                  const next = editBookingDraft ?? openBooking;
+                  setBookings((prev) => {
+                    const updated = prev.map((b) =>
+                      b.id === openBooking.id ? { ...b, ...next, note: !!next.notes } : b
+                    );
+                    const dates = Array.from(new Set(updated.map((b) => b.date)));
+                    let out = updated;
+                    for (const d of dates) out = assignTablesForDate(d, out);
+                    return out;
+                  });
+                  setEditBookingDraft(null);
+                  setOpenBooking(null);
+                }}
+              >
+                Spara ändring
+              </button>
+            </div>
           </div>
         </Modal>
       )}
@@ -1992,6 +2148,74 @@ export default function ReservationDashboard() {
                       setOnboardingDirty(true);
                     }}
                   />
+                </div>
+
+                <div className="mt-4 rounded-lg border border-gray-200 bg-white/70 p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold text-gray-700">Webbsökning (beta)</div>
+                    <label className="inline-flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={config.ai.webSearch.enabled}
+                        onChange={(e) =>
+                          setConfig((prev) => ({
+                            ...prev,
+                            ai: { ...prev.ai, webSearch: { ...prev.ai.webSearch, enabled: e.target.checked } },
+                          }))
+                        }
+                      />
+                      Tillåt webbsökning
+                    </label>
+                  </div>
+                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="Site officiel (https://...)"
+                      value={config.ai.webSearch.siteUrl}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          ai: { ...prev.ai, webSearch: { ...prev.ai.webSearch, siteUrl: e.target.value } },
+                        }))
+                      }
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="Google Maps (lien)"
+                      value={config.ai.webSearch.googleMapsUrl}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          ai: { ...prev.ai, webSearch: { ...prev.ai.webSearch, googleMapsUrl: e.target.value } },
+                        }))
+                      }
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="Facebook (lien page)"
+                      value={config.ai.webSearch.facebookUrl}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          ai: { ...prev.ai, webSearch: { ...prev.ai.webSearch, facebookUrl: e.target.value } },
+                        }))
+                      }
+                    />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      placeholder="Instagram (lien profil)"
+                      value={config.ai.webSearch.instagramUrl}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          ai: { ...prev.ai, webSearch: { ...prev.ai.webSearch, instagramUrl: e.target.value } },
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500">
+                    Vi hämtar endast info från de länkar du anger här.
+                  </div>
                 </div>
 
                 <div className="mt-3">
