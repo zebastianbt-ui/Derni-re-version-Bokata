@@ -275,8 +275,14 @@ export default function BookingPage() {
           },
         }),
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data?.error || "Kunde inte hämta svar.");
+      const raw = await r.text();
+      let data: { reply?: string; error?: string } = {};
+      try {
+        data = raw ? (JSON.parse(raw) as { reply?: string; error?: string }) : {};
+      } catch {
+        data = {};
+      }
+      if (!r.ok) throw new Error(data?.error || raw || "Kunde inte hämta svar.");
       setQaAnswer(data.reply || "Inget svar.");
     } catch (err) {
       setQaAnswer(err instanceof Error ? err.message : "Kunde inte hämta svar.");
@@ -430,63 +436,64 @@ export default function BookingPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-700">Namn</span>
-                    <input
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="För- och efternamn"
-                      className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-700">Antal gäster</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={16}
-                      value={guests}
-                      onChange={(e) => setGuests(Number(e.target.value))}
-                      className="mt-1 w-24 rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center"
-                    />
-                  </label>
-                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                      <label className="block">
+                        <span className="text-sm font-semibold text-gray-700">Namn</span>
+                        <input
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder="För- och efternamn"
+                          className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-sm font-semibold text-gray-700">Antal gäster</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={16}
+                          value={guests}
+                          onChange={(e) => setGuests(Number(e.target.value))}
+                          className="mt-1 w-24 rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center"
+                        />
+                      </label>
+                    </div>
 
-                <div className="grid grid-cols-1 gap-4">
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-700">E‑post</span>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="namn@example.com"
-                      className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-700">Kommentar</span>
-                    <textarea
-                      rows={4}
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Allergier, barnvagn…"
-                      className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
-                    />
-                  </label>
-                </div>
+                    <label className="block">
+                      <span className="text-sm font-semibold text-gray-700">E‑post</span>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="namn@example.com"
+                        className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                      />
+                    </label>
 
-                <div className="mt-4 flex justify-center">
-                  <div className="w-full max-w-4xl rounded-3xl border border-violet-100 bg-white p-6 grid grid-cols-1 md:grid-cols-[1fr_220px] gap-6 items-center">
-                    <div>
+                    <label className="block">
+                      <span className="text-sm font-semibold text-gray-700">Kommentar</span>
+                      <textarea
+                        rows={4}
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Allergier, barnvagn…"
+                        className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                      />
+                    </label>
+                  </div>
+
+                  <div>
+                    <div className="rounded-3xl border border-violet-100 bg-white p-6 h-full flex flex-col">
                       <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
                       <p className="text-sm text-gray-600 mt-1">Ställ din fråga och AI:n svarar.</p>
-                      <div className="mt-4 space-y-3">
+                      <div className="mt-4 space-y-3 flex-1">
                         <textarea
                           value={qaQuestion}
                           onChange={(e) => setQaQuestion(e.target.value)}
                           placeholder="Ex: Har ni öppet på söndag? Finns det parkering?"
-                          className="w-full min-h-[96px] rounded-2xl border border-violet-200 bg-violet-50/60 px-4 py-3 focus:border-violet-400 focus:ring-violet-400"
+                          className="w-full min-h-[120px] rounded-2xl border border-violet-200 bg-violet-50/60 px-4 py-3 focus:border-violet-400 focus:ring-violet-400"
                         />
                         <div className="flex flex-wrap items-center gap-3">
                           <button
@@ -500,9 +507,6 @@ export default function BookingPage() {
                           {qaAnswer && <div className="text-sm text-gray-700">{qaAnswer}</div>}
                         </div>
                       </div>
-                    </div>
-                    <div className="justify-self-center">
-                      <ForkMascot />
                     </div>
                   </div>
                 </div>
@@ -590,9 +594,12 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-12 py-12 text-center">
+      <footer className="mt-6 py-6 text-center">
         <div className="text-2xl md:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-pink-500 to-rose-500">
-          Bokäta – Den lagar inte mat. Den lagar allt annat.
+          Bokäta
+        </div>
+        <div className="mt-1 text-lg md:text-xl font-semibold text-white/85">
+          Den lagar inte mat. Den lagar allt annat.
         </div>
         <a
           href="/"
@@ -621,31 +628,6 @@ function ForkLogo() {
           d="M14 4c-1.1 0-2 .9-2 2v8c0 3.3 2.7 6 6 6h2v20c0 2.2 1.8 4 4 4s4-1.8 4-4V20h2c3.3 0 6-2.7 6-6V6c0-1.1-.9-2-2-2s-2 .9-2 2v6h-2V6c0-1.1-.9-2-2-2s-2 .9-2 2v6h-2V6c0-1.1-.9-2-2-2s-2 .9-2 2v6h-2V6c0-1.1-.9-2-2-2z"
         />
       </g>
-    </svg>
-  );
-}
-
-function ForkMascot() {
-  return (
-    <svg width="200" height="260" viewBox="0 0 200 260" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="forkBody" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#d7b3ff" />
-          <stop offset="1" stopColor="#8a5bff" />
-        </linearGradient>
-        <linearGradient id="forkGlow" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#ff9bdc" />
-          <stop offset="1" stopColor="#9b6bff" />
-        </linearGradient>
-      </defs>
-      <rect x="58" y="18" width="14" height="72" rx="7" fill="url(#forkBody)" />
-      <rect x="78" y="18" width="14" height="72" rx="7" fill="url(#forkBody)" />
-      <rect x="98" y="18" width="14" height="72" rx="7" fill="url(#forkBody)" />
-      <rect x="74" y="70" width="52" height="130" rx="26" fill="url(#forkBody)" />
-      <circle cx="84" cy="116" r="5.5" fill="#2f2145" />
-      <circle cx="116" cy="116" r="5.5" fill="#2f2145" />
-      <path d="M88 134C95 141 105 141 112 134" stroke="#2f2145" strokeWidth="4" strokeLinecap="round" />
-      <rect x="26" y="196" width="148" height="44" rx="22" fill="url(#forkGlow)" opacity="0.18" />
     </svg>
   );
 }
