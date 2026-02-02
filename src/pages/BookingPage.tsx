@@ -37,6 +37,7 @@ type BookingPublicSettings = {
     groupThreshold: number;
     maxBookingDurationMin: number;
   };
+  knowledge_public?: string | null;
   notify_email?: string | null;
   notify_enabled?: boolean | null;
   require_manual_confirmation?: boolean | null;
@@ -150,7 +151,7 @@ export default function BookingPage() {
       if (!restaurantSlug || restaurantSlug === "demo") return;
       const { data } = await supabase
         .from("booking_public_settings")
-        .select("public_id,hours,seating")
+        .select("public_id,hours,seating,knowledge_public")
         .eq("public_id", restaurantSlug)
         .maybeSingle();
       if (data) setPublicSettings(data as BookingPublicSettings);
@@ -266,7 +267,7 @@ export default function BookingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
-          knowledge: "",
+          knowledge: publicSettings?.knowledge_public ?? "",
           context: {
             baseDate: date,
             nowTime: `${new Date().getHours().toString().padStart(2, "0")}:${new Date().getMinutes().toString().padStart(2, "0")}`,
@@ -310,7 +311,7 @@ export default function BookingPage() {
         </div>
       </header>
 
-      <main className={`max-w-5xl mx-auto px-4 py-8 ${created ? "" : "pb-28"}`}>
+      <main className={`max-w-5xl mx-auto px-4 pt-6 ${created ? "pb-8" : "pb-20 md:pb-8"}`}>
         {!created ? (
           <section id="booking">
             <div className="rounded-3xl bg-white shadow-sm border border-rose-100 p-6 md:p-8">
@@ -594,7 +595,7 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-6 py-6 text-center">
+      <footer className="mt-1 py-2 text-center">
         <div className="text-2xl md:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-pink-500 to-rose-500">
           Bokäta
         </div>
@@ -603,11 +604,11 @@ export default function BookingPage() {
         </div>
         <a
           href="/"
-          className="mt-4 inline-flex items-center justify-center rounded-full border border-white/30 bg-white/10 px-5 py-2 text-sm font-semibold text-white/90 backdrop-blur hover:bg-white/20"
+          className="mt-3 inline-flex items-center justify-center rounded-full border border-white/30 bg-white/10 px-5 py-2 text-sm font-semibold text-white/90 backdrop-blur hover:bg-white/20"
         >
           Driver du också restaurang? Upptäck Bokäta →
         </a>
-        <div className="mt-6 text-xs text-white/70">© 2026 Bokäta. Stockholm, Sweden. All rights reserved.</div>
+        <div className="mt-4 text-xs text-white/70">© 2026 Bokäta. Stockholm, Sweden. All rights reserved.</div>
       </footer>
     </div>
   );

@@ -452,7 +452,7 @@ export default function ReservationDashboard() {
         membership.data?.restaurant_id
           ? supabase
               .from("booking_public_settings")
-              .select("hours,seating,notify_email,notify_enabled,require_manual_confirmation")
+              .select("hours,seating,notify_email,notify_enabled,require_manual_confirmation,knowledge_public")
               .eq("public_id", membership.data.restaurant_id)
               .maybeSingle()
           : Promise.resolve({ data: null }),
@@ -651,6 +651,7 @@ export default function ReservationDashboard() {
           notify_email: config.info.email || config.notifications.to || null,
           notify_enabled: config.notifications.notifyOnNewBooking,
           require_manual_confirmation: config.notifications.requireManualConfirmation,
+          knowledge_public: config.ai.knowledge,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "public_id" }
