@@ -42,6 +42,26 @@ type BookingPublicSettings = {
   require_manual_confirmation?: boolean | null;
 };
 
+const DEFAULT_HOURS: BookingPublicSettings["hours"] = {
+  normal: {
+    måndag: { closed: false, open: "11:00", close: "21:00" },
+    tisdag: { closed: false, open: "11:00", close: "21:00" },
+    onsdag: { closed: false, open: "11:00", close: "21:00" },
+    torsdag: { closed: false, open: "11:00", close: "21:00" },
+    fredag: { closed: false, open: "11:00", close: "21:00" },
+    lördag: { closed: false, open: "11:00", close: "21:00" },
+    söndag: { closed: false, open: "11:00", close: "21:00" },
+  },
+  special: [],
+};
+
+const DEFAULT_SEATING: BookingPublicSettings["seating"] = {
+  maxGuests: 60,
+  maxGuestsPerReservation: 8,
+  groupThreshold: 6,
+  maxBookingDurationMin: 90,
+};
+
 function loadReservations(): Reservation[] {
   try {
     const raw = typeof window !== "undefined" ? localStorage.getItem("bokata_reservations") : null;
@@ -121,6 +141,9 @@ export default function BookingPage() {
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
   const [publicSettings, setPublicSettings] = useState<BookingPublicSettings | null>(null);
+  const [qaQuestion, setQaQuestion] = useState("");
+  const [qaAnswer, setQaAnswer] = useState<string | null>(null);
+  const [qaLoading, setQaLoading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -135,22 +158,23 @@ export default function BookingPage() {
     load();
   }, [restaurantSlug]);
 
+  const effectiveSettings = publicSettings ?? { public_id: restaurantSlug, hours: DEFAULT_HOURS, seating: DEFAULT_SEATING };
+  const settingsMissing = !publicSettings && restaurantSlug !== "demo";
+
   const isClosedDate = (iso: string) => {
-    if (!publicSettings) return false;
-    const special = publicSettings.hours.special.find((s) => s.date === iso);
+    const special = effectiveSettings.hours.special.find((s) => s.date === iso);
     if (special) return special.closed;
     const day = toDayName(iso);
     if (!day) return false;
-    return publicSettings.hours.normal[day]?.closed ?? false;
+    return effectiveSettings.hours.normal[day]?.closed ?? false;
   };
 
   const dayHours = (iso: string) => {
-    if (!publicSettings) return null;
-    const special = publicSettings.hours.special.find((s) => s.date === iso);
+    const special = effectiveSettings.hours.special.find((s) => s.date === iso);
     if (special) return special.closed ? null : { open: special.open, close: special.close };
     const day = toDayName(iso);
     if (!day) return null;
-    const d = publicSettings.hours.normal[day];
+    const d = effectiveSettings.hours.normal[day];
     return d && !d.closed ? { open: d.open, close: d.close } : null;
   };
 
@@ -158,12 +182,12 @@ export default function BookingPage() {
     const h = dayHours(date);
     if (!h) return [];
     return genTimeSlots(h.open, h.close, 30);
-  }, [date, publicSettings]);
+  }, [date, effectiveSettings]);
 
   const avail = useMemo(() => {
     if (isClosedDate(date)) return { capacity: 0, booked: 0, available: 0, canFit: false };
     return mockAvailability(date, time, guests);
-  }, [date, time, guests, publicSettings]);
+  }, [date, time, guests, effectiveSettings]);
   const formReady = Boolean(date && time && guests && name && email);
   const [viewMonth, setViewMonth] = useState(() => Number(date.split("-")[1]) - 1);
   const [viewYear, setViewYear] = useState(() => Number(date.split("-")[0]));
@@ -231,6 +255,36 @@ export default function BookingPage() {
     }
   }
 
+  const askAi = async () => {
+    const text = qaQuestion.trim();
+    if (!text) return;
+    setQaLoading(true);
+    setQaAnswer(null);
+    try {
+      const r = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          knowledge: "",
+          context: {
+            baseDate: date,
+            nowTime: `${new Date().getHours().toString().padStart(2, "0")}:${new Date().getMinutes().toString().padStart(2, "0")}`,
+            seating: effectiveSettings.seating,
+            hours: effectiveSettings.hours,
+          },
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.error || "Kunde inte hämta svar.");
+      setQaAnswer(data.reply || "Inget svar.");
+    } catch (err) {
+      setQaAnswer(err instanceof Error ? err.message : "Kunde inte hämta svar.");
+    } finally {
+      setQaLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-gray-800">
       <div className="pointer-events-none absolute -top-40 -left-40 h-[34rem] w-[34rem] rounded-full bg-fuchsia-400/25 blur-3xl" />
@@ -247,9 +301,6 @@ export default function BookingPage() {
               <div className="text-sm text-white/70">{restaurantSlug}</div>
             </div>
           </div>
-          <a href="#booking" className="text-sm font-medium text-white/80 hover:text-white">
-            Till bokningen
-          </a>
         </div>
       </header>
 
@@ -356,7 +407,11 @@ export default function BookingPage() {
                         })}
                       </div>
 
-                      <div className="mt-6 text-xs text-gray-500">Demoöversikt. Den verkliga kapaciteten kopplas till Dashboard.</div>
+                      <div className="mt-6 text-xs text-gray-500">
+                        {settingsMissing
+                          ? "Tiderna är inte konfigurerade än. Välj ändå en tid så uppdateras när restaurangen sparat sina tider."
+                          : "Demoöversikt. Den verkliga kapaciteten kopplas till Dashboard."}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -532,6 +587,37 @@ export default function BookingPage() {
             </div>
           </section>
         )}
+
+        <section className="mt-10">
+          <div className="rounded-3xl bg-white/95 border border-rose-100 shadow-sm p-6 md:p-8 grid grid-cols-1 md:grid-cols-[1fr_220px] gap-6 items-center">
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">Des questions?</h2>
+              <p className="text-sm text-gray-600 mt-1">Posez votre question et l’IA vous répond.</p>
+              <div className="mt-4 space-y-3">
+                <textarea
+                  value={qaQuestion}
+                  onChange={(e) => setQaQuestion(e.target.value)}
+                  placeholder="Ex: Har ni öppet på söndag? Finns det parkering?"
+                  className="w-full min-h-[96px] rounded-2xl border border-violet-200 bg-violet-50/60 px-4 py-3 focus:border-violet-400 focus:ring-violet-400"
+                />
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={askAi}
+                    disabled={qaLoading || !qaQuestion.trim()}
+                    className="rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                  >
+                    {qaLoading ? "Svarar..." : "Fråga AI"}
+                  </button>
+                  {qaAnswer && <div className="text-sm text-gray-700">{qaAnswer}</div>}
+                </div>
+              </div>
+            </div>
+            <div className="justify-self-center">
+              <ForkMascot />
+            </div>
+          </div>
+        </section>
       </main>
 
       {!created && (
@@ -585,6 +671,31 @@ function ForkLogo() {
           d="M14 4c-1.1 0-2 .9-2 2v8c0 3.3 2.7 6 6 6h2v20c0 2.2 1.8 4 4 4s4-1.8 4-4V20h2c3.3 0 6-2.7 6-6V6c0-1.1-.9-2-2-2s-2 .9-2 2v6h-2V6c0-1.1-.9-2-2-2s-2 .9-2 2v6h-2V6c0-1.1-.9-2-2-2s-2 .9-2 2v6h-2V6c0-1.1-.9-2-2-2z"
         />
       </g>
+    </svg>
+  );
+}
+
+function ForkMascot() {
+  return (
+    <svg width="200" height="260" viewBox="0 0 200 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="forkBody" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#d7b3ff" />
+          <stop offset="1" stopColor="#8a5bff" />
+        </linearGradient>
+        <linearGradient id="forkGlow" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#ff9bdc" />
+          <stop offset="1" stopColor="#9b6bff" />
+        </linearGradient>
+      </defs>
+      <rect x="58" y="18" width="14" height="72" rx="7" fill="url(#forkBody)" />
+      <rect x="78" y="18" width="14" height="72" rx="7" fill="url(#forkBody)" />
+      <rect x="98" y="18" width="14" height="72" rx="7" fill="url(#forkBody)" />
+      <rect x="74" y="70" width="52" height="130" rx="26" fill="url(#forkBody)" />
+      <circle cx="84" cy="116" r="5.5" fill="#2f2145" />
+      <circle cx="116" cy="116" r="5.5" fill="#2f2145" />
+      <path d="M88 134C95 141 105 141 112 134" stroke="#2f2145" strokeWidth="4" strokeLinecap="round" />
+      <rect x="26" y="196" width="148" height="44" rx="22" fill="url(#forkGlow)" opacity="0.18" />
     </svg>
   );
 }
