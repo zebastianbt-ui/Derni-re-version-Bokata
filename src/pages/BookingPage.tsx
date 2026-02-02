@@ -37,6 +37,9 @@ type BookingPublicSettings = {
     groupThreshold: number;
     maxBookingDurationMin: number;
   };
+  notify_email?: string | null;
+  notify_enabled?: boolean | null;
+  require_manual_confirmation?: boolean | null;
 };
 
 function loadReservations(): Reservation[] {
@@ -177,7 +180,7 @@ export default function BookingPage() {
     return [...blanks, ...days];
   }, [viewYear, viewMonth]);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!date || !time || !guests || !name || !email) return;
     setSubmitting(true);
@@ -194,11 +197,38 @@ export default function BookingPage() {
       status: "pending",
       createdAt: new Date().toISOString(),
     };
-    setTimeout(() => {
-      saveReservation(resv);
-      setCreated(resv);
+    if (!restaurantSlug || restaurantSlug === "demo") {
+      setTimeout(() => {
+        saveReservation(resv);
+        setCreated(resv);
+        setSubmitting(false);
+      }, 350);
+      return;
+    }
+    try {
+      const r = await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          restaurantId: restaurantSlug,
+          date,
+          time,
+          guests,
+          name: name.trim(),
+          email: email.trim(),
+          phone: phone.trim() || null,
+          notes: notes.trim() || null,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.error || "Kunde inte skicka bokning.");
+      setCreated({ ...resv, status: data.status ?? resv.status });
       setSubmitting(false);
-    }, 350);
+    } catch (err) {
+      console.error(err);
+      setSubmitting(false);
+      alert(err instanceof Error ? err.message : "Kunde inte skicka bokning.");
+    }
   }
 
   return (

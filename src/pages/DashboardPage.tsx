@@ -87,7 +87,11 @@ type Settings = {
     };
   };
   escalation: { maxGuestsPerReservation: number; manualReviewKeywords: string[] };
-  notifications: { to: string };
+  notifications: {
+    to: string;
+    notifyOnNewBooking: boolean;
+    requireManualConfirmation: boolean;
+  };
 };
 
 const MEAL_RANGES: Record<Meal, [string, string]> = {
@@ -340,7 +344,11 @@ export default function ReservationDashboard() {
         },
       },
       escalation: { maxGuestsPerReservation: 22, manualReviewKeywords: ["privat event", "bröllop", "afterwork"] },
-      notifications: { to: "bookings@example.se" },
+      notifications: {
+        to: "bookings@example.se",
+        notifyOnNewBooking: true,
+        requireManualConfirmation: false,
+      },
     }),
     []
   );
@@ -441,7 +449,11 @@ export default function ReservationDashboard() {
               .maybeSingle()
           : Promise.resolve({ data: null }),
         membership.data?.restaurant_id
-          ? supabase.from("booking_public_settings").select("hours,seating").eq("public_id", membership.data.restaurant_id).maybeSingle()
+          ? supabase
+              .from("booking_public_settings")
+              .select("hours,seating,notify_email,notify_enabled,require_manual_confirmation")
+              .eq("public_id", membership.data.restaurant_id)
+              .maybeSingle()
           : Promise.resolve({ data: null }),
       ]);
 
@@ -483,6 +495,16 @@ export default function ReservationDashboard() {
           escalation: {
             ...prev.escalation,
             maxGuestsPerReservation: bookingSettings.seating?.maxGuestsPerReservation ?? prev.escalation.maxGuestsPerReservation,
+          },
+          info: {
+            ...prev.info,
+            email: bookingSettings.notify_email ?? prev.info.email,
+          },
+          notifications: {
+            ...prev.notifications,
+            to: bookingSettings.notify_email ?? prev.notifications.to,
+            notifyOnNewBooking: bookingSettings.notify_enabled ?? prev.notifications.notifyOnNewBooking,
+            requireManualConfirmation: bookingSettings.require_manual_confirmation ?? prev.notifications.requireManualConfirmation,
           },
         }));
       }
@@ -625,6 +647,9 @@ export default function ReservationDashboard() {
             groupThreshold: config.seating.groupThreshold,
             maxBookingDurationMin: config.seating.maxBookingDurationMin,
           },
+          notify_email: config.info.email || config.notifications.to || null,
+          notify_enabled: config.notifications.notifyOnNewBooking,
+          require_manual_confirmation: config.notifications.requireManualConfirmation,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "public_id" }
@@ -1825,9 +1850,43 @@ export default function ReservationDashboard() {
                 <input
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
                   value={config.info.email}
-                  onChange={(e) => setConfig({ ...config, info: { ...config.info, email: e.target.value } })}
+                  onChange={(e) =>
+                    setConfig({
+                      ...config,
+                      info: { ...config.info, email: e.target.value },
+                      notifications: { ...config.notifications, to: e.target.value },
+                    })
+                  }
                 />
               </Field>
+              <div className="mt-3 grid grid-cols-1 gap-2 text-sm">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={config.notifications.notifyOnNewBooking}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        notifications: { ...config.notifications, notifyOnNewBooking: e.target.checked },
+                      })
+                    }
+                  />
+                  Email till restaurang vid ny bokning
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={config.notifications.requireManualConfirmation}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        notifications: { ...config.notifications, requireManualConfirmation: e.target.checked },
+                      })
+                    }
+                  />
+                  Manuell bekräftelse krävs innan kundens bekräftelsemail
+                </label>
+              </div>
             </Section>
 
             <Section title="Kapacitet & tider">
