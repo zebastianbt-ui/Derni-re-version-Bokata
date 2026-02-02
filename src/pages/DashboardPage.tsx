@@ -25,6 +25,21 @@ type Booking = {
   color?: string;
 };
 
+type BookingRow = {
+  id: string;
+  restaurant_id: string;
+  date: string;
+  time: string;
+  name: string;
+  guests: number;
+  notes: string | null;
+  table_id: number | null;
+  duration_min: number | null;
+  status: string | null;
+  source: string | null;
+  created_at: string;
+};
+
 type PetsPolicy = "none" | "terrace" | "everywhere";
 
 const DAYS_SV = ["söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag"] as const;
@@ -502,6 +517,7 @@ export default function ReservationDashboard() {
 
   const [bookings, setBookings] = useState<Booking[]>(() => assignTablesForDate(dateSel, seed));
   const [editBookingDraft, setEditBookingDraft] = useState<Booking | null>(null);
+  const [bookingsReady, setBookingsReady] = useState(false);
 
   useEffect(() => {
     setBookings((prev) => assignTablesForDate(dateSel, prev));
@@ -517,6 +533,35 @@ export default function ReservationDashboard() {
       return out;
     });
   }, [config.seating.maxBookingDurationMin]);
+
+  useEffect(() => {
+    const loadBookings = async () => {
+      if (!restaurantId || !settingsReady) return;
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("id,restaurant_id,date,time,name,guests,notes,table_id,duration_min,status,source,created_at")
+        .eq("restaurant_id", restaurantId);
+      if (error) return;
+      const rows = (data ?? []) as BookingRow[];
+      const mapped = rows.map((r) => ({
+        id: r.id,
+        date: r.date,
+        time: r.time,
+        name: r.name,
+        guests: r.guests,
+        notes: r.notes ?? "",
+        note: !!r.notes,
+        tableId: r.table_id ?? null,
+        durationMin: r.duration_min ?? config.seating.maxBookingDurationMin,
+        status: (r.status as BookingStatus) ?? "confirmed",
+        source: (r.source as Booking["source"]) ?? "walkin",
+        color: "bg-pink-100",
+      }));
+      setBookings(assignTablesForDate(dateSel, mapped));
+      setBookingsReady(true);
+    };
+    loadBookings();
+  }, [restaurantId, settingsReady]);
 
   useEffect(() => {
     if (!session?.user?.id || !settingsReady || !restaurantId) return;
@@ -1145,6 +1190,32 @@ export default function ReservationDashboard() {
       status: "confirmed",
       source: "web",
     };
+    if (restaurantId && settingsReady) {
+      supabase
+        .from("bookings")
+        .insert({
+          restaurant_id: restaurantId,
+          date: b.date,
+          time: b.time,
+          name: b.name,
+          guests: b.guests,
+          notes: b.notes || null,
+          table_id: b.tableId ?? null,
+          duration_min: b.durationMin ?? config.seating.maxBookingDurationMin,
+          status: b.status ?? "confirmed",
+          source: b.source ?? "walkin",
+        })
+        .select("id")
+        .single()
+        .then(({ data }) => {
+          if (data?.id) {
+            setBookings((prev) =>
+              assignTablesForDate(d.date, prev.map((x) => (x.id === b.id ? { ...x, id: data.id } : x)))
+            );
+          }
+        })
+        .catch(() => {});
+    }
 
     setBookings((prev) => assignTablesForDate(d.date, [...prev, b]));
     return { ok: true };
@@ -1617,6 +1688,9 @@ export default function ReservationDashboard() {
               onClick={() => {
                 if (!window.confirm("Ta bort bokningen?")) return;
                 setBookings((prev) => prev.filter((b) => b.id !== openBooking.id));
+                if (restaurantId && settingsReady) {
+                  supabase.from("bookings").delete().eq("id", openBooking.id).eq("restaurant_id", restaurantId);
+                }
                 setOpenBooking(null);
               }}
             >
@@ -1645,6 +1719,21 @@ export default function ReservationDashboard() {
                     for (const d of dates) out = assignTablesForDate(d, out);
                     return out;
                   });
+                  if (restaurantId && settingsReady) {
+                    supabase
+                      .from("bookings")
+                      .update({
+                        date: next.date,
+                        time: next.time,
+                        name: next.name,
+                        guests: next.guests,
+                        notes: next.notes || null,
+                        table_id: next.tableId ?? null,
+                        duration_min: next.durationMin ?? config.seating.maxBookingDurationMin,
+                      })
+                      .eq("id", openBooking.id)
+                      .eq("restaurant_id", restaurantId);
+                  }
                   setEditBookingDraft(null);
                   setOpenBooking(null);
                 }}
