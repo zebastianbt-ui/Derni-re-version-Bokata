@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../supabaseClient";
+import bokataFork from "../assets/bokata-fork.png";
 
 // NOTE: Tu as collé un bloc très long avec plein de caractères cassés (×, retours, underscores, etc.).
 // Cette version est une *reconstruction fidèle* du dashboard que tu décris (calendrier + timeline + modals + settings + preview IA),
@@ -1456,7 +1457,7 @@ export default function ReservationDashboard() {
       <header className="-mx-1 mb-8 rounded-2xl bg-gradient-to-br from-[#180033] via-[#2a0146] to-[#3b024f] px-6 py-10 text-white shadow-lg">
         <div className="max-w-6xl mx-auto text-center">
           <div className="flex justify-center mb-4">
-            <ForkMascot className="h-16 w-16 md:h-20 md:w-20" />
+            <img src={bokataFork} alt="Bokäta" className="h-16 w-16 md:h-20 md:w-20 object-contain" />
           </div>
           <h1 className="text-4xl md:text-6xl font-black tracking-tight">Dashboard</h1>
           <p className="mt-3 text-lg md:text-xl text-white/80 max-w-2xl mx-auto">Övervaka bokningar, gäster och AI-svar i realtid.</p>
@@ -2662,31 +2663,6 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
       <h2 className="text-xl font-bold text-gray-800">{value}</h2>
       {sub ? <p className="text-xs text-gray-500 mt-1">{sub}</p> : null}
     </div>
-  );
-}
-
-function ForkMascot({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 200 260" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="forkBodyDash" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#d7b3ff" />
-          <stop offset="1" stopColor="#8a5bff" />
-        </linearGradient>
-        <linearGradient id="forkGlowDash" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#ff9bdc" />
-          <stop offset="1" stopColor="#9b6bff" />
-        </linearGradient>
-      </defs>
-      <rect x="58" y="18" width="14" height="72" rx="7" fill="url(#forkBodyDash)" />
-      <rect x="78" y="18" width="14" height="72" rx="7" fill="url(#forkBodyDash)" />
-      <rect x="98" y="18" width="14" height="72" rx="7" fill="url(#forkBodyDash)" />
-      <rect x="74" y="70" width="52" height="130" rx="26" fill="url(#forkBodyDash)" />
-      <circle cx="84" cy="116" r="5.5" fill="#2f2145" />
-      <circle cx="116" cy="116" r="5.5" fill="#2f2145" />
-      <path d="M88 134C95 141 105 141 112 134" stroke="#2f2145" strokeWidth="4" strokeLinecap="round" />
-      <rect x="26" y="196" width="148" height="44" rx="22" fill="url(#forkGlowDash)" opacity="0.18" />
-    </svg>
   );
 }
 
