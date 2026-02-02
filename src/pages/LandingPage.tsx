@@ -1,4 +1,5 @@
 import React from "react";
+import bokataFork from "../assets/bokata-fork.png";
 
 export default function Page() {
   // Smooth scroll with header offset (SSR‑safe & legacy‑parser‑safe)
@@ -63,8 +64,8 @@ export default function Page() {
       {/* Top Nav */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-pink-100">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
-          <a href="#" className="flex items-center gap-2 font-bold text-xl">
-            <ForkLogo />
+          <a href="#" className="flex items-center gap-3 font-bold text-xl">
+            <img src={bokataFork} alt="Bokäta" className="h-9 w-9 object-contain" />
             <span>Bokäta</span>
           </a>
           <nav className="hidden md:flex items-center gap-4 text-base">
@@ -204,6 +205,10 @@ export default function Page() {
           </div>
         </div>
       </section>
+
+      <footer className="py-10 text-center text-sm text-gray-500">
+        © 2026 Bokäta. Stockholm, Sweden. All rights reserved.
+      </footer>
 
       {/* Footer */}
       <footer className="bg-white border-t border-pink-100 text-center text-xs text-gray-500 py-6">

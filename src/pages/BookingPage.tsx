@@ -310,9 +310,7 @@ export default function BookingPage() {
             <div className="rounded-3xl bg-white shadow-sm border border-rose-100 p-6 md:p-8">
               <form ref={formRef} onSubmit={submit} className="space-y-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <label className="block">
-                      <span className="text-sm font-semibold text-gray-700">Datum</span>
-                      <div className="mt-1 rounded-3xl border border-violet-200 bg-violet-50/70 p-6">
+                  <div className="rounded-3xl border border-violet-200 bg-violet-50/70 p-6 h-full min-h-[440px] flex flex-col">
                         <div className="flex items-center justify-between mb-4">
                           <button
                             type="button"
@@ -372,12 +370,10 @@ export default function BookingPage() {
                             );
                           })}
                         </div>
-                      </div>
-                      <div className="mt-2 text-xs text-gray-500">Valt datum: {date}</div>
-                  </label>
+                  </div>
 
                   <div>
-                    <div className="rounded-3xl bg-white border border-violet-100 p-6 md:p-8">
+                    <div className="rounded-3xl bg-white border border-violet-100 p-6 md:p-8 h-full min-h-[440px] flex flex-col">
                       <h2 className="text-lg font-bold text-gray-800">Snabböversikt</h2>
                       <p className="text-sm text-gray-600">{new Date(date).toLocaleDateString()} • {guests} gäster</p>
 
@@ -412,25 +408,37 @@ export default function BookingPage() {
                           ? "Tiderna är inte konfigurerade än. Välj ändå en tid så uppdateras när restaurangen sparat sina tider."
                           : "Demoöversikt. Den verkliga kapaciteten kopplas till Dashboard."}
                       </div>
+                      <div className="mt-auto pt-6">
+                        <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
+                          <div className="text-sm font-semibold text-violet-700 mb-1">Din bokning</div>
+                          <div className="text-sm text-gray-700">
+                            {date ? date : "Välj datum"} • {time ? `kl ${time}` : "välj tid"} • {guests} gäster
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {name ? name : "Ditt namn"} • {email ? email : "din e‑post"}
+                          </div>
+                          <button
+                            type="submit"
+                            disabled={!date || !time || !guests || !name || !email || submitting || !avail.canFit}
+                            className="mt-4 w-full px-5 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-600 via-pink-600 to-rose-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
+                          >
+                            {submitting ? "Skickar…" : "BOKA"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <label className="block">
-                    <span className="text-sm font-semibold text-gray-700">Tid</span>
-                    <select
-                      value={time}
-                      onChange={(e) => setTime(e.target.value)}
+                    <span className="text-sm font-semibold text-gray-700">Namn</span>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="För- och efternamn"
                       className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
-                    >
-                      <option value="">{times.length ? "Välj…" : "Stängt"}</option>
-                      {times.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </label>
                   <label className="block">
                     <span className="text-sm font-semibold text-gray-700">Antal gäster</span>
@@ -440,92 +448,63 @@ export default function BookingPage() {
                       max={16}
                       value={guests}
                       onChange={(e) => setGuests(Number(e.target.value))}
+                      className="mt-1 w-24 rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-700">E‑post</span>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="namn@example.com"
+                      className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-700">Kommentar</span>
+                    <textarea
+                      rows={4}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Allergier, barnvagn…"
                       className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
                     />
                   </label>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <label className="block">
-                      <span className="text-sm font-semibold text-gray-700">Namn</span>
-                      <input
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="För- och efternamn"
-                        className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="text-sm font-semibold text-gray-700">E‑post</span>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="namn@example.com"
-                        className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
-                      />
-                    </label>
-                  </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <label className="block">
-                      <span className="text-sm font-semibold text-gray-700">Telefon (valfritt)</span>
-                      <input
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="07…"
-                        className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
-                      />
-                    </label>
-                    <label className="block sm:col-span-2">
-                      <span className="text-sm font-semibold text-gray-700">Kommentar</span>
-                      <textarea
-                        rows={4}
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Allergier, barnvagn…"
-                        className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
-                      />
-                    </label>
-                  </div>
-
-                <div
-                    className={`rounded-2xl border p-4 transition ${
-                      formReady ? "bg-gradient-to-r from-violet-50 to-pink-50 border-violet-200" : "bg-violet-50 border-violet-100"
-                    }`}
-                  >
-                    <div className="text-sm font-semibold text-violet-700 mb-1">Din bokning</div>
-                    <div className="text-sm text-gray-700">
-                      {date ? date : "Välj datum"} • {time ? `kl ${time}` : "välj tid"} • {guests} gäster
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {name ? name : "Ditt namn"} • {email ? email : "din e‑post"}
-                    </div>
-                  </div>
-
-                <div className="flex items-center justify-between bg-violet-50 border border-violet-100 rounded-2xl p-4">
+                <div className="mt-4 flex justify-center">
+                  <div className="w-full max-w-4xl rounded-3xl border border-violet-100 bg-white p-6 grid grid-cols-1 md:grid-cols-[1fr_220px] gap-6 items-center">
                     <div>
-                      <div className="text-sm font-semibold text-violet-700">Tillgänglighet</div>
-                      <div className="text-xs text-violet-600">
-                        {isClosedDate(date) ? (
-                          <>Stängt den här dagen. Välj en annan dag.</>
-                        ) : time ? (
-                          avail.canFit ? (
-                            <>Plats för {guests} gäster kl {time}.</>
-                          ) : (
-                            <>Fullt kl {time}. Välj annan tid eller minska antal.</>
-                          )
-                        ) : (
-                          <>Välj en tid.</>
-                        )}
+                      <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
+                      <p className="text-sm text-gray-600 mt-1">Ställ din fråga och AI:n svarar.</p>
+                      <div className="mt-4 space-y-3">
+                        <textarea
+                          value={qaQuestion}
+                          onChange={(e) => setQaQuestion(e.target.value)}
+                          placeholder="Ex: Har ni öppet på söndag? Finns det parkering?"
+                          className="w-full min-h-[96px] rounded-2xl border border-violet-200 bg-violet-50/60 px-4 py-3 focus:border-violet-400 focus:ring-violet-400"
+                        />
+                        <div className="flex flex-wrap items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={askAi}
+                            disabled={qaLoading || !qaQuestion.trim()}
+                            className="rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                          >
+                            {qaLoading ? "Svarar..." : "Fråga AI"}
+                          </button>
+                          {qaAnswer && <div className="text-sm text-gray-700">{qaAnswer}</div>}
+                        </div>
                       </div>
                     </div>
-                    <button
-                      disabled={!date || !time || !guests || !name || !email || submitting || !avail.canFit}
-                      className="px-5 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-600 via-pink-600 to-rose-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
-                    >
-                      {submitting ? "Skickar…" : "Boka"}
-                    </button>
+                    <div className="justify-self-center">
+                      <ForkMascot />
+                    </div>
+                  </div>
                 </div>
               </form>
             </div>
@@ -588,36 +567,6 @@ export default function BookingPage() {
           </section>
         )}
 
-        <section className="mt-10">
-          <div className="rounded-3xl bg-white/95 border border-rose-100 shadow-sm p-6 md:p-8 grid grid-cols-1 md:grid-cols-[1fr_220px] gap-6 items-center">
-            <div>
-              <h2 className="text-xl font-bold text-gray-800">Des questions?</h2>
-              <p className="text-sm text-gray-600 mt-1">Posez votre question et l’IA vous répond.</p>
-              <div className="mt-4 space-y-3">
-                <textarea
-                  value={qaQuestion}
-                  onChange={(e) => setQaQuestion(e.target.value)}
-                  placeholder="Ex: Har ni öppet på söndag? Finns det parkering?"
-                  className="w-full min-h-[96px] rounded-2xl border border-violet-200 bg-violet-50/60 px-4 py-3 focus:border-violet-400 focus:ring-violet-400"
-                />
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={askAi}
-                    disabled={qaLoading || !qaQuestion.trim()}
-                    className="rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
-                  >
-                    {qaLoading ? "Svarar..." : "Fråga AI"}
-                  </button>
-                  {qaAnswer && <div className="text-sm text-gray-700">{qaAnswer}</div>}
-                </div>
-              </div>
-            </div>
-            <div className="justify-self-center">
-              <ForkMascot />
-            </div>
-          </div>
-        </section>
       </main>
 
       {!created && (
@@ -651,6 +600,7 @@ export default function BookingPage() {
         >
           Driver du också restaurang? Upptäck Bokäta →
         </a>
+        <div className="mt-6 text-xs text-white/70">© 2026 Bokäta. Stockholm, Sweden. All rights reserved.</div>
       </footer>
     </div>
   );

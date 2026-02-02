@@ -1454,13 +1454,13 @@ export default function ReservationDashboard() {
 
   return (
     <div className="min-h-screen bg-pink-50 p-6">
-      <header className="-mx-1 mb-8 rounded-2xl bg-gradient-to-br from-[#180033] via-[#2a0146] to-[#3b024f] px-6 py-10 text-white shadow-lg">
+      <header className="-mx-1 mb-8 rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] px-6 py-10 text-white shadow-lg">
         <div className="max-w-6xl mx-auto text-center">
-          <div className="flex justify-center mb-4">
-            <img src={bokataFork} alt="Bokäta" className="h-16 w-16 md:h-20 md:w-20 object-contain" />
+          <div className="flex items-center justify-center gap-4">
+            <h1 className="text-4xl md:text-6xl font-black tracking-tight">Dashboard</h1>
+            <img src={bokataFork} alt="Bokäta" className="h-12 w-12 md:h-16 md:w-16 object-contain" />
           </div>
-          <h1 className="text-4xl md:text-6xl font-black tracking-tight">Dashboard</h1>
-          <p className="mt-3 text-lg md:text-xl text-white/80 max-w-2xl mx-auto">Övervaka bokningar, gäster och AI-svar i realtid.</p>
+          <p className="mt-3 text-lg md:text-xl text-white/85 max-w-2xl mx-auto">Övervaka bokningar, gäster och AI-svar i realtid.</p>
           <div className="mt-6 flex flex-wrap gap-3 justify-center">
             <button
               className="rounded-full px-6 py-3 font-semibold text-white bg-pink-500 hover:bg-pink-600 shadow-md ring-1 ring-pink-300"
