@@ -65,7 +65,11 @@ export default function Page() {
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-pink-100">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
           <a href="#" className="flex items-center gap-3 font-bold text-xl">
-            <img src={bokataFork} alt="Bokäta" className="h-9 w-9 object-contain" />
+            <img
+              src={bokataFork}
+              alt="Bokäta"
+              className="h-10 w-auto rounded-md object-contain shadow-[0_0_14px_rgba(236,72,153,0.45)]"
+            />
             <span>Bokäta</span>
           </a>
           <nav className="hidden md:flex items-center gap-4 text-base">
@@ -227,25 +231,6 @@ export default function Page() {
       <PlanDrawer open={drawerOpen} plan={selectedPlan} onClose={()=>setDrawerOpen(false)} />
       <AuthModal open={authOpen} mode={authMode} onClose={()=>setAuthOpen(false)} onSubmit={handleAuthSubmit} onToggleMode={(m)=>setAuthMode(m)} />
     </div>
-  );
-}
-
-function ForkLogo() {
-  return (
-    <svg className="h-8 w-8" viewBox="0 0 64 64" fill="none" aria-hidden="true">
-      <defs>
-        <linearGradient id="forkGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#FF2BD0" />
-          <stop offset="100%" stopColor="#7A3CFF" />
-        </linearGradient>
-      </defs>
-      <g transform="rotate(-25 32 32)">
-        <rect x="18" y="10" width="8" height="18" rx="3" fill="url(#forkGrad)" />
-        <rect x="28" y="10" width="8" height="18" rx="3" fill="url(#forkGrad)" />
-        <rect x="38" y="10" width="8" height="18" rx="3" fill="url(#forkGrad)" />
-        <rect x="26" y="28" width="12" height="26" rx="6" fill="url(#forkGrad)" />
-      </g>
-    </svg>
   );
 }
 

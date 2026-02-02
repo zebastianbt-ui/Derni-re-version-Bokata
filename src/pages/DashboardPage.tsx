@@ -1459,7 +1459,11 @@ export default function ReservationDashboard() {
         <div className="max-w-6xl mx-auto text-center">
           <div className="flex items-center justify-center gap-4">
             <h1 className="text-4xl md:text-6xl font-black tracking-tight">Dashboard</h1>
-            <img src={bokataFork} alt="Bokäta" className="h-12 w-12 md:h-16 md:w-16 object-contain" />
+            <img
+              src={bokataFork}
+              alt="Bokäta"
+              className="h-10 w-auto rounded-md object-contain shadow-[0_0_14px_rgba(236,72,153,0.45)]"
+            />
           </div>
           <p className="mt-3 text-lg md:text-xl text-white/85 max-w-2xl mx-auto">Övervaka bokningar, gäster och AI-svar i realtid.</p>
           <div className="mt-6 flex flex-wrap gap-3 justify-center">

@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
+import bokataFork from "../assets/bokata-fork.png";
 
 /**
  * Bokäta – Bokningssida (v2, rosa+lila)
  * Komplett bokningsflöde på svenska.
  *
- * Fix: Stängd och komplett <svg> i ForkLogo (tidigare fel: oavslutad path gav
- * "Unterminated string constant").
  */
 
 type Reservation = {
@@ -300,7 +299,11 @@ export default function BookingPage() {
       <header className="sticky top-0 z-10 backdrop-blur bg-white/10 border-b border-white/10">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <ForkLogo />
+            <img
+              src={bokataFork}
+              alt="Bokäta"
+              className="h-10 w-auto rounded-md object-contain shadow-[0_0_14px_rgba(236,72,153,0.45)]"
+            />
             <div>
               <div className="text-xs uppercase tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-pink-200 to-violet-200 font-semibold">
                 Bokäta – Boka bord
@@ -611,25 +614,6 @@ export default function BookingPage() {
         <div className="mt-4 text-xs text-white/70">© 2026 Bokäta. Stockholm, Sweden. All rights reserved.</div>
       </footer>
     </div>
-  );
-}
-
-function ForkLogo() {
-  return (
-    <svg viewBox="0 0 48 48" className="h-9 w-9">
-      <defs>
-        <linearGradient id="g" x1="0" x2="1">
-          <stop offset="0%" stopColor="#8b5cf6" />
-          <stop offset="50%" stopColor="#ec4899" />
-          <stop offset="100%" stopColor="#f43f5e" />
-        </linearGradient>
-      </defs>
-      <g fill="url(#g)" stroke="none">
-        <path
-          d="M14 4c-1.1 0-2 .9-2 2v8c0 3.3 2.7 6 6 6h2v20c0 2.2 1.8 4 4 4s4-1.8 4-4V20h2c3.3 0 6-2.7 6-6V6c0-1.1-.9-2-2-2s-2 .9-2 2v6h-2V6c0-1.1-.9-2-2-2s-2 .9-2 2v6h-2V6c0-1.1-.9-2-2-2s-2 .9-2 2v6h-2V6c0-1.1-.9-2-2-2z"
-        />
-      </g>
-    </svg>
   );
 }
 
