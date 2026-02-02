@@ -148,6 +148,7 @@ export default function BookingPage() {
   const [qaQuestion, setQaQuestion] = useState("");
   const [qaAnswer, setQaAnswer] = useState<string | null>(null);
   const [qaLoading, setQaLoading] = useState(false);
+  const [qaHistory, setQaHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -265,12 +266,14 @@ export default function BookingPage() {
     setQaLoading(true);
     setQaAnswer(null);
     try {
+      const nextHistory = [...qaHistory, { role: "user", content: text }];
       const r = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
           knowledge: publicSettings?.knowledge_public ?? "",
+          history: nextHistory,
           context: {
             baseDate: date,
             nowTime: `${new Date().getHours().toString().padStart(2, "0")}:${new Date().getMinutes().toString().padStart(2, "0")}`,
@@ -287,7 +290,9 @@ export default function BookingPage() {
         data = {};
       }
       if (!r.ok) throw new Error(data?.error || raw || "Kunde inte hämta svar.");
-      setQaAnswer(data.reply || "Inget svar.");
+      const reply = data.reply || "Inget svar.";
+      setQaAnswer(reply);
+      setQaHistory([...nextHistory, { role: "assistant", content: reply }]);
     } catch (err) {
       setQaAnswer(err instanceof Error ? err.message : "Kunde inte hämta svar.");
     } finally {

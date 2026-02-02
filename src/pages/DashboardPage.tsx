@@ -885,13 +885,14 @@ export default function ReservationDashboard() {
     addOnboardingFaq(pick);
   };
 
-  const buildKnowledge = (data: typeof onboarding, faqs: { q: string; a: string }[]) => {
+  const buildKnowledge = (data: typeof onboarding, faqs: { q: string; a: string }[], siteUrl: string) => {
     const lines = [
       "INFOS:",
       data.restaurantName ? `Namn: ${data.restaurantName}` : "",
       data.address ? `Adress: ${data.address}` : "",
       data.phone ? `Telefon: ${data.phone}` : "",
       data.email ? `E-post: ${data.email}` : "",
+      siteUrl ? `Webbplats: ${siteUrl}` : "",
       data.payment ? `Betalning: ${data.payment}` : "",
       data.allergies ? `Allergier: ${data.allergies}` : "",
       data.kids ? `Barn: ${data.kids}` : "",
@@ -906,9 +907,9 @@ export default function ReservationDashboard() {
 
   useEffect(() => {
     if (!onboardingDirty) return;
-    const next = buildKnowledge(onboarding, onboardingFaqs);
+    const next = buildKnowledge(onboarding, onboardingFaqs, config.ai.webSearch.siteUrl || "");
     setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: next } }));
-  }, [onboarding, onboardingFaqs, onboardingDirty]);
+  }, [onboarding, onboardingFaqs, onboardingDirty, config.ai.webSearch.siteUrl]);
 
   useEffect(() => {
     if (onboardingDirty) return;
@@ -1073,7 +1074,7 @@ export default function ReservationDashboard() {
       setAiSaveMessage("Restaurang saknas. Försök logga ut/in igen.");
       return;
     }
-    const next = buildKnowledge(onboarding, onboardingFaqs);
+    const next = buildKnowledge(onboarding, onboardingFaqs, config.ai.webSearch.siteUrl || "");
     setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: next } }));
     setAiSaveState("saving");
     setAiSaveMessage("");

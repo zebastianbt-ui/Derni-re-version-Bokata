@@ -133,16 +133,24 @@ ${dashboardFacts}
     const line = knowledgeLines.find((l) => l.toLowerCase().startsWith(label.toLowerCase() + ":"));
     return line ? line.split(":").slice(1).join(":").trim() : "";
   };
+  const getFieldAny = (labels: string[]) => {
+    for (const label of labels) {
+      const val = getField(label);
+      if (val) return val;
+    }
+    return "";
+  };
   const kbInfo = {
     name: getField("Namn"),
     address: getField("Adress"),
     phone: getField("Telefon"),
     email: getField("E-post"),
+    website: getFieldAny(["Webbplats", "Hemsida", "Website", "Site"]),
     payment: getField("Betalning"),
     allergies: getField("Allergier"),
     kids: getField("Barn"),
     pets: getField("Djurpolicy"),
-    parking: getField("Parkering"),
+    parking: getFieldAny(["Parkering", "Parking"]),
     transport: getField("Kollektivtrafik"),
   };
   const kbFaqs = (() => {
@@ -193,6 +201,10 @@ ${dashboardFacts}
     ranges.push({ start, end: prev });
     return ranges;
   })();
+  const closedRangeForDate = (iso?: string | null) => {
+    if (!iso) return null;
+    return closedRanges.find((r) => iso >= r.start && iso <= r.end) ?? null;
+  };
 
   if (isWhyFollowUp && closedRanges.length) {
     const rangesText = closedRanges
@@ -244,6 +256,10 @@ ${dashboardFacts}
   }
   if (/(e-post|email|mail)/i.test(msgLower) && kbInfo.email) {
     res.status(200).json({ reply: `Du kan maila oss på ${kbInfo.email}.` });
+    return;
+  }
+  if (/(meny|menu|à la carte|rätter|mat)/i.test(msgLower) && kbInfo.website) {
+    res.status(200).json({ reply: `Menyn finns här: ${kbInfo.website}` });
     return;
   }
   if (/(betal|kort|kontant|swish)/i.test(msgLower) && kbInfo.payment) {
@@ -396,6 +412,11 @@ ${dashboardFacts}
 
     const date = parseDate(msgLower, base);
     if (date) {
+      const range = closedRangeForDate(date);
+      if (range) {
+        res.status(200).json({ reply: `Vi har en stängd period: ${range.start}–${range.end}.` });
+        return;
+      }
       const hours = getDayHours(date);
       if (!hours || hours.closed || isClosedDate(date)) {
         res.status(200).json({ reply: `Vi har stängt ${hours?.dayName ? `på ${hours.dayName}` : "den dagen"}.` });
@@ -496,6 +517,11 @@ ${dashboardFacts}
 
     const day = toUtcDate(date)?.getUTCDay();
     const dayName = day != null ? weekdaySv[day] : null;
+    const range = closedRangeForDate(date);
+    if (range) {
+      res.status(200).json({ reply: `Vi har en stängd period: ${range.start}–${range.end}.` });
+      return;
+    }
     const special = context.hours?.special?.find((s) => s.date === date);
     const normal = dayName ? context.hours?.normal?.[dayName] : null;
     if ((special && special.closed) || (!special && normal?.closed)) {
