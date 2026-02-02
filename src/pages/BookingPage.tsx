@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "../supabaseClient";
 
 /**
  * Bokäta – Bokningssida (v2, rosa+lila)
@@ -20,6 +21,22 @@ type Reservation = {
   notes?: string;
   status: "pending" | "confirmed" | "cancelled";
   createdAt: string;
+};
+
+type DayName = "måndag" | "tisdag" | "onsdag" | "torsdag" | "fredag" | "lördag" | "söndag";
+
+type BookingPublicSettings = {
+  public_id: string;
+  hours: {
+    normal: Record<DayName, { closed: boolean; open: string; close: string }>;
+    special: { date: string; closed: boolean; open: string; close: string }[];
+  };
+  seating: {
+    maxGuests: number;
+    maxGuestsPerReservation: number;
+    groupThreshold: number;
+    maxBookingDurationMin: number;
+  };
 };
 
 function loadReservations(): Reservation[] {
@@ -66,6 +83,13 @@ function genTimeSlots(start = "11:00", end = "21:00", stepMin = 30) {
   return out;
 }
 
+const weekdaySv: DayName[] = ["söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag"];
+const toDayName = (iso: string): DayName | null => {
+  const d = new Date(iso + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return null;
+  return weekdaySv[d.getDay()];
+};
+
 function mockAvailability(date: string, time: string, guests: number) {
   const d = new Date(date + "T" + (time || "12:00"));
   const dow = d.getDay();
@@ -93,9 +117,50 @@ export default function BookingPage() {
   const [created, setCreated] = useState<Reservation | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
+  const [publicSettings, setPublicSettings] = useState<BookingPublicSettings | null>(null);
 
-  const times = useMemo(() => genTimeSlots("11:00", "21:00", 30), []);
-  const avail = useMemo(() => mockAvailability(date, time, guests), [date, time, guests]);
+  useEffect(() => {
+    const load = async () => {
+      if (!restaurantSlug || restaurantSlug === "demo") return;
+      const { data } = await supabase
+        .from("booking_public_settings")
+        .select("public_id,hours,seating")
+        .eq("public_id", restaurantSlug)
+        .maybeSingle();
+      if (data) setPublicSettings(data as BookingPublicSettings);
+    };
+    load();
+  }, [restaurantSlug]);
+
+  const isClosedDate = (iso: string) => {
+    if (!publicSettings) return false;
+    const special = publicSettings.hours.special.find((s) => s.date === iso);
+    if (special) return special.closed;
+    const day = toDayName(iso);
+    if (!day) return false;
+    return publicSettings.hours.normal[day]?.closed ?? false;
+  };
+
+  const dayHours = (iso: string) => {
+    if (!publicSettings) return null;
+    const special = publicSettings.hours.special.find((s) => s.date === iso);
+    if (special) return special.closed ? null : { open: special.open, close: special.close };
+    const day = toDayName(iso);
+    if (!day) return null;
+    const d = publicSettings.hours.normal[day];
+    return d && !d.closed ? { open: d.open, close: d.close } : null;
+  };
+
+  const times = useMemo(() => {
+    const h = dayHours(date);
+    if (!h) return [];
+    return genTimeSlots(h.open, h.close, 30);
+  }, [date, publicSettings]);
+
+  const avail = useMemo(() => {
+    if (isClosedDate(date)) return { capacity: 0, booked: 0, available: 0, canFit: false };
+    return mockAvailability(date, time, guests);
+  }, [date, time, guests, publicSettings]);
   const formReady = Boolean(date && time && guests && name && email);
   const [viewMonth, setViewMonth] = useState(() => Number(date.split("-")[1]) - 1);
   const [viewYear, setViewYear] = useState(() => Number(date.split("-")[0]));
@@ -206,13 +271,17 @@ export default function BookingPage() {
                             if (!c.day) return <div key={c.key} className="h-10" />;
                             const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(c.day).padStart(2, "0")}`;
                             const isSel = iso === date;
+                            const closed = isClosedDate(iso);
                             return (
                               <button
                                 key={c.key}
                                 type="button"
-                                onClick={() => setDate(iso)}
+                                onClick={() => !closed && setDate(iso)}
+                                disabled={closed}
                                 className={`h-12 rounded-2xl text-sm font-semibold ${
-                                  isSel
+                                  closed
+                                    ? "bg-gray-100 text-gray-400 border border-gray-200"
+                                    : isSel
                                     ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white"
                                     : "bg-white text-violet-700 border border-violet-200 hover:bg-violet-100"
                                 }`}
@@ -270,7 +339,7 @@ export default function BookingPage() {
                       onChange={(e) => setTime(e.target.value)}
                       className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
                     >
-                      <option value="">Välj…</option>
+                      <option value="">{times.length ? "Välj…" : "Stängt"}</option>
                       {times.map((t) => (
                         <option key={t} value={t}>
                           {t}
@@ -353,7 +422,9 @@ export default function BookingPage() {
                     <div>
                       <div className="text-sm font-semibold text-violet-700">Tillgänglighet</div>
                       <div className="text-xs text-violet-600">
-                        {time ? (
+                        {isClosedDate(date) ? (
+                          <>Stängt den här dagen. Välj en annan dag.</>
+                        ) : time ? (
                           avail.canFit ? (
                             <>Plats för {guests} gäster kl {time}.</>
                           ) : (

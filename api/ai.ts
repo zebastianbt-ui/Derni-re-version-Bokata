@@ -168,6 +168,39 @@ ${dashboardFacts}
   const isFollowUp =
     /^(varför|varfor|var|hur|vad|vilken|vilket|vilka|och|då|sa|så|ok|okej|tack)\b/i.test(msgLower) ||
     msgLower.length <= 12;
+  const isWhyFollowUp = /^(varför|varfor)\b/i.test(msgLower);
+  const closedRanges = (() => {
+    const closedDates =
+      context?.hours?.special
+        ?.filter((s) => s.closed && s.date)
+        .map((s) => s.date)
+        .sort() ?? [];
+    if (!closedDates.length) return [] as { start: string; end: string }[];
+    const ranges: { start: string; end: string }[] = [];
+    let start = closedDates[0];
+    let prev = closedDates[0];
+    for (let i = 1; i < closedDates.length; i++) {
+      const cur = closedDates[i];
+      const nextExpected = addDays(prev, 1);
+      if (nextExpected && cur === nextExpected) {
+        prev = cur;
+      } else {
+        ranges.push({ start, end: prev });
+        start = cur;
+        prev = cur;
+      }
+    }
+    ranges.push({ start, end: prev });
+    return ranges;
+  })();
+
+  if (isWhyFollowUp && closedRanges.length) {
+    const rangesText = closedRanges
+      .map((r) => (r.start === r.end ? r.start : `${r.start}–${r.end}`))
+      .join(", ");
+    res.status(200).json({ reply: `Vi har en stängd period: ${rangesText}.` });
+    return;
+  }
   if (!isRestaurantTopic && !isFollowUp) {
     res.status(200).json({ reply: "Jag kan tyvärr bara svara på frågor om restaurangen." });
     return;
@@ -175,6 +208,20 @@ ${dashboardFacts}
   if (!isRestaurantTopic && isFollowUp && !lastAssistant) {
     res.status(200).json({ reply: "Jag kan tyvärr bara svara på frågor om restaurangen." });
     return;
+  }
+
+  if (isWhyFollowUp && lastAssistant) {
+    if (/stängt|stängd|stängda/i.test(lastAssistant)) {
+      if (closedRanges.length) {
+        const rangesText = closedRanges
+          .map((r) => (r.start === r.end ? r.start : `${r.start}–${r.end}`))
+          .join(", ");
+        res.status(200).json({ reply: `Vi har en stängd period: ${rangesText}.` });
+        return;
+      }
+      res.status(200).json({ reply: "Vi är stängda enligt våra öppettider den dagen." });
+      return;
+    }
   }
 
   const normMsg = normalize(message);

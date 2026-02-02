@@ -1411,7 +1411,7 @@ export default function ReservationDashboard() {
                     tabIndex={0}
                   >
                     <div className="text-sm font-semibold">{c.day}</div>
-                    {isClosed && <div className="text-[10px] text-gray-500">Fermé</div>}
+                    {isClosed && <div className="text-[10px] text-gray-500">Stängt</div>}
                   </div>
                 );
               })}
