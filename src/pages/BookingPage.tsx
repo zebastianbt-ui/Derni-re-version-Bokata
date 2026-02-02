@@ -90,13 +90,14 @@ function makeId(prefix = "resv") {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
 }
 
-function genTimeSlots(start = "11:00", end = "21:00", stepMin = 30) {
+function genTimeSlots(start = "11:00", end = "21:00", stepMin = 30, lastBookingBufferMin = 60) {
   const out: string[] = [];
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
   const startMins = sh * 60 + sm;
   const endMins = eh * 60 + em;
-  for (let m = startMins; m <= endMins; m += stepMin) {
+  const lastStart = Math.max(startMins, endMins - lastBookingBufferMin);
+  for (let m = startMins; m <= lastStart; m += stepMin) {
     const h = Math.floor(m / 60)
       .toString()
       .padStart(2, "0");
@@ -450,10 +451,10 @@ export default function BookingPage() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="space-y-4">
+                  <div className="space-y-4 px-1">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                       <label className="block">
-                        <span className="text-sm font-semibold text-gray-700">Namn</span>
+                        <span className="text-sm font-semibold text-gray-700 pl-0.5">Namn</span>
                         <input
                           value={name}
                           onChange={(e) => setName(e.target.value)}
@@ -462,7 +463,7 @@ export default function BookingPage() {
                         />
                       </label>
                       <label className="block">
-                        <span className="text-sm font-semibold text-gray-700">Antal gäster</span>
+                        <span className="text-sm font-semibold text-gray-700 pl-0.5">Antal gäster</span>
                         <input
                           type="number"
                           min={1}
@@ -570,7 +571,7 @@ export default function BookingPage() {
                   Ny bokning
                 </button>
                 <a
-                  href="#booking"
+                  href={`/booking?r=${restaurantSlug}`}
                   className="px-5 py-3 rounded-2xl font-semibold text-violet-700 bg-violet-50 border border-violet-100 hover:bg-violet-100 transition"
                 >
                   Tillbaka
