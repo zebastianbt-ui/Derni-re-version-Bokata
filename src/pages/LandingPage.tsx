@@ -210,52 +210,12 @@ export default function Page() {
                 q="Integritetspolicy – Bokäta"
                 a={
                   <div className="space-y-3 text-gray-700">
-                    <p>Bokäta värnar om din integritet. Denna integritetspolicy beskriver hur vi samlar in, använder och skyddar personuppgifter när du använder vår tjänst.</p>
-                    <div>
-                      <p className="font-semibold text-gray-900">Vilka uppgifter samlar vi in?</p>
-                      <ul className="list-disc pl-5 space-y-1">
-                        <li>Namn och kontaktuppgifter (t.ex. e‑postadress)</li>
-                        <li>Bokningsinformation</li>
-                        <li>Meddelanden som skickas via tjänsten</li>
-                        <li>Teknisk information (t.ex. IP‑adress, webbläsare)</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900">Hur används uppgifterna?</p>
-                      <ul className="list-disc pl-5 space-y-1">
-                        <li>Tillhandahålla och förbättra Bokätas tjänster</li>
-                        <li>Hantera bokningar och kommunikation med gäster</li>
-                        <li>Möjliggöra AI‑baserade automatiska svar</li>
-                        <li>Skicka viktig information om tjänsten</li>
-                        <li>Uppfylla rättsliga skyldigheter</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900">AI och automatiserade svar</p>
-                      <p>Bokäta använder artificiell intelligens för att automatiskt besvara frågor och hantera bokningsförfrågningar. AI‑svaren baseras på den information som restaurangen själv tillhandahåller.</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900">Delning av uppgifter</p>
-                      <p>Vi delar inte personuppgifter med tredje part, förutom när det krävs för:</p>
-                      <ul className="list-disc pl-5 space-y-1">
-                        <li>Betalningar (via betaltjänstleverantör, t.ex. Stripe)</li>
-                        <li>Drift och säkerhet av tjänsten</li>
-                        <li>Rättsliga krav</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900">Lagring av uppgifter</p>
-                      <p>Personuppgifter sparas endast så länge det är nödvändigt för att tillhandahålla tjänsten eller enligt lag.</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900">Dina rättigheter</p>
-                      <ul className="list-disc pl-5 space-y-1">
-                        <li>Begära tillgång till dina uppgifter</li>
-                        <li>Begära rättelse eller radering</li>
-                        <li>Invända mot behandling</li>
-                        <li>Kontakta oss om du har frågor om integritet</li>
-                      </ul>
-                    </div>
+                    <p><span className="font-semibold text-gray-900">Personuppgiftsansvarig:</span> Bokäta (verksamhet under registrering). Kontakt: bokata.ab@gmail.com.</p>
+                    <p><span className="font-semibold text-gray-900">Vi samlar in:</span> namn och kontaktuppgifter, bokningsinformation, meddelanden via tjänsten samt teknisk information (IP, webbläsare, enhet).</p>
+                    <p><span className="font-semibold text-gray-900">Vi använder uppgifter för:</span> att leverera tjänsten, hantera bokningar och kommunikation, förbättra funktioner och säkerhet samt uppfylla lagkrav.</p>
+                    <p><span className="font-semibold text-gray-900">Delning:</span> endast med underleverantörer som krävs för tjänsten, t.ex. Stripe (betalning), Resend (e‑post), Supabase (databas), Vercel (hosting), OpenAI (AI).</p>
+                    <p><span className="font-semibold text-gray-900">Lagring:</span> uppgifter sparas bara så länge det behövs; normalt raderas eller anonymiseras de inom 12 månader efter senaste aktivitet.</p>
+                    <p><span className="font-semibold text-gray-900">Dina rättigheter:</span> begära tillgång, rättelse eller radering. Kontakta oss på bokata.ab@gmail.com.</p>
                   </div>
                 }
               />

@@ -526,15 +526,15 @@ export default function BookingPage() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="space-y-4 px-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                  <div className="space-y-6 px-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-end">
                       <label className="block">
                         <span className="text-sm font-semibold text-gray-700 pl-2">Namn</span>
                         <input
                           value={name}
                           onChange={(e) => setName(e.target.value)}
                           placeholder="För- och efternamn"
-                          className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                          className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
                         />
                       </label>
                       <label className="block">
@@ -545,7 +545,7 @@ export default function BookingPage() {
                           max={16}
                           value={guests}
                           onChange={(e) => setGuests(Number(e.target.value))}
-                          className="mt-2 w-28 rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center"
+                          className="mt-3 w-28 rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center"
                         />
                       </label>
                     </div>
@@ -557,7 +557,7 @@ export default function BookingPage() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="namn@example.com"
-                        className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                        className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
                       />
                     </label>
 
@@ -568,7 +568,7 @@ export default function BookingPage() {
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Allergier, barnvagn…"
-                        className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                        className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
                       />
                     </label>
                   </div>

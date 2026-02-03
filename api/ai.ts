@@ -112,6 +112,7 @@ ${dashboardFacts}
     const [h, m] = t.split(":").map(Number);
     return h * 60 + m;
   };
+  const minToTime = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
   const round30 = (t: string) => {
     const [h, m] = t.split(":").map(Number);
     if (m < 15) return `${pad2(h)}:00`;
@@ -189,28 +190,49 @@ ${dashboardFacts}
     msgLower.length <= 12;
   const isWhyFollowUp = /^(varför|varfor)\b/i.test(msgLower);
   const closedRanges = (() => {
+    const ranges: { start: string; end: string }[] = [];
     const closedDates =
       context?.hours?.special
         ?.filter((s) => s.closed && s.date)
         .map((s) => s.date)
         .sort() ?? [];
-    if (!closedDates.length) return [] as { start: string; end: string }[];
-    const ranges: { start: string; end: string }[] = [];
-    let start = closedDates[0];
-    let prev = closedDates[0];
-    for (let i = 1; i < closedDates.length; i++) {
-      const cur = closedDates[i];
-      const nextExpected = addDays(prev, 1);
-      if (nextExpected && cur === nextExpected) {
-        prev = cur;
-      } else {
-        ranges.push({ start, end: prev });
-        start = cur;
-        prev = cur;
+    if (closedDates.length) {
+      let start = closedDates[0];
+      let prev = closedDates[0];
+      for (let i = 1; i < closedDates.length; i++) {
+        const cur = closedDates[i];
+        const nextExpected = addDays(prev, 1);
+        if (nextExpected && cur === nextExpected) {
+          prev = cur;
+        } else {
+          ranges.push({ start, end: prev });
+          start = cur;
+          prev = cur;
+        }
+      }
+      ranges.push({ start, end: prev });
+    }
+    const periods = context?.hours?.periods ?? [];
+    for (const p of periods) {
+      const days = p?.days ? Object.values(p.days) : [];
+      if (days.length && days.every((d) => d?.closed)) {
+        ranges.push({ start: p.from, end: p.to });
       }
     }
-    ranges.push({ start, end: prev });
-    return ranges;
+    if (!ranges.length) return ranges;
+    const sorted = ranges.slice().sort((a, b) => a.start.localeCompare(b.start));
+    const merged: { start: string; end: string }[] = [sorted[0]];
+    for (let i = 1; i < sorted.length; i++) {
+      const cur = sorted[i];
+      const last = merged[merged.length - 1];
+      const nextExpected = addDays(last.end, 1);
+      if (cur.start <= last.end || (nextExpected && cur.start === nextExpected)) {
+        if (cur.end > last.end) last.end = cur.end;
+      } else {
+        merged.push({ ...cur });
+      }
+    }
+    return merged;
   })();
   const closedRangeForDate = (iso?: string | null) => {
     if (!iso) return null;
@@ -559,8 +581,12 @@ ${dashboardFacts}
     const close = hours.close;
     if (open && close) {
       const t = timeToMin(time);
-      if (t < timeToMin(open) || t > timeToMin(close)) {
-        res.status(200).json({ reply: `Vi har öppet ${open}–${close}. Vill du boka en annan tid?` });
+      const lastBookingBufferMin = 60;
+      const latestStart = Math.max(timeToMin(open), timeToMin(close) - lastBookingBufferMin);
+      if (t < timeToMin(open) || t > latestStart) {
+        res.status(200).json({
+          reply: `Vi har öppet ${open}–${close}. Sista bokningsbara tiden är ${minToTime(latestStart)}.`,
+        });
         return;
       }
     }

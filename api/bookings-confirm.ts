@@ -41,8 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .eq("id", booking.id);
 
   const sendEmail = async (to: string, subject: string, html: string) => {
-    if (!resendKey) return;
-    await fetch("https://api.resend.com/emails", {
+    if (!resendKey) return { ok: false, status: 0, text: "Missing RESEND_API_KEY" };
+    const resp = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -50,6 +50,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       body: JSON.stringify({ from: resendFrom, to, subject, html }),
     });
+    const text = await resp.text();
+    if (!resp.ok) {
+      console.error("Resend error", resp.status, text || resp.statusText, { to, from: resendFrom });
+    }
+    return { ok: resp.ok, status: resp.status, text };
   };
 
   if (booking.client_email && action === "confirm") {
