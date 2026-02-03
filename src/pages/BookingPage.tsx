@@ -24,11 +24,19 @@ type Reservation = {
 
 type DayName = "måndag" | "tisdag" | "onsdag" | "torsdag" | "fredag" | "lördag" | "söndag";
 
+type HoursPeriod = {
+  id?: string;
+  from: string;
+  to: string;
+  days: Record<DayName, { closed: boolean; open: string; close: string }>;
+};
+
 type BookingPublicSettings = {
   public_id: string;
   hours: {
     normal: Record<DayName, { closed: boolean; open: string; close: string }>;
     special: { date: string; closed: boolean; open: string; close: string }[];
+    periods?: HoursPeriod[];
   };
   seating: {
     maxGuests: number;
@@ -53,6 +61,22 @@ const DEFAULT_HOURS: BookingPublicSettings["hours"] = {
     söndag: { closed: false, open: "11:00", close: "21:00" },
   },
   special: [],
+  periods: [
+    {
+      id: "default",
+      from: new Date().toISOString().slice(0, 10),
+      to: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().slice(0, 10),
+      days: {
+        måndag: { closed: false, open: "11:00", close: "21:00" },
+        tisdag: { closed: false, open: "11:00", close: "21:00" },
+        onsdag: { closed: false, open: "11:00", close: "21:00" },
+        torsdag: { closed: false, open: "11:00", close: "21:00" },
+        fredag: { closed: false, open: "11:00", close: "21:00" },
+        lördag: { closed: false, open: "11:00", close: "21:00" },
+        söndag: { closed: false, open: "11:00", close: "21:00" },
+      },
+    },
+  ],
 };
 
 const DEFAULT_SEATING: BookingPublicSettings["seating"] = {
@@ -84,6 +108,53 @@ function saveReservation(r: Reservation) {
 function toISODateInputValue(date = new Date()) {
   const tz = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return tz.toISOString().split("T")[0];
+}
+
+function cloneDays(days: Record<DayName, { closed: boolean; open: string; close: string }>) {
+  return {
+    måndag: { ...days.måndag },
+    tisdag: { ...days.tisdag },
+    onsdag: { ...days.onsdag },
+    torsdag: { ...days.torsdag },
+    fredag: { ...days.fredag },
+    lördag: { ...days.lördag },
+    söndag: { ...days.söndag },
+  };
+}
+
+function defaultPeriodRange() {
+  const start = new Date();
+  const end = new Date();
+  end.setFullYear(end.getFullYear() + 1);
+  return { from: toISODateInputValue(start), to: toISODateInputValue(end) };
+}
+
+function normalizeHours(hours: BookingPublicSettings["hours"]) {
+  const normal = hours.normal ? cloneDays(hours.normal) : cloneDays(DEFAULT_HOURS.normal);
+  const special = Array.isArray(hours.special) ? [...hours.special] : [];
+  const rawPeriods = Array.isArray(hours.periods) ? hours.periods : [];
+  const { from, to } = defaultPeriodRange();
+  const periods =
+    rawPeriods.length > 0
+      ? rawPeriods.map((p) => ({
+          id: p.id,
+          from: p.from || from,
+          to: p.to || to,
+          days: cloneDays(p.days ?? normal),
+        }))
+      : [
+          {
+            id: "default",
+            from,
+            to,
+            days: cloneDays(normal),
+          },
+        ];
+  return { normal, special, periods };
+}
+
+function isIsoInRange(iso: string, from: string, to: string) {
+  return iso >= from && iso <= to;
 }
 
 function makeId(prefix = "resv") {
@@ -165,22 +236,26 @@ export default function BookingPage() {
   }, [restaurantSlug]);
 
   const effectiveSettings = publicSettings ?? { public_id: restaurantSlug, hours: DEFAULT_HOURS, seating: DEFAULT_SEATING };
+  const normalizedHours = useMemo(() => normalizeHours(effectiveSettings.hours), [effectiveSettings.hours]);
   const settingsMissing = !publicSettings && restaurantSlug !== "demo";
 
   const isClosedDate = (iso: string) => {
-    const special = effectiveSettings.hours.special.find((s) => s.date === iso);
+    const special = normalizedHours.special.find((s) => s.date === iso);
     if (special) return special.closed;
     const day = toDayName(iso);
     if (!day) return false;
-    return effectiveSettings.hours.normal[day]?.closed ?? false;
+    const period = normalizedHours.periods.find((p) => isIsoInRange(iso, p.from, p.to));
+    const d = (period?.days ?? normalizedHours.normal)[day];
+    return d?.closed ?? false;
   };
 
   const dayHours = (iso: string) => {
-    const special = effectiveSettings.hours.special.find((s) => s.date === iso);
+    const special = normalizedHours.special.find((s) => s.date === iso);
     if (special) return special.closed ? null : { open: special.open, close: special.close };
     const day = toDayName(iso);
     if (!day) return null;
-    const d = effectiveSettings.hours.normal[day];
+    const period = normalizedHours.periods.find((p) => isIsoInRange(iso, p.from, p.to));
+    const d = (period?.days ?? normalizedHours.normal)[day];
     return d && !d.closed ? { open: d.open, close: d.close } : null;
   };
 
@@ -188,12 +263,12 @@ export default function BookingPage() {
     const h = dayHours(date);
     if (!h) return [];
     return genTimeSlots(h.open, h.close, 30);
-  }, [date, effectiveSettings]);
+  }, [date, normalizedHours]);
 
   const avail = useMemo(() => {
     if (isClosedDate(date)) return { capacity: 0, booked: 0, available: 0, canFit: false };
     return mockAvailability(date, time, guests);
-  }, [date, time, guests, effectiveSettings]);
+  }, [date, time, guests, normalizedHours]);
   const formReady = Boolean(date && time && guests && name && email);
   const [viewMonth, setViewMonth] = useState(() => Number(date.split("-")[1]) - 1);
   const [viewYear, setViewYear] = useState(() => Number(date.split("-")[0]));
@@ -279,7 +354,7 @@ export default function BookingPage() {
             baseDate: date,
             nowTime: `${new Date().getHours().toString().padStart(2, "0")}:${new Date().getMinutes().toString().padStart(2, "0")}`,
             seating: effectiveSettings.seating,
-            hours: effectiveSettings.hours,
+            hours: normalizedHours,
           },
         }),
       });
@@ -451,49 +526,49 @@ export default function BookingPage() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="space-y-4 px-1">
+                  <div className="space-y-4 px-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                       <label className="block">
-                        <span className="text-sm font-semibold text-gray-700 pl-0.5">Namn</span>
+                        <span className="text-sm font-semibold text-gray-700 pl-2">Namn</span>
                         <input
                           value={name}
                           onChange={(e) => setName(e.target.value)}
                           placeholder="För- och efternamn"
-                          className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                          className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
                         />
                       </label>
                       <label className="block">
-                        <span className="text-sm font-semibold text-gray-700 pl-0.5">Antal gäster</span>
+                        <span className="text-sm font-semibold text-gray-700 pl-2">Antal gäster</span>
                         <input
                           type="number"
                           min={1}
                           max={16}
                           value={guests}
                           onChange={(e) => setGuests(Number(e.target.value))}
-                          className="mt-1 w-24 rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center"
+                          className="mt-2 w-28 rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center"
                         />
                       </label>
                     </div>
 
                     <label className="block">
-                      <span className="text-sm font-semibold text-gray-700">E‑post</span>
+                      <span className="text-sm font-semibold text-gray-700 pl-2">E‑post</span>
                       <input
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="namn@example.com"
-                        className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                        className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
                       />
                     </label>
 
                     <label className="block">
-                      <span className="text-sm font-semibold text-gray-700">Kommentar</span>
+                      <span className="text-sm font-semibold text-gray-700 pl-2">Kommentar</span>
                       <textarea
                         rows={4}
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Allergier, barnvagn…"
-                        className="mt-1 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                        className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
                       />
                     </label>
                   </div>

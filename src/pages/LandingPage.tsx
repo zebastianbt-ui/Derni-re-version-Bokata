@@ -205,99 +205,103 @@ export default function Page() {
               <Faq q="Kan jag aktivera förhandsbetalning?" a="Ja, valbart för särskilda bokningar (t.ex. grupper, event, brunch)." />
               <Faq q="Behöver jag installera en app?" a="Nej, allt sker i webbläsaren (dator eller surfplatta)." />
               <Faq q="Hur anpassar jag AI:n?" a="Du förkonfigurerar svar, meny, sittningar och policy. AI:n följer dina regler och kan eskalera till människa." />
+              <Faq
+                id="integritet"
+                q="Integritetspolicy – Bokäta"
+                a={
+                  <div className="space-y-3 text-gray-700">
+                    <p>Bokäta värnar om din integritet. Denna integritetspolicy beskriver hur vi samlar in, använder och skyddar personuppgifter när du använder vår tjänst.</p>
+                    <div>
+                      <p className="font-semibold text-gray-900">Vilka uppgifter samlar vi in?</p>
+                      <ul className="list-disc pl-5 space-y-1">
+                        <li>Namn och kontaktuppgifter (t.ex. e‑postadress)</li>
+                        <li>Bokningsinformation</li>
+                        <li>Meddelanden som skickas via tjänsten</li>
+                        <li>Teknisk information (t.ex. IP‑adress, webbläsare)</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Hur används uppgifterna?</p>
+                      <ul className="list-disc pl-5 space-y-1">
+                        <li>Tillhandahålla och förbättra Bokätas tjänster</li>
+                        <li>Hantera bokningar och kommunikation med gäster</li>
+                        <li>Möjliggöra AI‑baserade automatiska svar</li>
+                        <li>Skicka viktig information om tjänsten</li>
+                        <li>Uppfylla rättsliga skyldigheter</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">AI och automatiserade svar</p>
+                      <p>Bokäta använder artificiell intelligens för att automatiskt besvara frågor och hantera bokningsförfrågningar. AI‑svaren baseras på den information som restaurangen själv tillhandahåller.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Delning av uppgifter</p>
+                      <p>Vi delar inte personuppgifter med tredje part, förutom när det krävs för:</p>
+                      <ul className="list-disc pl-5 space-y-1">
+                        <li>Betalningar (via betaltjänstleverantör, t.ex. Stripe)</li>
+                        <li>Drift och säkerhet av tjänsten</li>
+                        <li>Rättsliga krav</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Lagring av uppgifter</p>
+                      <p>Personuppgifter sparas endast så länge det är nödvändigt för att tillhandahålla tjänsten eller enligt lag.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Dina rättigheter</p>
+                      <ul className="list-disc pl-5 space-y-1">
+                        <li>Begära tillgång till dina uppgifter</li>
+                        <li>Begära rättelse eller radering</li>
+                        <li>Invända mot behandling</li>
+                        <li>Kontakta oss om du har frågor om integritet</li>
+                      </ul>
+                    </div>
+                  </div>
+                }
+              />
+              <Faq
+                id="villkor"
+                q="Villkor – Bokäta"
+                a={
+                  <div className="space-y-3 text-gray-700">
+                    <div>
+                      <p className="font-semibold text-gray-900">Tjänsten</p>
+                      <p>Bokäta är en digital boknings‑ och AI‑assistenttjänst för restauranger. Tjänsten tillhandahålls i befintligt skick och kan förändras över tid.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Användarens ansvar</p>
+                      <p>Användaren ansvarar för:</p>
+                      <ul className="list-disc pl-5 space-y-1">
+                        <li>Korrekt information som anges i systemet</li>
+                        <li>Hur Bokäta används gentemot gäster</li>
+                        <li>Efterlevnad av gällande lagar och regler</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">AI‑funktioner</p>
+                      <p>Bokäta använder AI för att automatisera svar och bokningshantering. AI‑svaren är vägledande och Bokäta kan inte garantera fullständig korrekthet i alla situationer.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Betalning och uppsägning</p>
+                      <p>Betalning sker enligt vald plan. Abonnemang kan avslutas enligt villkoren för respektive plan. Ingen återbetalning sker för påbörjad period om inget annat anges.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Ansvarsbegränsning</p>
+                      <p>Bokäta ansvarar inte för:</p>
+                      <ul className="list-disc pl-5 space-y-1">
+                        <li>Förlorade intäkter</li>
+                        <li>Felaktiga bokningar</li>
+                        <li>Indirekta skador eller följdskador</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Ändringar</p>
+                      <p>Bokäta förbehåller sig rätten att uppdatera dessa villkor. Uppdaterade villkor publiceras på webbplatsen.</p>
+                    </div>
+                  </div>
+                }
+              />
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-white px-6 py-10" id="integritet">
-        <div className="max-w-4xl mx-auto text-gray-800 space-y-4">
-          <h3 className="text-2xl font-bold text-gray-900">Integritetspolicy – Bokäta</h3>
-          <p>Bokäta värnar om din integritet. Denna integritetspolicy beskriver hur vi samlar in, använder och skyddar personuppgifter när du använder vår tjänst.</p>
-          <div>
-            <p className="font-semibold text-gray-900">Vilka uppgifter samlar vi in?</p>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>Namn och kontaktuppgifter (t.ex. e-postadress)</li>
-              <li>Bokningsinformation</li>
-              <li>Meddelanden som skickas via tjänsten</li>
-              <li>Teknisk information (t.ex. IP-adress, webbläsare)</li>
-            </ul>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">Hur används uppgifterna?</p>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>Tillhandahålla och förbättra Bokätas tjänster</li>
-              <li>Hantera bokningar och kommunikation med gäster</li>
-              <li>Möjliggöra AI-baserade automatiska svar</li>
-              <li>Skicka viktig information om tjänsten</li>
-              <li>Uppfylla rättsliga skyldigheter</li>
-            </ul>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">AI och automatiserade svar</p>
-            <p>Bokäta använder artificiell intelligens för att automatiskt besvara frågor och hantera bokningsförfrågningar. AI-svaren baseras på den information som restaurangen själv tillhandahåller.</p>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">Delning av uppgifter</p>
-            <p>Vi delar inte personuppgifter med tredje part, förutom när det krävs för:</p>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>Betalningar (via betaltjänstleverantör, t.ex. Stripe)</li>
-              <li>Drift och säkerhet av tjänsten</li>
-              <li>Rättsliga krav</li>
-            </ul>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">Lagring av uppgifter</p>
-            <p>Personuppgifter sparas endast så länge det är nödvändigt för att tillhandahålla tjänsten eller enligt lag.</p>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">Dina rättigheter</p>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>Begära tillgång till dina uppgifter</li>
-              <li>Begära rättelse eller radering</li>
-              <li>Invända mot behandling</li>
-              <li>Kontakta oss om du har frågor om integritet</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-white px-6 py-10" id="villkor">
-        <div className="max-w-4xl mx-auto text-gray-800 space-y-4">
-          <h3 className="text-2xl font-bold text-gray-900">Villkor – Bokäta</h3>
-          <div>
-            <p className="font-semibold text-gray-900">Tjänsten</p>
-            <p>Bokäta är en digital boknings- och AI-assistenttjänst för restauranger. Tjänsten tillhandahålls i befintligt skick och kan förändras över tid.</p>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">Användarens ansvar</p>
-            <p>Användaren ansvarar för:</p>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>Korrekt information som anges i systemet</li>
-              <li>Hur Bokäta används gentemot gäster</li>
-              <li>Efterlevnad av gällande lagar och regler</li>
-            </ul>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">AI-funktioner</p>
-            <p>Bokäta använder AI för att automatisera svar och bokningshantering. AI-svaren är vägledande och Bokäta kan inte garantera fullständig korrekthet i alla situationer.</p>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">Betalning och uppsägning</p>
-            <p>Betalning sker enligt vald plan. Abonnemang kan avslutas enligt villkoren för respektive plan. Ingen återbetalning sker för påbörjad period om inget annat anges.</p>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">Ansvarsbegränsning</p>
-            <p>Bokäta ansvarar inte för:</p>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>Förlorade intäkter</li>
-              <li>Felaktiga bokningar</li>
-              <li>Indirekta skador eller följdskador</li>
-            </ul>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">Ändringar</p>
-            <p>Bokäta förbehåller sig rätten att uppdatera dessa villkor. Uppdaterade villkor publiceras på webbplatsen.</p>
           </div>
         </div>
       </section>
@@ -670,14 +674,14 @@ function AuthModal({ open, mode = 'login', onClose, onSubmit, onToggleMode }) {
   );
 }
 
-function Faq({ q, a }) {
+function Faq({ q, a, id }: { q: string; a: React.ReactNode; id?: string }) {
   return (
-    <details className="group rounded-2xl border border-pink-100 p-5 open:bg-pink-50">
+    <details id={id} className="group rounded-2xl border border-pink-100 p-5 open:bg-pink-50">
       <summary className="cursor-pointer list-none flex items-center justify-between gap-4">
         <span className="font-semibold text-gray-900">{q}</span>
         <span className="shrink-0 rounded-full border border-pink-200 px-2 py-0.5 text-xs">Öppna</span>
       </summary>
-      <p className="mt-3 text-gray-700">{a}</p>
+      <div className="mt-3">{a}</div>
     </details>
   );
 }

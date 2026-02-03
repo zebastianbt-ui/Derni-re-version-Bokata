@@ -22,6 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       hours?: {
         normal?: Record<string, { closed: boolean; open: string; close: string }>;
         special?: { date: string; closed: boolean; open: string; close: string }[];
+        periods?: { id?: string; from: string; to: string; days: Record<string, { closed: boolean; open: string; close: string }> }[];
       };
       tables?: number[];
       bookings?: { date: string; time: string; guests: number; durationMin?: number; tableId?: number | null }[];
@@ -41,14 +42,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const hoursSummary = (() => {
     const normal = context?.hours?.normal;
-    if (!normal) return "";
+    const periods = context?.hours?.periods;
     const order = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"];
+    const base = context?.baseDate;
+    const period =
+      base && Array.isArray(periods)
+        ? periods.find((p) => base >= p.from && base <= p.to) ?? periods[0]
+        : Array.isArray(periods) && periods.length
+        ? periods[0]
+        : null;
+    const days = period?.days ?? normal;
+    if (!days) return "";
     const lines = order.map((d) => {
-      const day = normal[d];
+      const day = days[d];
       if (!day) return null;
       return day.closed ? `${d}: stängt` : `${d}: ${day.open}–${day.close}`;
     });
-    return lines.filter(Boolean).join(", ");
+    const range = period ? ` (${period.from}–${period.to})` : "";
+    return `${lines.filter(Boolean).join(", ")}${range}`;
   })();
 
   const dashboardFacts = [
@@ -362,17 +373,34 @@ ${dashboardFacts}
     return null;
   };
 
+  const getPeriodForDate = (iso?: string | null) => {
+    if (!iso) return null;
+    const periods = context?.hours?.periods;
+    if (!Array.isArray(periods) || !periods.length) return null;
+    return periods.find((p) => iso >= p.from && iso <= p.to) ?? periods[periods.length - 1];
+  };
+
   const isClosedDate = (iso?: string | null) => {
     if (!iso) return false;
-    return !!context?.hours?.special?.some((s) => s.date === iso && s.closed);
+    const special = context?.hours?.special?.find((s) => s.date === iso);
+    if (special) return special.closed;
+    const dt = toUtcDate(iso);
+    if (!dt) return false;
+    const dayName = weekdaySv[dt.getUTCDay()];
+    const period = getPeriodForDate(iso);
+    const normal = context?.hours?.normal;
+    const d = (period?.days ?? normal)?.[dayName];
+    return d?.closed ?? false;
   };
 
   const getDayHours = (iso?: string | null) => {
-    if (!iso || !context?.hours?.normal) return null;
+    if (!iso) return null;
     const dt = toUtcDate(iso);
     if (!dt) return null;
     const dayName = weekdaySv[dt.getUTCDay()];
-    const d = context.hours.normal[dayName];
+    const period = getPeriodForDate(iso);
+    const normal = context?.hours?.normal;
+    const d = (period?.days ?? normal)?.[dayName];
     if (!d) return null;
     return { dayName, ...d };
   };
@@ -522,14 +550,13 @@ ${dashboardFacts}
       res.status(200).json({ reply: `Vi har en stängd period: ${range.start}–${range.end}.` });
       return;
     }
-    const special = context.hours?.special?.find((s) => s.date === date);
-    const normal = dayName ? context.hours?.normal?.[dayName] : null;
-    if ((special && special.closed) || (!special && normal?.closed)) {
+    const hours = getDayHours(date);
+    if (!hours || hours.closed || isClosedDate(date)) {
       res.status(200).json({ reply: `Tyvärr, vi har stängt ${dayName ? `på ${dayName}ar` : "den dagen"}.` });
       return;
     }
-    const open = special?.open ?? normal?.open;
-    const close = special?.close ?? normal?.close;
+    const open = hours.open;
+    const close = hours.close;
     if (open && close) {
       const t = timeToMin(time);
       if (t < timeToMin(open) || t > timeToMin(close)) {
