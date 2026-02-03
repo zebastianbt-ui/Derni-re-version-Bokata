@@ -32,6 +32,7 @@ export default function Page() {
   const [authOpen, setAuthOpen] = React.useState(false);
   const [authMode, setAuthMode] = React.useState('login'); // 'login' | 'signup'
   const openAuth = (mode = 'login') => { setAuthMode(mode); setAuthOpen(true); };
+  const [cookieOk, setCookieOk] = React.useState(false);
 
   // Single source of truth for plan data (used by Pricing cards & Signup modal)
   const PLAN_MAP = React.useMemo(() => ({
@@ -57,6 +58,13 @@ export default function Page() {
     if (typeof document === 'undefined') return;
     console.assert(!!document.querySelector('#pricing'), 'Pricing section should exist');
     console.assert(!!document.querySelector('#faq'), 'FAQ section should exist');
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      setCookieOk(window.localStorage.getItem('bokata_cookie_ok') === '1');
+    } catch {}
   }, []);
 
   return (
@@ -210,12 +218,9 @@ export default function Page() {
                 q="Integritetspolicy – Bokäta"
                 a={
                   <div className="space-y-3 text-gray-700">
-                    <p><span className="font-semibold text-gray-900">Personuppgiftsansvarig:</span> Bokäta (verksamhet under registrering). Kontakt: bokata.ab@gmail.com.</p>
-                    <p><span className="font-semibold text-gray-900">Vi samlar in:</span> namn och kontaktuppgifter, bokningsinformation, meddelanden via tjänsten samt teknisk information (IP, webbläsare, enhet).</p>
-                    <p><span className="font-semibold text-gray-900">Vi använder uppgifter för:</span> att leverera tjänsten, hantera bokningar och kommunikation, förbättra funktioner och säkerhet samt uppfylla lagkrav.</p>
-                    <p><span className="font-semibold text-gray-900">Delning:</span> endast med underleverantörer som krävs för tjänsten, t.ex. Stripe (betalning), Resend (e‑post), Supabase (databas), Vercel (hosting), OpenAI (AI).</p>
-                    <p><span className="font-semibold text-gray-900">Lagring:</span> uppgifter sparas bara så länge det behövs; normalt raderas eller anonymiseras de inom 12 månader efter senaste aktivitet.</p>
-                    <p><span className="font-semibold text-gray-900">Dina rättigheter:</span> begära tillgång, rättelse eller radering. Kontakta oss på bokata.ab@gmail.com.</p>
+                    <p><span className="font-semibold text-gray-900">Kort version:</span> Vi använder bara uppgifter som behövs för att leverera bokningar och svara gäster. Kontakt: bokata.ab@gmail.com.</p>
+                    <p><span className="font-semibold text-gray-900">Lagring:</span> uppgifter raderas eller anonymiseras inom 12 månader efter senaste aktivitet.</p>
+                    <p><span className="font-semibold text-gray-900">Rättigheter:</span> begär åtkomst, rättelse eller radering via bokata.ab@gmail.com.</p>
                   </div>
                 }
               />
@@ -265,6 +270,25 @@ export default function Page() {
           </div>
         </div>
       </section>
+
+      {!cookieOk && (
+        <div className="fixed bottom-4 left-0 right-0 z-50 px-4">
+          <div className="mx-auto max-w-3xl rounded-2xl border border-pink-100 bg-white/95 backdrop-blur shadow-lg px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="text-sm text-gray-700">
+              Vi använder nödvändiga cookies för att sidan ska fungera. Genom att fortsätta godkänner du detta.
+            </div>
+            <button
+              onClick={() => {
+                try { window.localStorage.setItem('bokata_cookie_ok', '1'); } catch {}
+                setCookieOk(true);
+              }}
+              className="ml-auto px-4 py-2 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700"
+            >
+              Okej
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="bg-white border-t border-pink-100 text-center text-xs text-gray-500 py-6">
