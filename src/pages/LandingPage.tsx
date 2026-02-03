@@ -36,9 +36,9 @@ export default function Page() {
 
   // Single source of truth for plan data (used by Pricing cards & Signup modal)
   const PLAN_MAP = React.useMemo(() => ({
-    manad: { title: 'Månad', price: '790 kr/månad', note: 'Utan bindningstid, mest flexibelt' },
-    ettar: { title: '1 år (Populär)', price: '630 kr/månad · 7 560 kr', note: 'Spara 1 920 kr jämfört med månadspris' },
-    tvar: { title: '2 år (Bästa deal)', price: '550:-/månad · 13 200 kr', note: 'Spara 5 760 kr jämfört med månadspris' }
+    manad: { title: 'Månad', price: '990 kr/månad', note: 'Utan bindningstid, mest flexibelt' },
+    ettar: { title: '1 år (Populär)', price: '890 kr/månad · 10 680 kr', note: 'Spara 1 200 kr jämfört med månadspris' },
+    tvar: { title: '2 år (Bästa deal)', price: '790 kr/månad · 18 960 kr', note: 'Spara 4 800 kr jämfört med månadspris' }
   }), []);
 
   const handleAuthSubmit = (email, mode, planKey = 'manad') => {
@@ -192,9 +192,9 @@ export default function Page() {
           </div>
           <div className="bg-white px-6 md:px-10 py-10">
             <div className="grid md:grid-cols-3 gap-8">
-              <PriceCard title="Månad" priceLine="790 kr/månad" note="Utan bindningstid, mest flexibelt" cta="Starta månadsplan" onSelect={()=>openPlan(PLAN_MAP.manad)} />
-              <PriceCard title="1 år (Populär)" highlight priceLine="630 kr/månad · 7 560 kr" note="Spara 1 920 kr jämfört med månadspris" cta="Välj årsplan" onSelect={()=>openPlan(PLAN_MAP.ettar)} />
-              <PriceCard title="2 år (Bästa deal)" priceLine="550:-/månad · 13 200 kr" note="Spara 5 760 kr jämfört med månadspris" cta="Välj 2‑årsplan" onSelect={()=>openPlan(PLAN_MAP.tvar)} />
+              <PriceCard title="Månad" priceLine="990 kr/månad" note="Utan bindningstid, mest flexibelt" cta="Starta månadsplan" onSelect={()=>openPlan(PLAN_MAP.manad)} />
+              <PriceCard title="1 år (Populär)" highlight priceLine="890 kr/månad · 10 680 kr" note="Spara 1 200 kr jämfört med månadspris" cta="Välj årsplan" onSelect={()=>openPlan(PLAN_MAP.ettar)} />
+              <PriceCard title="2 år (Bästa deal)" priceLine="790 kr/månad · 18 960 kr" note="Spara 4 800 kr jämfört med månadspris" cta="Välj 2‑årsplan" onSelect={()=>openPlan(PLAN_MAP.tvar)} />
             </div>
           </div>
         </div>
