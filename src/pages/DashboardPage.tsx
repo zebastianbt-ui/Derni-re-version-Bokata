@@ -2119,7 +2119,35 @@ export default function ReservationDashboard() {
                   {config.hours.periods.map((period, idx) => (
                     <div key={period.id} className="rounded-lg border border-pink-200 bg-pink-50/40 p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <div className="text-sm font-semibold text-gray-700">{period.name?.trim() || `Period ${idx + 1}`}</div>
+                        <input
+                          type="text"
+                          className="text-sm font-semibold text-violet-700 bg-transparent border-b border-transparent focus:border-violet-300 focus:outline-none w-full max-w-[220px]"
+                          value={period.name ?? `Period ${idx + 1}`}
+                          onFocus={() => {
+                            if (!period.name) {
+                              setConfig((prev) => ({
+                                ...prev,
+                                hours: {
+                                  ...prev.hours,
+                                  periods: prev.hours.periods.map((p) =>
+                                    p.id === period.id ? { ...p, name: `Period ${idx + 1}` } : p
+                                  ),
+                                },
+                              }));
+                            }
+                          }}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              hours: {
+                                ...prev.hours,
+                                periods: prev.hours.periods.map((p) =>
+                                  p.id === period.id ? { ...p, name: e.target.value } : p
+                                ),
+                              },
+                            }))
+                          }
+                        />
                         {config.hours.periods.length > 1 && (
                           <button
                             type="button"
@@ -2129,29 +2157,6 @@ export default function ReservationDashboard() {
                             Ta bort period
                           </button>
                         )}
-                      </div>
-                      <div className="grid grid-cols-12 items-end gap-2 mb-2">
-                        <div className="col-span-12 md:col-span-6">
-                          <Field label="Namn">
-                            <input
-                              type="text"
-                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                              placeholder={`Period ${idx + 1}`}
-                              value={period.name ?? ""}
-                              onChange={(e) =>
-                                setConfig((prev) => ({
-                                  ...prev,
-                                  hours: {
-                                    ...prev.hours,
-                                    periods: prev.hours.periods.map((p) =>
-                                      p.id === period.id ? { ...p, name: e.target.value } : p
-                                    ),
-                                  },
-                                }))
-                              }
-                            />
-                          </Field>
-                        </div>
                       </div>
                       <div className="grid grid-cols-12 items-end gap-2">
                         <div className="col-span-6">
@@ -2434,8 +2439,8 @@ export default function ReservationDashboard() {
                 />
               </Field>
 
-              <div className="mt-3 text-sm text-gray-600">
-                Fyll i fakta om restaurangen. Ju mer info du lägger in, desto bättre kan assistenten svara. Svar sparas automatiskt.
+              <div className="mt-3 text-sm font-semibold text-violet-700">
+                Fyll i fakta om restaurangen. Ju mer info du lägger in, desto bättre kan assistenten svara!
               </div>
 
               <div className="mt-2 rounded-lg border border-pink-200 bg-pink-50/30 p-3">
