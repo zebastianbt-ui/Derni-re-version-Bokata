@@ -2132,7 +2132,7 @@ export default function ReservationDashboard() {
                       </div>
                       <div className="grid grid-cols-12 items-end gap-2 mb-2">
                         <div className="col-span-12 md:col-span-6">
-                          <Field label="Namn (valfritt)">
+                          <Field label="Namn">
                             <input
                               type="text"
                               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
@@ -2435,7 +2435,7 @@ export default function ReservationDashboard() {
               </Field>
 
               <div className="mt-3 text-sm text-gray-600">
-                Fyll i fakta om restaurangen. Svar sparas automatiskt.
+                Fyll i fakta om restaurangen. Ju mer info du lägger in, desto bättre kan assistenten svara. Svar sparas automatiskt.
               </div>
 
               <div className="mt-2 rounded-lg border border-pink-200 bg-pink-50/30 p-3">
