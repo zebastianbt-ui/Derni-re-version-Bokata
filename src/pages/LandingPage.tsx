@@ -215,7 +215,7 @@ export default function Page() {
               <Faq q="Hur anpassar jag AI:n?" a="Du förkonfigurerar svar, meny, sittningar och policy. AI:n följer dina regler och kan eskalera till människa." />
               <Faq
                 id="integritet"
-                q="Integritetspolicy – Bokäta"
+                q="Integritetspolicy"
                 a={
                   <div className="space-y-3 text-gray-700">
                     <p><span className="font-semibold text-gray-900">Kort version:</span> Vi använder bara uppgifter som behövs för att leverera bokningar och svara gäster. Kontakt: bokata.ab@gmail.com.</p>
@@ -226,7 +226,7 @@ export default function Page() {
               />
               <Faq
                 id="villkor"
-                q="Villkor – Bokäta"
+                q="Villkor"
                 a={
                   <div className="space-y-3 text-gray-700">
                     <div>

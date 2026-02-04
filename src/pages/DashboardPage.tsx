@@ -207,7 +207,7 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 const toIsoDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const defaultPeriodRange = () => {
   const y = new Date().getFullYear();
-  return { from: `${y}-01-01`, to: `${y + 1}-12-31` };
+  return { from: `${y}-01-01`, to: `${y}-12-31` };
 };
 const makeHoursPeriod = (days: Record<DayName, { closed: boolean; open: string; close: string }>, from?: string, to?: string): HoursPeriod => {
   const range = defaultPeriodRange();
