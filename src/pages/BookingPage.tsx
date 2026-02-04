@@ -26,6 +26,7 @@ type DayName = "måndag" | "tisdag" | "onsdag" | "torsdag" | "fredag" | "lördag
 
 type HoursPeriod = {
   id?: string;
+  name?: string;
   from: string;
   to: string;
   days: Record<DayName, { closed: boolean; open: string; close: string }>;
@@ -157,6 +158,19 @@ function isIsoInRange(iso: string, from: string, to: string) {
   return iso >= from && iso <= to;
 }
 
+function periodSpanDays(from: string, to: string) {
+  const a = new Date(from + "T00:00:00Z");
+  const b = new Date(to + "T00:00:00Z");
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return Number.POSITIVE_INFINITY;
+  return Math.max(0, Math.floor((b.getTime() - a.getTime()) / 86400000));
+}
+
+function pickPeriodForDate(periods: HoursPeriod[], iso: string) {
+  const matches = periods.filter((p) => isIsoInRange(iso, p.from, p.to));
+  if (!matches.length) return null;
+  return matches.sort((a, b) => periodSpanDays(a.from, a.to) - periodSpanDays(b.from, b.to))[0];
+}
+
 function makeId(prefix = "resv") {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
 }
@@ -244,7 +258,7 @@ export default function BookingPage() {
     if (special) return special.closed;
     const day = toDayName(iso);
     if (!day) return false;
-    const period = normalizedHours.periods.find((p) => isIsoInRange(iso, p.from, p.to));
+    const period = pickPeriodForDate(normalizedHours.periods, iso);
     const d = (period?.days ?? normalizedHours.normal)[day];
     return d?.closed ?? false;
   };
@@ -254,7 +268,7 @@ export default function BookingPage() {
     if (special) return special.closed ? null : { open: special.open, close: special.close };
     const day = toDayName(iso);
     if (!day) return null;
-    const period = normalizedHours.periods.find((p) => isIsoInRange(iso, p.from, p.to));
+    const period = pickPeriodForDate(normalizedHours.periods, iso);
     const d = (period?.days ?? normalizedHours.normal)[day];
     return d && !d.closed ? { open: d.open, close: d.close } : null;
   };

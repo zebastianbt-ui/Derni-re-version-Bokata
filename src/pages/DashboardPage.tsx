@@ -51,6 +51,7 @@ const DAYS_ORDER: DayName[] = ["måndag", "tisdag", "onsdag", "torsdag", "fredag
 
 type HoursPeriod = {
   id: string;
+  name?: string;
   from: string; // YYYY-MM-DD
   to: string; // YYYY-MM-DD
   days: Record<DayName, { closed: boolean; open: string; close: string }>;
@@ -209,10 +210,16 @@ const defaultPeriodRange = () => {
   const y = new Date().getFullYear();
   return { from: `${y}-01-01`, to: `${y}-12-31` };
 };
-const makeHoursPeriod = (days: Record<DayName, { closed: boolean; open: string; close: string }>, from?: string, to?: string): HoursPeriod => {
+const makeHoursPeriod = (
+  days: Record<DayName, { closed: boolean; open: string; close: string }>,
+  from?: string,
+  to?: string,
+  name?: string
+): HoursPeriod => {
   const range = defaultPeriodRange();
   return {
     id: uid(),
+    name,
     from: from ?? range.from,
     to: to ?? range.to,
     days: cloneDays(days),
@@ -231,6 +238,7 @@ const normalizeHours = (hours?: Settings["hours"] | null) => {
     periodsRaw.length > 0
       ? periodsRaw.map((p) => ({
           ...p,
+          name: p.name ?? "",
           days: p.days ? cloneDays(p.days as Record<DayName, { closed: boolean; open: string; close: string }>) : cloneDays(normal),
         }))
       : [makeHoursPeriod(normal)];
@@ -707,7 +715,7 @@ export default function ReservationDashboard() {
           notify_email: config.info.email || config.notifications.to || null,
           notify_enabled: config.notifications.notifyOnNewBooking,
           require_manual_confirmation: config.notifications.requireManualConfirmation,
-          knowledge_public: config.ai.knowledge,
+          knowledge_public: buildPublicKnowledge(config.ai.knowledge, config.ai.webSearch),
           updated_at: new Date().toISOString(),
         },
         { onConflict: "public_id" }
@@ -956,6 +964,22 @@ export default function ReservationDashboard() {
     ].filter((x) => x !== "");
     const qa = faqs.flatMap((f) => [`FRÅGA: ${f.q}`, `SVAR: ${f.a || ""}`, ""]);
     return [...lines, ...qa].join("\n").trim();
+  };
+
+  const buildPublicKnowledge = (base: string, webSearch: Settings["ai"]["webSearch"]) => {
+    const lines = (base || "").split(/\r?\n/).map((l) => l.trim());
+    const hasLabel = (label: string) => lines.some((l) => l.toLowerCase().startsWith(label.toLowerCase() + ":"));
+    const append = (label: string, value?: string) => {
+      if (!value || hasLabel(label)) return;
+      lines.push(`${label}: ${value}`);
+    };
+    if (webSearch?.enabled) {
+      append("Webbplats", webSearch.siteUrl || "");
+      append("Google Maps", webSearch.googleMapsUrl || "");
+      append("Facebook", webSearch.facebookUrl || "");
+      append("Instagram", webSearch.instagramUrl || "");
+    }
+    return lines.filter(Boolean).join("\n").trim();
   };
 
   useEffect(() => {
@@ -1352,7 +1376,7 @@ export default function ReservationDashboard() {
   const addHoursPeriod = () => {
     setConfig((prev) => {
       const baseDays = prev.hours.periods?.[0]?.days ?? prev.hours.normal;
-      const next = [...(prev.hours.periods ?? []), makeHoursPeriod(baseDays)];
+      const next = [...(prev.hours.periods ?? []), makeHoursPeriod(baseDays, undefined, undefined, `Period ${prev.hours.periods.length + 1}`)];
       return { ...prev, hours: { ...prev.hours, periods: next } };
     });
   };
@@ -2095,7 +2119,7 @@ export default function ReservationDashboard() {
                   {config.hours.periods.map((period, idx) => (
                     <div key={period.id} className="rounded-lg border border-pink-200 bg-pink-50/40 p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <div className="text-sm font-semibold text-gray-700">Period {idx + 1}</div>
+                        <div className="text-sm font-semibold text-gray-700">{period.name?.trim() || `Period ${idx + 1}`}</div>
                         {config.hours.periods.length > 1 && (
                           <button
                             type="button"
@@ -2105,6 +2129,29 @@ export default function ReservationDashboard() {
                             Ta bort period
                           </button>
                         )}
+                      </div>
+                      <div className="grid grid-cols-12 items-end gap-2 mb-2">
+                        <div className="col-span-12 md:col-span-6">
+                          <Field label="Namn (valfritt)">
+                            <input
+                              type="text"
+                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                              placeholder={`Period ${idx + 1}`}
+                              value={period.name ?? ""}
+                              onChange={(e) =>
+                                setConfig((prev) => ({
+                                  ...prev,
+                                  hours: {
+                                    ...prev.hours,
+                                    periods: prev.hours.periods.map((p) =>
+                                      p.id === period.id ? { ...p, name: e.target.value } : p
+                                    ),
+                                  },
+                                }))
+                              }
+                            />
+                          </Field>
+                        </div>
                       </div>
                       <div className="grid grid-cols-12 items-end gap-2">
                         <div className="col-span-6">

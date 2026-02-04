@@ -22,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       hours?: {
         normal?: Record<string, { closed: boolean; open: string; close: string }>;
         special?: { date: string; closed: boolean; open: string; close: string }[];
-        periods?: { id?: string; from: string; to: string; days: Record<string, { closed: boolean; open: string; close: string }> }[];
+        periods?: { id?: string; name?: string; from: string; to: string; days: Record<string, { closed: boolean; open: string; close: string }> }[];
       };
       tables?: number[];
       bookings?: { date: string; time: string; guests: number; durationMin?: number; tableId?: number | null }[];
@@ -108,6 +108,12 @@ ${dashboardFacts}
     dt.setUTCDate(dt.getUTCDate() + n);
     return fmtDate(dt);
   };
+  const spanDays = (from: string, to: string) => {
+    const a = toUtcDate(from);
+    const b = toUtcDate(to);
+    if (!a || !b) return Number.POSITIVE_INFINITY;
+    return Math.max(0, Math.floor((b.getTime() - a.getTime()) / 86400000));
+  };
   const timeToMin = (t: string) => {
     const [h, m] = t.split(":").map(Number);
     return h * 60 + m;
@@ -164,6 +170,9 @@ ${dashboardFacts}
     pets: getField("Djurpolicy"),
     parking: getFieldAny(["Parkering", "Parking"]),
     transport: getField("Kollektivtrafik"),
+    instagram: getFieldAny(["Instagram", "Insta"]),
+    facebook: getField("Facebook"),
+    googleMaps: getFieldAny(["Google Maps", "Maps", "GoogleMaps"]),
   };
   const kbFaqs = (() => {
     const out: { q: string; a: string }[] = [];
@@ -295,6 +304,18 @@ ${dashboardFacts}
     res.status(200).json({ reply: `Menyn finns här: ${kbInfo.website}` });
     return;
   }
+  if (/(instagram|insta)/i.test(msgLower) && kbInfo.instagram) {
+    res.status(200).json({ reply: `Instagram: ${kbInfo.instagram}.` });
+    return;
+  }
+  if (/facebook/i.test(msgLower) && kbInfo.facebook) {
+    res.status(200).json({ reply: `Facebook: ${kbInfo.facebook}.` });
+    return;
+  }
+  if (/(google maps|karta|maps)/i.test(msgLower) && kbInfo.googleMaps) {
+    res.status(200).json({ reply: `Google Maps: ${kbInfo.googleMaps}.` });
+    return;
+  }
   if (/(betal|kort|kontant|swish)/i.test(msgLower) && kbInfo.payment) {
     res.status(200).json({ reply: `Vi tar ${kbInfo.payment}.` });
     return;
@@ -399,7 +420,9 @@ ${dashboardFacts}
     if (!iso) return null;
     const periods = context?.hours?.periods;
     if (!Array.isArray(periods) || !periods.length) return null;
-    return periods.find((p) => iso >= p.from && iso <= p.to) ?? periods[periods.length - 1];
+    const matches = periods.filter((p) => iso >= p.from && iso <= p.to);
+    if (!matches.length) return periods[periods.length - 1];
+    return matches.sort((a, b) => spanDays(a.from, a.to) - spanDays(b.from, b.to))[0];
   };
 
   const isClosedDate = (iso?: string | null) => {
