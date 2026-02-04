@@ -466,7 +466,7 @@ export default function BookingPage() {
                                 type="button"
                                 onClick={() => !closed && setDate(iso)}
                                 disabled={closed}
-                                className={`h-12 rounded-2xl text-sm font-semibold ${
+                                className={`h-12 rounded-2xl text-sm font-semibold flex flex-col items-center justify-center leading-tight ${
                                   closed
                                     ? "bg-gray-100 text-gray-400 border border-gray-200"
                                     : isSel
@@ -474,7 +474,8 @@ export default function BookingPage() {
                                     : "bg-white text-violet-700 border border-violet-200 hover:bg-violet-100"
                                 }`}
                               >
-                                {c.day}
+                                <span>{c.day}</span>
+                                {closed && <span className="text-[10px] mt-0.5">Stängt</span>}
                               </button>
                             );
                           })}
@@ -548,7 +549,7 @@ export default function BookingPage() {
                           value={name}
                           onChange={(e) => setName(e.target.value)}
                           placeholder="För- och efternamn"
-                          className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                          className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center"
                         />
                       </label>
                       <label className="block">
@@ -571,7 +572,7 @@ export default function BookingPage() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="namn@example.com"
-                        className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                        className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center"
                       />
                     </label>
 
@@ -582,7 +583,7 @@ export default function BookingPage() {
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Allergier, barnvagn…"
-                        className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400"
+                        className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center"
                       />
                     </label>
                   </div>

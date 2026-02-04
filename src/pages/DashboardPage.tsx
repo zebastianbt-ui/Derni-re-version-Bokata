@@ -337,7 +337,7 @@ export default function ReservationDashboard() {
   const profileTimer = useRef<number | null>(null);
   const bookingSaveTimer = useRef<number | null>(null);
 
-  const [activeMeal, setActiveMeal] = useState<Meal>("Lunch");
+  const [activeMeal, setActiveMeal] = useState<Meal>("Alla");
   const [openBooking, setOpenBooking] = useState<Booking | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -2121,7 +2121,7 @@ export default function ReservationDashboard() {
                       <div className="flex items-center justify-between mb-2">
                         <input
                           type="text"
-                          className="text-sm font-semibold text-violet-700 bg-transparent border-b border-transparent focus:border-violet-300 focus:outline-none w-full max-w-[220px]"
+                          className="text-sm font-semibold text-violet-700 bg-violet-100/60 border border-transparent focus:border-violet-300 focus:outline-none w-full max-w-[220px] rounded-md px-2 py-1"
                           value={period.name ?? `Period ${idx + 1}`}
                           onFocus={() => {
                             if (!period.name) {
@@ -2439,8 +2439,8 @@ export default function ReservationDashboard() {
                 />
               </Field>
 
-              <div className="mt-3 text-sm font-semibold text-violet-700">
-                Fyll i fakta om restaurangen. Ju mer info du lägger in, desto bättre kan assistenten svara!
+              <div className="mt-3 text-sm font-semibold text-violet-700 whitespace-nowrap">
+                Ju mer info du lägger in, desto bättre svarar assistenten.
               </div>
 
               <div className="mt-2 rounded-lg border border-pink-200 bg-pink-50/30 p-3">
