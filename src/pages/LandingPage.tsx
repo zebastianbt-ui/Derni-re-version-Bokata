@@ -36,9 +36,9 @@ export default function Page() {
 
   // Single source of truth for plan data (used by Pricing cards & Signup modal)
   const PLAN_MAP = React.useMemo(() => ({
-    manad: { title: 'Månad', price: '990 kr/månad', note: 'Utan bindningstid, mest flexibelt' },
-    ettar: { title: '1 år (Populär)', price: '890 kr/månad · 10 680 kr', note: 'Spara 1 200 kr jämfört med månadspris' },
-    tvar: { title: '2 år (Bästa deal)', price: '790 kr/månad · 18 960 kr', note: 'Spara 4 800 kr jämfört med månadspris' }
+    manad: { title: 'Månad', price: '990 kr/månad', note: 'Utan bindningstid, mest flexibelt!' },
+    ettar: { title: '1 år (Populär)', price: '890 kr/månad', note: 'Spara 1 200 kr jämfört med månadspris' },
+    tvar: { title: '2 år (Bästa deal)', price: '790 kr/månad', note: 'Spara 4 800 kr jämfört med månadspris' }
   }), []);
 
   const handleAuthSubmit = (email, mode, planKey = 'manad') => {
@@ -188,13 +188,13 @@ export default function Page() {
           <div className="bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-700 text-white text-center px-6 py-10">
             <h2 className="text-3xl md:text-4xl font-extrabold">Priser</h2>
             <p className="mt-2"><span className="inline-block bg-white text-pink-700 font-semibold px-3 py-1 rounded-full">Gratisperiod: 14 dagar!</span></p>
-            <p className="opacity-90 text-sm mt-2">Priser inkl. moms. Fakturering via Stripe. Ingen bindningstid på månadsplanen.</p>
+            <p className="opacity-90 text-sm mt-2">Inga avgifter per bokad gäst! Priser inkl. moms.</p>
           </div>
           <div className="bg-white px-6 md:px-10 py-10">
             <div className="grid md:grid-cols-3 gap-8">
-              <PriceCard title="Månad" priceLine="990 kr/månad" note="Utan bindningstid, mest flexibelt" cta="Starta månadsplan" onSelect={()=>openPlan(PLAN_MAP.manad)} />
-              <PriceCard title="1 år (Populär)" highlight priceLine="890 kr/månad · 10 680 kr" note="Spara 1 200 kr jämfört med månadspris" cta="Välj årsplan" onSelect={()=>openPlan(PLAN_MAP.ettar)} />
-              <PriceCard title="2 år (Bästa deal)" priceLine="790 kr/månad · 18 960 kr" note="Spara 4 800 kr jämfört med månadspris" cta="Välj 2‑årsplan" onSelect={()=>openPlan(PLAN_MAP.tvar)} />
+              <PriceCard title="Månad" priceLine="990 kr/månad" note="Utan bindningstid, mest flexibelt!" cta="Starta månadsplan" onSelect={()=>openPlan(PLAN_MAP.manad)} />
+              <PriceCard title="1 år (Populär)" highlight priceLine="890 kr/månad" note="Spara 1 200 kr jämfört med månadspris" cta="Välj årsplan" onSelect={()=>openPlan(PLAN_MAP.ettar)} />
+              <PriceCard title="2 år (Bästa deal)" priceLine="790 kr/månad" note="Spara 4 800 kr jämfört med månadspris" cta="Välj 2‑årsplan" onSelect={()=>openPlan(PLAN_MAP.tvar)} />
             </div>
           </div>
         </div>
