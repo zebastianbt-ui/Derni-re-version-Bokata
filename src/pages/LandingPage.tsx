@@ -26,7 +26,12 @@ export default function Page() {
   // Pricing drawer state
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [selectedPlan, setSelectedPlan] = React.useState(null);
-  const openPlan = (plan) => { setSelectedPlan(plan); setDrawerOpen(true); };
+  const [signupPlanKey, setSignupPlanKey] = React.useState('manad');
+  const openPlan = (plan, key = 'manad') => {
+    setSelectedPlan(plan);
+    setSignupPlanKey(key);
+    setDrawerOpen(true);
+  };
 
   // Auth modal state (Zettle-like)
   const [authOpen, setAuthOpen] = React.useState(false);
@@ -204,9 +209,9 @@ export default function Page() {
           </div>
           <div className="bg-white px-6 md:px-10 py-10">
             <div className="grid md:grid-cols-3 gap-8">
-              <PriceCard title="Månad" priceLine="990 kr/månad" note="Utan bindningstid, mest flexibelt!" cta="Starta månadsplan" onSelect={()=>openPlan(PLAN_MAP.manad)} />
-              <PriceCard title="1 år (Populär)" highlight priceLine="890 kr/månad" note="Spara 1 200 kr jämfört med månadspris" cta="Välj årsplan" onSelect={()=>openPlan(PLAN_MAP.ettar)} />
-              <PriceCard title="2 år (Bästa deal)" priceLine="790 kr/månad" note="Spara 4 800 kr jämfört med månadspris" cta="Välj 2‑årsplan" onSelect={()=>openPlan(PLAN_MAP.tvar)} />
+              <PriceCard title="Månad" priceLine="990 kr/månad" note="Utan bindningstid, mest flexibelt!" cta="Starta månadsplan" onSelect={()=>openPlan(PLAN_MAP.manad, 'manad')} />
+              <PriceCard title="1 år (Populär)" highlight priceLine="890 kr/månad" note="Spara 1 200 kr jämfört med månadspris" cta="Välj årsplan" onSelect={()=>openPlan(PLAN_MAP.ettar, 'ettar')} />
+              <PriceCard title="2 år (Bästa deal)" priceLine="790 kr/månad" note="Spara 4 800 kr jämfört med månadspris" cta="Välj 2‑årsplan" onSelect={()=>openPlan(PLAN_MAP.tvar, 'tvar')} />
             </div>
           </div>
         </div>
@@ -316,8 +321,24 @@ export default function Page() {
       </footer>
 
       {/* Drawers & Modals */}
-      <PlanDrawer open={drawerOpen} plan={selectedPlan} onClose={()=>setDrawerOpen(false)} />
-      <AuthModal open={authOpen} mode={authMode} onClose={()=>setAuthOpen(false)} onSubmit={handleAuthSubmit} onToggleMode={(m)=>setAuthMode(m)} />
+      <PlanDrawer
+        open={drawerOpen}
+        plan={selectedPlan}
+        onClose={() => setDrawerOpen(false)}
+        onContinue={() => {
+          setDrawerOpen(false);
+          setAuthMode('signup');
+          setAuthOpen(true);
+        }}
+      />
+      <AuthModal
+        open={authOpen}
+        mode={authMode}
+        defaultPlanKey={signupPlanKey}
+        onClose={() => setAuthOpen(false)}
+        onSubmit={handleAuthSubmit}
+        onToggleMode={(m) => setAuthMode(m)}
+      />
     </div>
   );
 }
@@ -578,7 +599,7 @@ function PriceCard({ title, priceLine, note, cta, highlight, onSelect }) {
   );
 }
 
-function PlanDrawer({ open, plan, onClose }) {
+function PlanDrawer({ open, plan, onClose, onContinue }) {
   return (
     <div className={`fixed inset-0 z-50 ${open ? '' : 'pointer-events-none'}`}>
       <div
@@ -603,7 +624,13 @@ function PlanDrawer({ open, plan, onClose }) {
             <li>Ingen bindningstid på månadsplan.</li>
             <li>Avsluta när som helst inför nästa period.</li>
           </ul>
-          <a href="/signup" className="inline-flex justify-center items-center px-4 py-2 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700">Fortsätt</a>
+          <button
+            type="button"
+            onClick={onContinue}
+            className="inline-flex justify-center items-center px-4 py-2 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700"
+          >
+            Fortsätt
+          </button>
         </div>
       </aside>
     </div>
@@ -622,10 +649,10 @@ function PlanPill({ active, children, ...props }) {
   );
 }
 
-function AuthModal({ open, mode = 'login', onClose, onSubmit, onToggleMode }) {
+function AuthModal({ open, mode = 'login', defaultPlanKey = 'manad', onClose, onSubmit, onToggleMode }) {
   const [email, setEmail] = React.useState('');
-  const [planKey, setPlanKey] = React.useState('manad');
-  React.useEffect(()=>{ if(!open){ setEmail(''); setPlanKey('manad'); } }, [open]);
+  const [planKey, setPlanKey] = React.useState(defaultPlanKey);
+  React.useEffect(()=>{ if(!open){ setEmail(''); setPlanKey(defaultPlanKey); } }, [open, defaultPlanKey]);
   const title = mode === 'signup' ? 'Skapa konto' : 'Logga in';
   const next = () => onSubmit && onSubmit(email, mode, planKey);
   const onKey = (e) => { if(e.key === 'Enter') next(); };
