@@ -41,11 +41,23 @@ export default function Page() {
     tvar: { title: '2 år (Bästa deal)', price: '790 kr/månad', note: 'Spara 4 800 kr jämfört med månadspris' }
   }), []);
 
-  const handleAuthSubmit = (email, mode, planKey = 'manad') => {
+  const handleAuthSubmit = async (email, mode, planKey = 'manad') => {
     if (mode === 'signup') {
-      const plan = PLAN_MAP[planKey] || PLAN_MAP.manad;
-      setAuthOpen(false);
-      openPlan(plan);
+      try {
+        const r = await fetch('/api/stripe-checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ planKey, email }),
+        });
+        const data = await r.json();
+        if (!r.ok || !data?.url) throw new Error(data?.error || 'Stripe checkout failed');
+        window.location.href = data.url;
+      } catch (err) {
+        console.error(err);
+        alert(err instanceof Error ? err.message : 'Kunde inte starta betalning.');
+      } finally {
+        setAuthOpen(false);
+      }
     } else {
       if (typeof window !== 'undefined') {
         window.location.href = '/login' + (email ? `?email=${encodeURIComponent(email)}` : '');
