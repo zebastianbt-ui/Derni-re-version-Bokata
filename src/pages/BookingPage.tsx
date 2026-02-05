@@ -509,7 +509,7 @@ export default function BookingPage() {
 
                   <div>
                     <div className="rounded-3xl bg-white border border-violet-100 p-6 md:p-8 h-full min-h-[440px] flex flex-col">
-                      <div className="grid grid-cols-3 gap-2 max-h-[360px] min-h-[260px] overflow-auto pr-1">
+                      <div className="grid grid-cols-3 gap-2 max-h-[320px] min-h-[220px] overflow-auto pr-1">
                         {times.map((t) => {
                           const a = mockAvailability(date, t, guests);
                           const isSel = t === time;
@@ -518,7 +518,7 @@ export default function BookingPage() {
                             <button
                               key={t}
                               onClick={() => setTime(t)}
-                              className={`text-sm rounded-xl px-3 py-2 border transition ${
+                              className={`text-xs rounded-lg px-2 py-1.5 border transition ${
                                 a.canFit
                                   ? isSel
                                     ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white border-violet-600"
@@ -599,9 +599,9 @@ export default function BookingPage() {
                 {notes ? ` • ${notes}` : ""}
               </div>
 
-              <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 p-6 md:p-8">
+              <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 p-4 md:p-6">
                 <div className="max-w-6xl mx-auto flex flex-col lg:flex-row items-center gap-6">
-                  <div className="w-full lg:w-[70%] rounded-3xl border border-violet-100 bg-white p-6 h-full flex flex-col">
+                  <div className="w-full lg:w-[70%] rounded-3xl border border-violet-100 bg-white p-4 md:p-6 h-full flex flex-col">
                     <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
                     <p className="text-sm text-gray-600 mt-1">Ställ din fråga och AI:n svarar.</p>
                     <div className="mt-4 space-y-3 flex-1">
