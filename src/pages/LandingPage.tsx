@@ -68,7 +68,7 @@ export default function Page() {
       }
     } else {
       if (typeof window !== 'undefined') {
-        window.location.href = '/login' + (email ? `?email=${encodeURIComponent(email)}` : '');
+        window.location.href = '/dashboard' + (email ? `?email=${encodeURIComponent(email)}` : '');
       }
     }
   };

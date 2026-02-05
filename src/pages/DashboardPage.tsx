@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../supabaseClient";
 import bokataFork from "../assets/bokata-fork.png";
@@ -320,6 +321,7 @@ function findAvailableTable(args: { date: string; time: string; guests: number; 
 export default function ReservationDashboard() {
   const [session, setSession] = useState<Session | null>(null);
   const [authEmail, setAuthEmail] = useState("");
+  const location = useLocation();
   const [authMsg, setAuthMsg] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [profileName, setProfileName] = useState("");
@@ -1491,6 +1493,12 @@ export default function ReservationDashboard() {
         : "Länk skickad! Kolla din e‑post och klicka på länken för att logga in."
     );
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const email = params.get("email");
+    if (email) setAuthEmail(email);
+  }, [location.search]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
