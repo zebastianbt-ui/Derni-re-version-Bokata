@@ -211,6 +211,7 @@ function mockAvailability(date: string, time: string, guests: number) {
 
 export default function BookingPage() {
   const [restaurantSlug, setRestaurantSlug] = useState("demo");
+  const [restaurantName, setRestaurantName] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -247,6 +248,20 @@ export default function BookingPage() {
       if (data) setPublicSettings(data as BookingPublicSettings);
     };
     load();
+  }, [restaurantSlug]);
+
+  useEffect(() => {
+    const loadName = async () => {
+      if (!restaurantSlug || restaurantSlug === "demo") return;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(restaurantSlug);
+      if (!isUuid) {
+        setRestaurantName(restaurantSlug);
+        return;
+      }
+      const { data } = await supabase.from("restaurants").select("name").eq("id", restaurantSlug).maybeSingle();
+      setRestaurantName(data?.name ?? null);
+    };
+    loadName();
   }, [restaurantSlug]);
 
   const effectiveSettings = publicSettings ?? { public_id: restaurantSlug, hours: DEFAULT_HOURS, seating: DEFAULT_SEATING };
@@ -407,9 +422,7 @@ export default function BookingPage() {
               <div className="text-xs uppercase tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-pink-200 to-violet-200 font-semibold">
                 Bokäta – Boka bord
               </div>
-              {restaurantSlug && restaurantSlug !== "demo" && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(restaurantSlug) ? (
-                <div className="text-sm text-white/70">{restaurantSlug}</div>
-              ) : null}
+              {restaurantName ? <div className="text-sm text-white/70">{restaurantName}</div> : null}
             </div>
           </div>
         </div>

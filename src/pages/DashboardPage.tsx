@@ -550,7 +550,7 @@ export default function ReservationDashboard() {
         }));
       }
 
-      if (bookingSettings?.hours || bookingSettings?.seating) {
+      if (bookingSettings) {
         setConfig((prev) => ({
           ...prev,
           hours: normalizeHours(bookingSettings.hours ?? prev.hours),
