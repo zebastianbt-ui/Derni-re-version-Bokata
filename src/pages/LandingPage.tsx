@@ -1,4 +1,5 @@
 import React from "react";
+import { useLocation } from "react-router-dom";
 import bokataFork from "../assets/bokata-fork.png";
 
 export default function Page() {
@@ -37,6 +38,8 @@ export default function Page() {
   const [authOpen, setAuthOpen] = React.useState(false);
   const [authMode, setAuthMode] = React.useState('login'); // 'login' | 'signup'
   const openAuth = (mode = 'login') => { setAuthMode(mode); setAuthOpen(true); };
+  const [authEmailSeed, setAuthEmailSeed] = React.useState('');
+  const location = useLocation();
   const [cookieOk, setCookieOk] = React.useState(false);
 
   // Single source of truth for plan data (used by Pricing cards & Signup modal)
@@ -83,6 +86,17 @@ export default function Page() {
       setCookieOk(window.localStorage.getItem('bokata_cookie_ok') === '1');
     } catch {}
   }, []);
+
+  React.useEffect(() => {
+    if (!location) return;
+    const path = location.pathname;
+    if (path === '/login' || path === '/signup') {
+      const params = new URLSearchParams(location.search);
+      setAuthEmailSeed(params.get('email') || '');
+      setAuthMode(path === '/signup' ? 'signup' : 'login');
+      setAuthOpen(true);
+    }
+  }, [location]);
 
   return (
     <div className="min-h-screen text-gray-900 bg-white">
@@ -335,6 +349,7 @@ export default function Page() {
         open={authOpen}
         mode={authMode}
         defaultPlanKey={signupPlanKey}
+        defaultEmail={authEmailSeed}
         onClose={() => setAuthOpen(false)}
         onSubmit={handleAuthSubmit}
         onToggleMode={(m) => setAuthMode(m)}
@@ -649,10 +664,18 @@ function PlanPill({ active, children, ...props }) {
   );
 }
 
-function AuthModal({ open, mode = 'login', defaultPlanKey = 'manad', onClose, onSubmit, onToggleMode }) {
-  const [email, setEmail] = React.useState('');
+function AuthModal({ open, mode = 'login', defaultPlanKey = 'manad', defaultEmail = '', onClose, onSubmit, onToggleMode }) {
+  const [email, setEmail] = React.useState(defaultEmail);
   const [planKey, setPlanKey] = React.useState(defaultPlanKey);
-  React.useEffect(()=>{ if(!open){ setEmail(''); setPlanKey(defaultPlanKey); } }, [open, defaultPlanKey]);
+  React.useEffect(() => {
+    if (!open) {
+      setEmail('');
+      setPlanKey(defaultPlanKey);
+      return;
+    }
+    setEmail(defaultEmail || '');
+    setPlanKey(defaultPlanKey);
+  }, [open, defaultEmail, defaultPlanKey]);
   const title = mode === 'signup' ? 'Skapa konto' : 'Logga in';
   const next = () => onSubmit && onSubmit(email, mode, planKey);
   const onKey = (e) => { if(e.key === 'Enter') next(); };
