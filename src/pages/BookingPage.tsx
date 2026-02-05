@@ -407,7 +407,9 @@ export default function BookingPage() {
               <div className="text-xs uppercase tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-pink-200 to-violet-200 font-semibold">
                 Bokäta – Boka bord
               </div>
-              <div className="text-sm text-white/70">{restaurantSlug}</div>
+              {restaurantSlug && restaurantSlug !== "demo" && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(restaurantSlug) ? (
+                <div className="text-sm text-white/70">{restaurantSlug}</div>
+              ) : null}
             </div>
           </div>
         </div>

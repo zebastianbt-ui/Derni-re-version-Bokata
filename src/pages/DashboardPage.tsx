@@ -559,6 +559,8 @@ export default function ReservationDashboard() {
             maxGuests: bookingSettings.seating?.maxGuests ?? prev.seating.maxGuests,
             maxBookingDurationMin: bookingSettings.seating?.maxBookingDurationMin ?? prev.seating.maxBookingDurationMin,
             groupThreshold: bookingSettings.seating?.groupThreshold ?? prev.seating.groupThreshold,
+            maxTables: bookingSettings.seating?.maxTables ?? prev.seating.maxTables,
+            highChairs: bookingSettings.seating?.highChairs ?? prev.seating.highChairs,
           },
           escalation: {
             ...prev.escalation,
@@ -714,6 +716,8 @@ export default function ReservationDashboard() {
             maxGuestsPerReservation: config.escalation.maxGuestsPerReservation,
             groupThreshold: config.seating.groupThreshold,
             maxBookingDurationMin: config.seating.maxBookingDurationMin,
+            maxTables: config.seating.maxTables,
+            highChairs: config.seating.highChairs,
           },
           notify_email: config.info.email || config.notifications.to || null,
           notify_enabled: config.notifications.notifyOnNewBooking,
@@ -2479,12 +2483,7 @@ export default function ReservationDashboard() {
             </Section>
 
             <Section title="AI-profil & kunskapsbas">
-              <div className="mb-3 text-sm text-gray-600 flex items-center justify-between gap-2">
-                <div>Inloggad: {profileEmail || "—"}</div>
-                <button className="text-pink-700 hover:text-pink-900" onClick={handleLogout}>
-                  Logga ut
-                </button>
-              </div>
+              <div className="mb-3 text-sm text-gray-600">Inloggad: {profileEmail || "—"}</div>
 
               <Field label="Namn (kundprofil)" labelClassName="text-base font-bold text-gray-800">
                 <input
