@@ -1,6 +1,7 @@
 import React from "react";
 import { useLocation } from "react-router-dom";
 import bokataFork from "../assets/bokata-fork.png";
+import forkTransparent from "../assets/fork-transparent.png";
 
 export default function Page() {
   // Smooth scroll with header offset (SSR‑safe & legacy‑parser‑safe)
@@ -123,8 +124,14 @@ export default function Page() {
       </header>
 
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 text-white px-6 py-16 text-center">
-        <div className="max-w-4xl mx-auto">
+      <section className="bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 text-white px-6 py-16 text-center relative overflow-hidden">
+        <img
+          src={forkTransparent}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute right-16 top-1/2 h-56 md:h-72 w-auto -translate-y-1/2 opacity-95 hidden md:block"
+        />
+        <div className="max-w-4xl mx-auto relative">
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight mb-4">Bokäta</h1>
           <h2 className="text-2xl md:text-3xl mb-4">Den lagar inte mat. Den lagar allt annat.</h2>
           <p className="text-lg md:text-xl leading-relaxed max-w-2xl mx-auto mb-8">
