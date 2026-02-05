@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../supabaseClient";
 import bokataFork from "../assets/bokata-fork.png";
+import forkTransparent from "../assets/fork-transparent.png";
 
 // NOTE: Tu as collé un bloc très long avec plein de caractères cassés (×, retours, underscores, etc.).
 // Cette version est une *reconstruction fidèle* du dashboard que tu décris (calendrier + timeline + modals + settings + preview IA),
@@ -1526,10 +1527,10 @@ export default function ReservationDashboard() {
     <div className="min-h-screen bg-pink-50 p-6">
       <header className="-mx-1 mb-8 rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] px-6 py-10 text-white shadow-lg relative overflow-hidden">
         <img
-          src={bokataFork}
+          src={forkTransparent}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute right-0 bottom-0 h-64 md:h-80 w-auto opacity-90 mix-blend-screen drop-shadow-[0_0_24px_rgba(236,72,153,0.4)]"
+          className="pointer-events-none absolute right-0 bottom-0 h-64 md:h-80 w-auto opacity-95"
         />
         <div className="max-w-6xl mx-auto text-center relative">
           <div className="flex items-center justify-center gap-4">
