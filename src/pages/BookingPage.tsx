@@ -250,6 +250,15 @@ export default function BookingPage() {
     load();
   }, [restaurantSlug]);
 
+  const parseRestaurantNameFromKnowledge = (knowledge?: string | null) => {
+    if (!knowledge) return null;
+    const lines = knowledge.split(/\r?\n/).map((l) => l.trim());
+    const nameLine = lines.find((l) => l.toLowerCase().startsWith("namn:"));
+    if (!nameLine) return null;
+    const value = nameLine.split(":").slice(1).join(":").trim();
+    return value || null;
+  };
+
   useEffect(() => {
     const loadName = async () => {
       if (!restaurantSlug || restaurantSlug === "demo") return;
@@ -263,6 +272,14 @@ export default function BookingPage() {
     };
     loadName();
   }, [restaurantSlug]);
+
+  useEffect(() => {
+    if (!publicSettings?.knowledge_public) return;
+    const parsed = parseRestaurantNameFromKnowledge(publicSettings.knowledge_public);
+    if (parsed && parsed !== restaurantName) {
+      setRestaurantName(parsed);
+    }
+  }, [publicSettings?.knowledge_public, restaurantName]);
 
   const effectiveSettings = publicSettings ?? { public_id: restaurantSlug, hours: DEFAULT_HOURS, seating: DEFAULT_SEATING };
   const normalizedHours = useMemo(() => normalizeHours(effectiveSettings.hours), [effectiveSettings.hours]);
