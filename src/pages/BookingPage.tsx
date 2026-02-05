@@ -429,14 +429,14 @@ export default function BookingPage() {
         {!created ? (
           <section id="booking">
             <form ref={formRef} onSubmit={submit} className="space-y-10">
-              <div className="rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 text-white p-6 md:p-10 relative overflow-hidden shadow-lg">
+              <div className="-mx-4 md:-mx-6 rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 text-white p-6 md:p-10 relative overflow-hidden shadow-lg">
                 <img
                   src={forkTransparent}
                   alt=""
                   aria-hidden="true"
                   className="pointer-events-none absolute right-16 top-1/2 h-64 md:h-80 w-auto -translate-y-1/2 opacity-95 hidden md:block"
                 />
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
+                <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
                   <div className="rounded-3xl border border-violet-200 bg-white p-6 h-full min-h-[440px] flex flex-col">
                     <div className="flex items-center justify-between mb-4">
                       <button
@@ -604,8 +604,8 @@ export default function BookingPage() {
                 </div>
               </div>
 
-              <div className="rounded-3xl bg-gradient-to-b from-purple-50 to-pink-50 p-6 md:p-8">
-                <div className="rounded-3xl border border-violet-100 bg-white p-6 h-full flex flex-col">
+              <div className="-mx-4 md:-mx-6 rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 p-6 md:p-8">
+                <div className="max-w-6xl mx-auto rounded-3xl border border-violet-100 bg-white p-6 h-full flex flex-col">
                   <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
                   <p className="text-sm text-gray-600 mt-1">Ställ din fråga och AI:n svarar.</p>
                   <div className="mt-4 space-y-3 flex-1">
