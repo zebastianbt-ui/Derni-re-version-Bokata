@@ -1560,16 +1560,21 @@ export default function ReservationDashboard() {
 
       {/* Top stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Stat label="Bokningar idag" value={String(dayBookings.length)} />
-        <Stat label="Antal gäster idag" value={String(totalGuestsDay)} />
-        <Stat label="Mest bokade tid" value={busiestLeast.max} />
-        <Stat label="Minst bokade tid" value={busiestLeast.min} />
+        <Stat icon="📅" label="Bokningar idag" value={String(dayBookings.length)} />
+        <Stat icon="👥" label="Antal gäster idag" value={String(totalGuestsDay)} />
+        <Stat icon="🕒" label="Mest bokade tid" value={busiestLeast.max} />
+        <Stat icon="🕘" label="Minst bokade tid" value={busiestLeast.min} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Stat label="Totalt denna vecka" value="348" />
-        <Stat label="Stammiskunder" value="35" />
-        <Stat label="Svar skickade av AI" value="37" sub="denna vecka" />
+        <Stat icon="📈" label="Totalt denna vecka" value="348" />
+        <Stat icon="💗" label="Stammiskunder" value="35" />
+        <Stat
+          icon={<img src={bokataFork} alt="Bokata" className="h-4 w-4" />}
+          label="Svar skickade av AI"
+          value="37"
+          sub="denna vecka"
+        />
       </div>
 
       {/* Calendar + Day view */}
@@ -2837,10 +2842,23 @@ export default function ReservationDashboard() {
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function Stat({
+  icon,
+  label,
+  value,
+  sub,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  value: string;
+  sub?: string;
+}) {
   return (
     <div className="bg-white p-4 shadow-lg rounded-lg border border-pink-300">
-      <p className="text-sm text-gray-500">{label}</p>
+      <p className="text-sm text-gray-500 flex items-center gap-2">
+        {icon ? <span className="text-base">{icon}</span> : null}
+        <span>{label}</span>
+      </p>
       <h2 className="text-xl font-bold text-gray-800">{value}</h2>
       {sub ? <p className="text-xs text-gray-500 mt-1">{sub}</p> : null}
     </div>
