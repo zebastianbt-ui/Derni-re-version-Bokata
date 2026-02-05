@@ -500,7 +500,7 @@ export default function BookingPage() {
                         ›
                       </button>
                     </div>
-                    <div className="grid grid-cols-7 text-sm text-violet-700/80 mb-3">
+                    <div className="grid grid-cols-7 text-sm font-semibold text-violet-700/80 mb-3">
                       {["M", "T", "O", "T", "F", "L", "S"].map((d) => (
                         <div key={d} className="text-center">{d}</div>
                       ))}
@@ -551,7 +551,7 @@ export default function BookingPage() {
                             <button
                               key={t}
                               onClick={() => setTime(t)}
-                              className={`text-sm rounded-md px-1.5 py-1 border transition ${
+                              className={`text-sm font-semibold rounded-md px-1.5 py-1 border transition ${
                                 a.canFit
                                   ? isSel
                                     ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white border-violet-600"
@@ -632,7 +632,7 @@ export default function BookingPage() {
                 {notes ? ` • ${notes}` : ""}
               </div>
 
-              <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 px-6 md:px-10 py-6 md:py-10">
+              <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 p-6 md:p-10">
                 <div className="max-w-6xl mx-auto flex flex-col lg:flex-row items-center gap-6">
                   <div className="w-full lg:w-[70%] rounded-3xl border border-violet-100 bg-white p-4 md:p-6 h-full flex flex-col">
                     <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>

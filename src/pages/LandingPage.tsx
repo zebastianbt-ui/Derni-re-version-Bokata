@@ -116,7 +116,7 @@ export default function Page() {
             <a href="#pricing" onClick={(e)=>onAnchorClick(e,'#pricing')} className="px-3 py-1 rounded-full text-pink-700 font-semibold hover:bg-pink-50 hover:text-pink-800">Priser</a>
           </nav>
           <div className="flex items-center gap-3">
-            <button onClick={()=>{ window.location.href = '/dashboard'; }} className="hidden sm:inline-flex items-center px-4 py-2 rounded-full border border-pink-200 text-pink-700 hover:bg-pink-50">Log in</button>
+            <button onClick={()=>{ window.location.href = '/dashboard'; }} className="inline-flex items-center px-4 py-2 rounded-full border border-pink-200 text-pink-700 hover:bg-pink-50">Log in</button>
             <button onClick={()=>openAuth('signup')} className="inline-flex items-center px-4 py-2 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700">Sign up</button>
           </div>
         </div>

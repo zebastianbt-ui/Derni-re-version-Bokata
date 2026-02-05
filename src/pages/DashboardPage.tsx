@@ -331,6 +331,7 @@ export default function ReservationDashboard() {
   const [profileEmail, setProfileEmail] = useState("");
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [restaurantName, setRestaurantName] = useState("");
+  const [bookingLinkStatus, setBookingLinkStatus] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
   const [members, setMembers] = useState<{ name: string; email: string; role: string }[]>([]);
@@ -347,6 +348,35 @@ export default function ReservationDashboard() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const today = useMemo(() => new Date(), []);
+
+  const bookingPublicUrl = useMemo(() => {
+    if (!restaurantId || typeof window === "undefined") return "";
+    return `${window.location.origin}/booking?r=${restaurantId}`;
+  }, [restaurantId]);
+
+  const copyBookingPublicUrl = async () => {
+    if (!bookingPublicUrl) return;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(bookingPublicUrl);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = bookingPublicUrl;
+        textarea.setAttribute("readonly", "true");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setBookingLinkStatus("Kopierad");
+    } catch {
+      setBookingLinkStatus("Kunde inte kopiera");
+    } finally {
+      window.setTimeout(() => setBookingLinkStatus(""), 2000);
+    }
+  };
   const [month, setMonth] = useState(today.getMonth());
   const [year, setYear] = useState(today.getFullYear());
   const [selectedDay, setSelectedDay] = useState(today.getDate());
@@ -1530,7 +1560,7 @@ export default function ReservationDashboard() {
           src={forkTransparent}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute right-24 top-1/2 h-96 md:h-[30rem] w-auto -translate-y-1/2 opacity-95"
+          className="pointer-events-none absolute right-20 top-1/2 hidden md:block h-80 lg:h-[26rem] w-auto -translate-y-1/2 opacity-95"
         />
         <div className="max-w-6xl mx-auto text-center relative">
           <div className="flex items-center justify-center gap-4">
@@ -1951,6 +1981,27 @@ export default function ReservationDashboard() {
                   Kunde inte spara inställningar: {settingsSaveError}
                 </div>
               ) : null}
+              <Field label="Lien de réservation">
+                <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    className="w-full flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700"
+                    value={bookingPublicUrl || "Laddar..."}
+                    readOnly
+                  />
+                  <button
+                    type="button"
+                    onClick={copyBookingPublicUrl}
+                    disabled={!bookingPublicUrl}
+                    className="rounded-lg bg-pink-500 px-3 py-2 text-sm font-semibold text-white hover:bg-pink-600 disabled:opacity-50"
+                  >
+                    Kopiera
+                  </button>
+                  {bookingLinkStatus ? <span className="text-xs text-gray-500">{bookingLinkStatus}</span> : null}
+                </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  À coller sur votre site ou Facebook pour diriger les clients vers la page de réservation Bokäta.
+                </div>
+              </Field>
               <Field label="E-post för bokningar">
                 <input
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
