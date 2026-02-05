@@ -294,6 +294,28 @@ export default function BookingPage() {
     return genTimeSlots(h.open, h.close, 30);
   }, [date, normalizedHours]);
 
+  const findNextOpenDate = (startIso: string) => {
+    if (dayHours(startIso)) return startIso;
+    const start = new Date(startIso + "T00:00:00");
+    if (Number.isNaN(start.getTime())) return startIso;
+    for (let i = 1; i <= 366; i += 1) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const iso = toISODateInputValue(d);
+      if (dayHours(iso)) return iso;
+    }
+    return startIso;
+  };
+
+  useEffect(() => {
+    const next = findNextOpenDate(date);
+    if (next !== date) {
+      setDate(next);
+      setViewMonth(Number(next.split("-")[1]) - 1);
+      setViewYear(Number(next.split("-")[0]));
+    }
+  }, [normalizedHours, date]);
+
   const avail = useMemo(() => {
     if (isClosedDate(date)) return { capacity: 0, booked: 0, available: 0, canFit: false };
     return mockAvailability(date, time, guests);
@@ -533,63 +555,70 @@ export default function BookingPage() {
                           ? "Tiderna är inte konfigurerade än. Välj ändå en tid så uppdateras när restaurangen sparat sina tider."
                           : ""}
                       </div>
+                      <div className="pt-6">
+                        <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4 space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <label className="block">
+                              <span className="text-xs font-semibold text-gray-600 pl-1">Namn</span>
+                              <input
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="För- och efternamn"
+                                className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center text-sm text-gray-900 placeholder:text-gray-400"
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="text-xs font-semibold text-gray-600 pl-1">Antal gäster</span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={16}
+                                value={guests}
+                                onChange={(e) => setGuests(Number(e.target.value))}
+                                className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center px-4 py-3 text-sm text-gray-900"
+                              />
+                            </label>
+                          </div>
+                          <label className="block">
+                            <span className="text-xs font-semibold text-gray-600 pl-1">E‑post</span>
+                            <input
+                              type="email"
+                              value={email}
+                              onChange={(e) => setEmail(e.target.value)}
+                              placeholder="namn@example.com"
+                              className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center text-sm text-gray-900 placeholder:text-gray-400"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-semibold text-gray-600 pl-1">Kommentar</span>
+                            <textarea
+                              rows={3}
+                              value={notes}
+                              onChange={(e) => setNotes(e.target.value)}
+                              placeholder="Allergier, barnvagn…"
+                              className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center text-sm text-gray-900 placeholder:text-gray-400"
+                            />
+                          </label>
+                          <button
+                            type="submit"
+                            disabled={!date || !time || !guests || !name || !email || submitting || !avail.canFit}
+                            className="w-full px-5 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-600 to-pink-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
+                          >
+                            {submitting ? "Skickar…" : "BOKA"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-pink-100 bg-white px-6 py-4">
-                <div className="w-full lg:w-3/4 mx-auto flex flex-col lg:flex-row gap-4 items-end">
-                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <label className="block">
-                      <span className="text-xs font-semibold text-gray-600 pl-1">Namn</span>
-                      <input
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="För- och efternamn"
-                        className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center text-sm text-gray-900 placeholder:text-gray-400"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="text-xs font-semibold text-gray-600 pl-1">Antal gäster</span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={16}
-                        value={guests}
-                        onChange={(e) => setGuests(Number(e.target.value))}
-                        className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center px-4 py-3 text-sm text-gray-900"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="text-xs font-semibold text-gray-600 pl-1">E‑post</span>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="namn@example.com"
-                        className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center text-sm text-gray-900 placeholder:text-gray-400"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="text-xs font-semibold text-gray-600 pl-1">Kommentar</span>
-                      <textarea
-                        rows={2}
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Allergier, barnvagn…"
-                        className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center text-sm text-gray-900 placeholder:text-gray-400"
-                      />
-                    </label>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={!date || !time || !guests || !name || !email || submitting || !avail.canFit}
-                    className="w-full lg:w-auto px-6 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-600 to-pink-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
-                  >
-                    {submitting ? "Skickar…" : "BOKA"}
-                  </button>
-                </div>
+              <div className="rounded-2xl border border-pink-100 bg-white px-6 py-3 text-center text-sm text-gray-700">
+                <span className="font-semibold text-gray-900">Snabböversikt</span>{" "}
+                {new Date(date).toLocaleDateString()} • {guests} gäster
+                {name ? ` • ${name}` : ""}
+                {email ? ` • ${email}` : ""}
+                {notes ? ` • ${notes}` : ""}
               </div>
 
               <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 p-4 md:p-6">
@@ -705,7 +734,7 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-0 py-2 text-center">
+      <footer className="mt-0 py-1 text-center">
         <div className="text-2xl md:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-pink-500 to-rose-500">
           Bokäta
         </div>
