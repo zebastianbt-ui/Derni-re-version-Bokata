@@ -502,10 +502,7 @@ export default function BookingPage() {
 
                   <div>
                     <div className="rounded-3xl bg-white border border-violet-100 p-6 md:p-8 h-full min-h-[440px] flex flex-col">
-                      <h2 className="text-lg font-bold text-gray-800">Snabböversikt</h2>
-                      <p className="text-sm text-gray-600">{new Date(date).toLocaleDateString()} • {guests} gäster</p>
-
-                      <div className="mt-4 grid grid-cols-3 gap-2 max-h-[360px] overflow-auto pr-1">
+                      <div className="grid grid-cols-3 gap-2 max-h-[360px] overflow-auto pr-1">
                         {times.map((t) => {
                           const a = mockAvailability(date, t, guests);
                           const isSel = t === time;
@@ -537,18 +534,53 @@ export default function BookingPage() {
                           : ""}
                       </div>
                       <div className="mt-auto pt-6">
-                        <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
-                          <div className="text-sm font-semibold text-violet-700 mb-1">Din bokning</div>
-                          <div className="text-sm text-gray-700">
-                            {date ? date : "Välj datum"} • {time ? `kl ${time}` : "välj tid"} • {guests} gäster
+                        <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4 space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <label className="block">
+                              <span className="text-xs font-semibold text-gray-600 pl-1">Namn</span>
+                              <input
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="För- och efternamn"
+                                className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center text-sm"
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="text-xs font-semibold text-gray-600 pl-1">Antal gäster</span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={16}
+                                value={guests}
+                                onChange={(e) => setGuests(Number(e.target.value))}
+                                className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center px-4 py-3 text-sm"
+                              />
+                            </label>
                           </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {name ? name : "Ditt namn"} • {email ? email : "din e‑post"}
-                          </div>
+                          <label className="block">
+                            <span className="text-xs font-semibold text-gray-600 pl-1">E‑post</span>
+                            <input
+                              type="email"
+                              value={email}
+                              onChange={(e) => setEmail(e.target.value)}
+                              placeholder="namn@example.com"
+                              className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center text-sm"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-semibold text-gray-600 pl-1">Kommentar</span>
+                            <textarea
+                              rows={3}
+                              value={notes}
+                              onChange={(e) => setNotes(e.target.value)}
+                              placeholder="Allergier, barnvagn…"
+                              className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center text-sm"
+                            />
+                          </label>
                           <button
                             type="submit"
                             disabled={!date || !time || !guests || !name || !email || submitting || !avail.canFit}
-                            className="mt-4 w-full px-5 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-600 via-pink-600 to-rose-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
+                            className="w-full px-5 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-600 to-pink-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
                           >
                             {submitting ? "Skickar…" : "BOKA"}
                           </button>
@@ -559,73 +591,38 @@ export default function BookingPage() {
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-pink-100 bg-white p-6 md:p-8">
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-end">
-                  <label className="block lg:col-span-1">
-                    <span className="text-sm font-semibold text-gray-700 pl-2">Namn</span>
-                    <input
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="För- och efternamn"
-                      className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center"
-                    />
-                  </label>
-                  <label className="block lg:col-span-1">
-                    <span className="text-sm font-semibold text-gray-700 pl-2">Antal gäster</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={16}
-                      value={guests}
-                      onChange={(e) => setGuests(Number(e.target.value))}
-                      className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center px-4 py-3"
-                    />
-                  </label>
-                  <label className="block lg:col-span-1">
-                    <span className="text-sm font-semibold text-gray-700 pl-2">E‑post</span>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="namn@example.com"
-                      className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center"
-                    />
-                  </label>
-                  <label className="block lg:col-span-1">
-                    <span className="text-sm font-semibold text-gray-700 pl-2">Kommentar</span>
-                    <textarea
-                      rows={3}
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Allergier, barnvagn…"
-                      className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center"
-                    />
-                  </label>
-                </div>
+              <div className="rounded-2xl border border-pink-100 bg-white px-6 py-3 text-center text-sm text-gray-700">
+                <span className="font-semibold text-gray-900">Snabböversikt</span>{" "}
+                {new Date(date).toLocaleDateString()} • {guests} gäster
               </div>
 
               <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 p-6 md:p-8">
-                <div className="max-w-6xl mx-auto rounded-3xl border border-violet-100 bg-white p-6 h-full flex flex-col">
-                  <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
-                  <p className="text-sm text-gray-600 mt-1">Ställ din fråga och AI:n svarar.</p>
-                  <div className="mt-4 space-y-3 flex-1">
-                    <textarea
-                      value={qaQuestion}
-                      onChange={(e) => setQaQuestion(e.target.value)}
-                      placeholder="Ex: Har ni öppet på söndag? Finns det parkering?"
-                      className="w-full min-h-[120px] rounded-2xl border border-violet-200 bg-violet-50/60 px-4 py-3 focus:border-violet-400 focus:ring-violet-400"
-                    />
-                    <div className="flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={askAi}
-                        disabled={qaLoading || !qaQuestion.trim()}
-                        className="rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
-                      >
-                        {qaLoading ? "Svarar..." : "Fråga AI"}
-                      </button>
-                      {qaAnswer && <div className="text-sm text-gray-700">{qaAnswer}</div>}
+                <div className="max-w-6xl mx-auto flex flex-col lg:flex-row items-center gap-6">
+                  <div className="w-full lg:w-[70%] rounded-3xl border border-violet-100 bg-white p-6 h-full flex flex-col">
+                    <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
+                    <p className="text-sm text-gray-600 mt-1">Ställ din fråga och AI:n svarar.</p>
+                    <div className="mt-4 space-y-3 flex-1">
+                      <textarea
+                        value={qaQuestion}
+                        onChange={(e) => setQaQuestion(e.target.value)}
+                        placeholder="Ex: Har ni öppet på söndag? Finns det parkering?"
+                        className="w-full min-h-[120px] rounded-2xl border border-violet-200 bg-violet-50/60 px-4 py-3 focus:border-violet-400 focus:ring-violet-400"
+                      />
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={askAi}
+                          disabled={qaLoading || !qaQuestion.trim()}
+                          className="rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                        >
+                          {qaLoading ? "Svarar..." : "Fråga AI"}
+                        </button>
+                        {qaAnswer && <div className="text-sm text-gray-700">{qaAnswer}</div>}
+                      </div>
                     </div>
+                  </div>
+                  <div className="hidden lg:flex w-[30%] justify-center">
+                    <img src={forkTransparent} alt="" aria-hidden="true" className="h-56 w-auto" />
                   </div>
                 </div>
               </div>
