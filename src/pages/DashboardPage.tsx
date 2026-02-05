@@ -325,6 +325,7 @@ export default function ReservationDashboard() {
   const location = useLocation();
   const [authMsg, setAuthMsg] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [settingsSaveError, setSettingsSaveError] = useState<string | null>(null);
   const [profileName, setProfileName] = useState("");
   const [profileEmail, setProfileEmail] = useState("");
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
@@ -478,6 +479,13 @@ export default function ReservationDashboard() {
           .eq("user_id", userId)
           .limit(1)
           .maybeSingle();
+      }
+
+      if (!membership.data && typeof window !== "undefined") {
+        const storedId = window.localStorage.getItem("bokata_restaurant_id");
+        if (storedId) {
+          membership = { data: { restaurant_id: storedId, role: "owner" } } as typeof membership;
+        }
       }
 
       if (!membership.data) {
@@ -729,6 +737,9 @@ export default function ReservationDashboard() {
       );
       if (error) {
         console.error("booking_public_settings upsert failed", error.message);
+        setSettingsSaveError(error.message);
+      } else {
+        setSettingsSaveError(null);
       }
     }, 700);
     return () => {
@@ -2036,6 +2047,11 @@ export default function ReservationDashboard() {
         <Drawer onClose={() => setSettingsOpen(false)}>
           <div className="space-y-6">
             <Section title="Restauranginfo">
+              {settingsSaveError ? (
+                <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  Kunde inte spara inställningar: {settingsSaveError}
+                </div>
+              ) : null}
               <Field label="E-post för bokningar">
                 <input
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
