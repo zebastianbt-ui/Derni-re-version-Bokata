@@ -337,7 +337,6 @@ export default function ReservationDashboard() {
   const [aiSaveState, setAiSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [aiSaveMessage, setAiSaveMessage] = useState<string>("");
   const saveTimer = useRef<number | null>(null);
-  const saveFlashTimer = useRef<number | null>(null);
   const profileTimer = useRef<number | null>(null);
   const bookingSaveTimer = useRef<number | null>(null);
 
@@ -632,10 +631,6 @@ export default function ReservationDashboard() {
 
   useEffect(() => {
     if (!session?.user?.id || !settingsReady || !restaurantId) return;
-    if (skipNextAiAutoSaveRef.current) {
-      skipNextAiAutoSaveRef.current = false;
-      return;
-    }
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
 
     saveTimer.current = window.setTimeout(async () => {
@@ -661,7 +656,6 @@ export default function ReservationDashboard() {
       } else {
         setAiSaveState("saved");
         setAiSaveMessage("Sparad");
-        triggerSaveFlash();
       }
     }, 600);
 
@@ -845,8 +839,6 @@ export default function ReservationDashboard() {
   const currentYear = new Date().getFullYear();
   const [holidayYear, setHolidayYear] = useState<number>(currentYear);
   const [onboardingDirty, setOnboardingDirty] = useState(false);
-  const [saveFlash, setSaveFlash] = useState(false);
-  const skipNextAiAutoSaveRef = useRef(false);
   const [onboarding, setOnboarding] = useState({
     restaurantName: "",
     address: "",
@@ -1100,80 +1092,6 @@ export default function ReservationDashboard() {
       throw new Error(data?.error || "AI error");
     }
     return data.reply || "Inget svar.";
-  };
-
-  const triggerSaveFlash = () => {
-    if (saveFlashTimer.current) window.clearTimeout(saveFlashTimer.current);
-    setSaveFlash(true);
-    saveFlashTimer.current = window.setTimeout(() => setSaveFlash(false), 900);
-  };
-
-  const saveKnowledgeNow = async () => {
-    if (!session?.user?.id) {
-      setAiSaveState("error");
-      setAiSaveMessage("Du måste vara inloggad för att spara.");
-      return;
-    }
-    const token = session?.access_token || "";
-    if (!token) {
-      setAiSaveState("error");
-      setAiSaveMessage("Autentisering saknas. Försök logga ut/in igen.");
-      return;
-    }
-    let restId = restaurantId;
-    if (!restId) {
-      try {
-        const restaurant = await fetchRestaurantFromApi(token);
-        restId = restaurant.restaurantId ?? null;
-        if (!restId) {
-          const baseName = profileName?.trim() ? `${profileName.trim()} Restaurant` : "Bokäta Restaurant";
-          const created = await createRestaurantFromApi(token, baseName);
-          restId = created.restaurantId ?? null;
-          if (created.name) setRestaurantName(created.name);
-        } else if (restaurant.name) {
-          setRestaurantName(restaurant.name);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Kunde inte hämta restaurang";
-        setAiSaveState("error");
-        setAiSaveMessage(msg);
-        return;
-      }
-      if (restId) setRestaurantId(restId);
-    }
-    if (!restId) {
-      setAiSaveState("error");
-      setAiSaveMessage("Restaurang saknas. Försök logga ut/in igen.");
-      return;
-    }
-    const next = buildKnowledge(onboarding, onboardingFaqs, config.ai.webSearch.siteUrl || "");
-    skipNextAiAutoSaveRef.current = true;
-    setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: next } }));
-    setAiSaveState("saving");
-    setAiSaveMessage("");
-    const { error } = await supabase.from("ai_settings").upsert(
-      {
-        restaurant_id: restId,
-        knowledge: next,
-        assistant_name: config.ai.name,
-        web_search_enabled: config.ai.webSearch.enabled,
-        site_url: config.ai.webSearch.siteUrl || null,
-        google_maps_url: config.ai.webSearch.googleMapsUrl || null,
-        facebook_url: config.ai.webSearch.facebookUrl || null,
-        instagram_url: config.ai.webSearch.instagramUrl || null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "restaurant_id" }
-    );
-    if (error) {
-      setAiSaveState("error");
-      setAiSaveMessage(error.message);
-      return;
-    }
-    setAiSaveState("saved");
-    setAiSaveMessage("Sparad!");
-    triggerSaveFlash();
-    setOnboardingDirty(false);
   };
 
   const runAiTests = async () => {
@@ -1649,10 +1567,10 @@ export default function ReservationDashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Stat label="Totalt denna vecka" value="348" sub="(demo)" />
-        <Stat label="Stammiskunder" value="35" sub="(demo)" />
-        <Stat label="Google-recensioner" value="4.8 ★" sub="12 nya denna vecka (demo)" />
-        <Stat label="Svar skickade av AI" value="37" sub="denna vecka (demo)" />
+        <Stat label="Totalt denna vecka" value="348" />
+        <Stat label="Stammiskunder" value="35" />
+        <Stat label="Google-recensioner" value="4.8 ★" sub="12 nya denna vecka" />
+        <Stat label="Svar skickade av AI" value="37" sub="denna vecka" />
       </div>
 
       {/* Calendar + Day view */}
@@ -2661,23 +2579,7 @@ export default function ReservationDashboard() {
                 </div>
 
                 <div className="mt-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-semibold text-gray-700">Sparade frågor (kunskapsbas)</div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        className={`px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow disabled:opacity-60 ${saveFlash ? "animate-pulse" : ""}`}
-                        onClick={saveKnowledgeNow}
-                        disabled={aiSaveState === "saving"}
-                      >
-                        {aiSaveState === "saving" ? "Sparar..." : "Spara nu"}
-                      </button>
-                      <div className={`text-xs min-w-[120px] text-right ${aiSaveState === "error" ? "text-red-600" : "text-gray-500"}`}>
-                        {aiSaveState === "saved" && (aiSaveMessage || "Sparad")}
-                        {aiSaveState === "error" && aiSaveMessage}
-                      </div>
-                    </div>
-                  </div>
+                  <div className="text-sm font-semibold text-gray-700 mb-2">Sparade frågor (kunskapsbas)</div>
                   {onboardingFaqs.filter((f) => f.a?.trim()).length ? (
                     <div className="space-y-2">
                       {onboardingFaqs
