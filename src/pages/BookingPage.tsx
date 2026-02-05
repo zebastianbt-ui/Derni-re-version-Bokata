@@ -452,12 +452,6 @@ export default function BookingPage() {
           <section id="booking">
             <form ref={formRef} onSubmit={submit} className="space-y-10">
               <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 text-white p-6 md:p-10 overflow-hidden shadow-lg">
-                <img
-                  src={forkTransparent}
-                  alt=""
-                  aria-hidden="true"
-                  className="pointer-events-none absolute right-16 top-1/2 h-64 md:h-80 w-auto -translate-y-1/2 opacity-95 hidden md:block"
-                />
                 <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
                   <div className="rounded-3xl border border-violet-200 bg-white p-6 h-full min-h-[440px] flex flex-col">
                     <div className="flex items-center justify-between mb-4">
@@ -621,9 +615,9 @@ export default function BookingPage() {
                 {notes ? ` • ${notes}` : ""}
               </div>
 
-              <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 p-4 md:p-6">
+              <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 px-6 md:px-10 py-4 md:py-6">
                 <div className="max-w-6xl mx-auto flex flex-col lg:flex-row items-center gap-6">
-                  <div className="w-full lg:w-[70%] rounded-3xl border border-violet-100 bg-white p-6 md:p-8 h-full flex flex-col">
+                  <div className="w-full lg:w-[70%] rounded-3xl border border-violet-100 bg-white p-4 md:p-6 h-full flex flex-col">
                     <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
                     <p className="text-sm text-gray-600 mt-1">Ställ din fråga och AI:n svarar.</p>
                     <div className="mt-4 space-y-3 flex-1">
