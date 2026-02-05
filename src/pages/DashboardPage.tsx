@@ -1640,6 +1640,12 @@ export default function ReservationDashboard() {
             >
               Inställningar
             </button>
+            <button
+              className="rounded-full px-6 py-3 font-semibold text-white/90 bg-white/10 border border-white/20 hover:bg-white/15"
+              onClick={handleLogout}
+            >
+              Logga ut
+            </button>
           </div>
         </div>
       </header>
