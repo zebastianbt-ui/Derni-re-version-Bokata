@@ -129,7 +129,7 @@ export default function Page() {
           src={forkTransparent}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute right-16 top-1/2 h-56 md:h-72 w-auto -translate-y-1/2 opacity-95 hidden md:block"
+          className="pointer-events-none absolute right-16 top-1/2 h-[21rem] md:h-[27rem] w-auto -translate-y-1/2 opacity-95 hidden md:block"
         />
         <div className="max-w-4xl mx-auto relative">
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight mb-4">Bokäta</h1>
