@@ -715,31 +715,43 @@ export default function ReservationDashboard() {
     if (!session?.user?.id || !settingsReady || !restaurantId) return;
     if (bookingSaveTimer.current) window.clearTimeout(bookingSaveTimer.current);
     bookingSaveTimer.current = window.setTimeout(async () => {
-      const { error } = await supabase.from("booking_public_settings").upsert(
-        {
-          public_id: restaurantId,
-          hours: config.hours,
-          seating: {
-            maxGuests: config.seating.maxGuests,
-            maxGuestsPerReservation: config.escalation.maxGuestsPerReservation,
-            groupThreshold: config.seating.groupThreshold,
-            maxBookingDurationMin: config.seating.maxBookingDurationMin,
-            maxTables: config.seating.maxTables,
-            highChairs: config.seating.highChairs,
+      try {
+        const token = session?.access_token || "";
+        const resp = await fetch("/api/booking-settings", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
-          notify_email: config.info.email || config.notifications.to || null,
-          notify_enabled: config.notifications.notifyOnNewBooking,
-          require_manual_confirmation: config.notifications.requireManualConfirmation,
-          knowledge_public: buildPublicKnowledge(config.ai.knowledge, config.ai.webSearch),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "public_id" }
-      );
-      if (error) {
-        console.error("booking_public_settings upsert failed", error.message);
-        setSettingsSaveError(error.message);
-      } else {
+          body: JSON.stringify({
+            restaurantId,
+            hours: config.hours,
+            seating: {
+              maxGuests: config.seating.maxGuests,
+              maxGuestsPerReservation: config.escalation.maxGuestsPerReservation,
+              groupThreshold: config.seating.groupThreshold,
+              maxBookingDurationMin: config.seating.maxBookingDurationMin,
+              maxTables: config.seating.maxTables,
+              highChairs: config.seating.highChairs,
+            },
+            notify_email: config.info.email || config.notifications.to || null,
+            notify_enabled: config.notifications.notifyOnNewBooking,
+            require_manual_confirmation: config.notifications.requireManualConfirmation,
+            knowledge_public: buildPublicKnowledge(config.ai.knowledge, config.ai.webSearch),
+          }),
+        });
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          const msg = data?.error || `Save failed (${resp.status})`;
+          console.error("booking_public_settings save failed", msg);
+          setSettingsSaveError(msg);
+          return;
+        }
         setSettingsSaveError(null);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Save failed";
+        console.error("booking_public_settings save failed", msg);
+        setSettingsSaveError(msg);
       }
     }, 700);
     return () => {
