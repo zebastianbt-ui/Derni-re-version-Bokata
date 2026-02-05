@@ -1,6 +1,5 @@
 import React from "react";
 import { useLocation } from "react-router-dom";
-import bokataFork from "../assets/bokata-fork.png";
 import forkTransparent from "../assets/fork-transparent.png";
 
 export default function Page() {
@@ -106,9 +105,9 @@ export default function Page() {
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
           <a href="#" className="flex items-center gap-3 font-bold text-xl">
             <img
-              src={bokataFork}
+              src={forkTransparent}
               alt="Bokäta"
-              className="h-10 w-auto rounded-md object-contain shadow-[0_0_14px_rgba(236,72,153,0.45)]"
+              className="h-10 w-auto object-contain"
             />
             <span>Bokäta</span>
           </a>
@@ -135,7 +134,9 @@ export default function Page() {
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight mb-4">Bokäta</h1>
           <h2 className="text-2xl md:text-3xl mb-4">Den lagar inte mat. Den lagar allt annat.</h2>
           <p className="text-lg md:text-xl leading-relaxed max-w-2xl mx-auto mb-8">
-            AI‑assistenten som sköter bokningar, svarar gäster automatiskt och fyller dina bord utan krångel.
+            AI‑assistenten som sköter bokningar, svarar gäster automatiskt
+            <br />
+            och fyller dina bord utan krångel.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <a href="#pricing" onClick={(e)=>onAnchorClick(e,'#pricing')} className="inline-flex justify-center items-center px-6 py-3 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700">

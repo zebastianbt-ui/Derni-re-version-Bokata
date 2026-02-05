@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
-import bokataFork from "../assets/bokata-fork.png";
+import forkTransparent from "../assets/fork-transparent.png";
 
 /**
  * Bokäta – Bokningssida (v2, rosa+lila)
@@ -413,11 +413,11 @@ export default function BookingPage() {
       <header className="sticky top-0 z-10 backdrop-blur bg-white/10 border-b border-white/10">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img
-              src={bokataFork}
-              alt="Bokäta"
-              className="h-10 w-auto rounded-md object-contain shadow-[0_0_14px_rgba(236,72,153,0.45)]"
-            />
+              <img
+                src={forkTransparent}
+                alt="Bokäta"
+                className="h-10 w-auto object-contain"
+              />
             <div>
               <div className="text-xs uppercase tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-pink-200 to-violet-200 font-semibold">
                 Bokäta – Boka bord
