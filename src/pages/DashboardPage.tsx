@@ -1530,7 +1530,7 @@ export default function ReservationDashboard() {
           src={forkTransparent}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute right-0 bottom-0 h-64 md:h-80 w-auto opacity-95"
+          className="pointer-events-none absolute right-16 top-1/2 h-64 md:h-80 w-auto -translate-y-1/2 opacity-95"
         />
         <div className="max-w-6xl mx-auto text-center relative">
           <div className="flex items-center justify-center gap-4">
