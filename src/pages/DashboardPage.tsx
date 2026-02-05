@@ -1524,15 +1524,19 @@ export default function ReservationDashboard() {
 
   return (
     <div className="min-h-screen bg-pink-50 p-6">
-      <header className="-mx-1 mb-8 rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] px-6 py-10 text-white shadow-lg">
-        <div className="max-w-6xl mx-auto text-center">
+      <header className="-mx-1 mb-8 rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] px-6 py-10 text-white shadow-lg relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -right-20 -top-24 h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,rgba(236,72,153,0.55),rgba(99,102,241,0.12),transparent_70%)] blur-2xl" />
+        </div>
+        <img
+          src={bokataFork}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute right-0 bottom-0 h-64 md:h-80 w-auto opacity-90 drop-shadow-[0_0_24px_rgba(236,72,153,0.45)] mix-blend-screen"
+        />
+        <div className="max-w-6xl mx-auto text-center relative">
           <div className="flex items-center justify-center gap-4">
             <h1 className="text-4xl md:text-6xl font-black tracking-tight">Dashboard</h1>
-            <img
-              src={bokataFork}
-              alt="Bokäta"
-              className="h-10 w-auto rounded-md object-contain shadow-[0_0_14px_rgba(236,72,153,0.45)]"
-            />
           </div>
           <p className="mt-3 text-lg md:text-xl text-white/85 max-w-2xl mx-auto">Övervaka bokningar, gäster och AI-svar i realtid.</p>
           <div className="mt-6 flex flex-wrap gap-3 justify-center">
