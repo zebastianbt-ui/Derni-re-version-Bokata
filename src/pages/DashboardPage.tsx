@@ -1524,15 +1524,17 @@ export default function ReservationDashboard() {
 
   return (
     <div className="min-h-screen bg-pink-50 p-6">
-      <header className="-mx-1 mb-8 rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] px-6 py-10 text-white shadow-lg relative overflow-hidden">
+      <header className="-mx-1 mb-8 rounded-2xl bg-gradient-to-br from-[#2a0b49] via-[#5a137f] to-[#b4148d] px-6 py-10 text-white shadow-lg relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -right-20 -top-24 h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,rgba(236,72,153,0.55),rgba(99,102,241,0.12),transparent_70%)] blur-2xl" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_45%,rgba(217,82,255,0.45),rgba(107,45,212,0.2)_35%,transparent_70%)]" />
+          <div className="absolute -right-10 -top-20 h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle_at_center,rgba(230,94,255,0.6),rgba(138,64,252,0.15),transparent_70%)] blur-2xl" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_70%,rgba(255,120,220,0.35),transparent_55%)]" />
         </div>
         <img
           src={bokataFork}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute right-0 bottom-0 h-64 md:h-80 w-auto opacity-90 drop-shadow-[0_0_24px_rgba(236,72,153,0.45)] mix-blend-screen"
+          className="pointer-events-none absolute right-0 bottom-0 h-64 md:h-80 w-auto opacity-95 drop-shadow-[0_0_28px_rgba(224,90,255,0.45)]"
         />
         <div className="max-w-6xl mx-auto text-center relative">
           <div className="flex items-center justify-center gap-4">
