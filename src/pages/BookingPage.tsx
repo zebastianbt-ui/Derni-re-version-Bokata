@@ -406,12 +406,9 @@ export default function BookingPage() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-gray-800">
-      <div className="pointer-events-none absolute -top-40 -left-40 h-[34rem] w-[34rem] rounded-full bg-fuchsia-400/25 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-52 -right-28 h-[32rem] w-[32rem] rounded-full bg-violet-400/25 blur-3xl" />
-
-      <header className="sticky top-0 z-10 backdrop-blur bg-white/10 border-b border-white/10">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-white text-gray-900">
+      <header className="sticky top-0 z-10 backdrop-blur bg-white/80 border-b border-pink-100">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
               <img
                 src={forkTransparent}
@@ -419,82 +416,88 @@ export default function BookingPage() {
                 className="h-10 w-auto object-contain"
               />
             <div>
-              <div className="text-xs uppercase tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-pink-200 to-violet-200 font-semibold">
+              <div className="text-xs uppercase tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-pink-600 to-violet-600 font-semibold">
                 Bokäta – Boka bord
               </div>
-              {restaurantName ? <div className="text-sm text-white/70">{restaurantName}</div> : null}
+              {restaurantName ? <div className="text-sm text-gray-500">{restaurantName}</div> : null}
             </div>
           </div>
         </div>
       </header>
 
-      <main className={`max-w-5xl mx-auto px-4 pt-6 ${created ? "pb-8" : "pb-20 md:pb-8"}`}>
+      <main className={`max-w-6xl mx-auto px-4 pt-8 ${created ? "pb-8" : "pb-24 md:pb-12"}`}>
         {!created ? (
           <section id="booking">
-            <div className="rounded-3xl bg-white shadow-sm border border-rose-100 p-6 md:p-8">
-              <form ref={formRef} onSubmit={submit} className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="rounded-3xl border border-violet-200 bg-violet-50/70 p-6 h-full min-h-[440px] flex flex-col">
-                        <div className="flex items-center justify-between mb-4">
+            <form ref={formRef} onSubmit={submit} className="space-y-10">
+              <div className="rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 text-white p-6 md:p-10 relative overflow-hidden shadow-lg">
+                <img
+                  src={forkTransparent}
+                  alt=""
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-16 top-1/2 h-64 md:h-80 w-auto -translate-y-1/2 opacity-95 hidden md:block"
+                />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
+                  <div className="rounded-3xl border border-violet-200 bg-white p-6 h-full min-h-[440px] flex flex-col">
+                    <div className="flex items-center justify-between mb-4">
+                      <button
+                        type="button"
+                        className="h-10 w-10 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
+                        onClick={() => {
+                          const nm = viewMonth === 0 ? 11 : viewMonth - 1;
+                          const ny = viewMonth === 0 ? viewYear - 1 : viewYear;
+                          setViewMonth(nm);
+                          setViewYear(ny);
+                        }}
+                      >
+                        ‹
+                      </button>
+                      <div className="text-lg font-semibold text-violet-800">
+                        {monthName(viewMonth)} {viewYear}
+                      </div>
+                      <button
+                        type="button"
+                        className="h-10 w-10 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
+                        onClick={() => {
+                          const nm = viewMonth === 11 ? 0 : viewMonth + 1;
+                          const ny = viewMonth === 11 ? viewYear + 1 : viewYear;
+                          setViewMonth(nm);
+                          setViewYear(ny);
+                        }}
+                      >
+                        ›
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-7 text-sm text-violet-700/80 mb-3">
+                      {["M", "T", "O", "T", "F", "L", "S"].map((d) => (
+                        <div key={d} className="text-center">{d}</div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-7 gap-3">
+                      {calendarDays.map((c) => {
+                        if (!c.day) return <div key={c.key} className="h-10" />;
+                        const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(c.day).padStart(2, "0")}`;
+                        const isSel = iso === date;
+                        const closed = isClosedDate(iso);
+                        return (
                           <button
+                            key={c.key}
                             type="button"
-                            className="h-10 w-10 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
-                            onClick={() => {
-                              const nm = viewMonth === 0 ? 11 : viewMonth - 1;
-                              const ny = viewMonth === 0 ? viewYear - 1 : viewYear;
-                              setViewMonth(nm);
-                              setViewYear(ny);
-                            }}
+                            onClick={() => !closed && setDate(iso)}
+                            disabled={closed}
+                            className={`h-12 rounded-2xl text-sm font-semibold flex flex-col items-center justify-center leading-tight ${
+                              closed
+                                ? "bg-gray-100 text-gray-400 border border-gray-200"
+                                : isSel
+                                ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white"
+                                : "bg-white text-violet-700 border border-violet-200 hover:bg-violet-100"
+                            }`}
                           >
-                            ‹
+                            <span>{c.day}</span>
+                            {closed && <span className="text-[10px] mt-0.5">Stängt</span>}
                           </button>
-                          <div className="text-lg font-semibold text-violet-800">
-                            {monthName(viewMonth)} {viewYear}
-                          </div>
-                          <button
-                            type="button"
-                            className="h-10 w-10 rounded-full border border-violet-200 text-violet-700 hover:bg-violet-100"
-                            onClick={() => {
-                              const nm = viewMonth === 11 ? 0 : viewMonth + 1;
-                              const ny = viewMonth === 11 ? viewYear + 1 : viewYear;
-                              setViewMonth(nm);
-                              setViewYear(ny);
-                            }}
-                          >
-                            ›
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-7 text-sm text-violet-700/80 mb-3">
-                          {["M", "T", "O", "T", "F", "L", "S"].map((d) => (
-                            <div key={d} className="text-center">{d}</div>
-                          ))}
-                        </div>
-                        <div className="grid grid-cols-7 gap-3">
-                          {calendarDays.map((c) => {
-                            if (!c.day) return <div key={c.key} className="h-10" />;
-                            const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(c.day).padStart(2, "0")}`;
-                            const isSel = iso === date;
-                            const closed = isClosedDate(iso);
-                            return (
-                              <button
-                                key={c.key}
-                                type="button"
-                                onClick={() => !closed && setDate(iso)}
-                                disabled={closed}
-                                className={`h-12 rounded-2xl text-sm font-semibold flex flex-col items-center justify-center leading-tight ${
-                                  closed
-                                    ? "bg-gray-100 text-gray-400 border border-gray-200"
-                                    : isSel
-                                    ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white"
-                                    : "bg-white text-violet-700 border border-violet-200 hover:bg-violet-100"
-                                }`}
-                              >
-                                <span>{c.day}</span>
-                                {closed && <span className="text-[10px] mt-0.5">Stängt</span>}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <div>
@@ -554,83 +557,79 @@ export default function BookingPage() {
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="space-y-6 px-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-end">
-                      <label className="block">
-                        <span className="text-sm font-semibold text-gray-700 pl-2">Namn</span>
-                        <input
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          placeholder="För- och efternamn"
-                          className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center"
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="text-sm font-semibold text-gray-700 pl-2">Antal gäster</span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={16}
-                          value={guests}
-                          onChange={(e) => setGuests(Number(e.target.value))}
-                          className="mt-3 w-28 rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center"
-                        />
-                      </label>
-                    </div>
+              <div className="rounded-3xl border border-pink-100 bg-white p-6 md:p-8">
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-end">
+                  <label className="block lg:col-span-1">
+                    <span className="text-sm font-semibold text-gray-700 pl-2">Namn</span>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="För- och efternamn"
+                      className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center"
+                    />
+                  </label>
+                  <label className="block lg:col-span-1">
+                    <span className="text-sm font-semibold text-gray-700 pl-2">Antal gäster</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={16}
+                      value={guests}
+                      onChange={(e) => setGuests(Number(e.target.value))}
+                      className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center px-4 py-3"
+                    />
+                  </label>
+                  <label className="block lg:col-span-1">
+                    <span className="text-sm font-semibold text-gray-700 pl-2">E‑post</span>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="namn@example.com"
+                      className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center"
+                    />
+                  </label>
+                  <label className="block lg:col-span-1">
+                    <span className="text-sm font-semibold text-gray-700 pl-2">Kommentar</span>
+                    <textarea
+                      rows={3}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Allergier, barnvagn…"
+                      className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center"
+                    />
+                  </label>
+                </div>
+              </div>
 
-                    <label className="block">
-                      <span className="text-sm font-semibold text-gray-700 pl-2">E‑post</span>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="namn@example.com"
-                        className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center"
-                      />
-                    </label>
-
-                    <label className="block">
-                      <span className="text-sm font-semibold text-gray-700 pl-2">Kommentar</span>
-                      <textarea
-                        rows={4}
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Allergier, barnvagn…"
-                        className="mt-3 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-3 text-center"
-                      />
-                    </label>
-                  </div>
-
-                  <div>
-                    <div className="rounded-3xl border border-violet-100 bg-white p-6 h-full flex flex-col">
-                      <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
-                      <p className="text-sm text-gray-600 mt-1">Ställ din fråga och AI:n svarar.</p>
-                      <div className="mt-4 space-y-3 flex-1">
-                        <textarea
-                          value={qaQuestion}
-                          onChange={(e) => setQaQuestion(e.target.value)}
-                          placeholder="Ex: Har ni öppet på söndag? Finns det parkering?"
-                          className="w-full min-h-[120px] rounded-2xl border border-violet-200 bg-violet-50/60 px-4 py-3 focus:border-violet-400 focus:ring-violet-400"
-                        />
-                        <div className="flex flex-wrap items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={askAi}
-                            disabled={qaLoading || !qaQuestion.trim()}
-                            className="rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
-                          >
-                            {qaLoading ? "Svarar..." : "Fråga AI"}
-                          </button>
-                          {qaAnswer && <div className="text-sm text-gray-700">{qaAnswer}</div>}
-                        </div>
-                      </div>
+              <div className="rounded-3xl bg-gradient-to-b from-purple-50 to-pink-50 p-6 md:p-8">
+                <div className="rounded-3xl border border-violet-100 bg-white p-6 h-full flex flex-col">
+                  <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
+                  <p className="text-sm text-gray-600 mt-1">Ställ din fråga och AI:n svarar.</p>
+                  <div className="mt-4 space-y-3 flex-1">
+                    <textarea
+                      value={qaQuestion}
+                      onChange={(e) => setQaQuestion(e.target.value)}
+                      placeholder="Ex: Har ni öppet på söndag? Finns det parkering?"
+                      className="w-full min-h-[120px] rounded-2xl border border-violet-200 bg-violet-50/60 px-4 py-3 focus:border-violet-400 focus:ring-violet-400"
+                    />
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={askAi}
+                        disabled={qaLoading || !qaQuestion.trim()}
+                        className="rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                      >
+                        {qaLoading ? "Svarar..." : "Fråga AI"}
+                      </button>
+                      {qaAnswer && <div className="text-sm text-gray-700">{qaAnswer}</div>}
                     </div>
                   </div>
                 </div>
-              </form>
-            </div>
+              </div>
+            </form>
           </section>
         ) : (
           <section className="max-w-2xl mx-auto">
@@ -713,20 +712,20 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-1 py-2 text-center">
+      <footer className="mt-6 py-6 text-center">
         <div className="text-2xl md:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-pink-500 to-rose-500">
           Bokäta
         </div>
-        <div className="mt-1 text-lg md:text-xl font-semibold text-white/85">
+        <div className="mt-1 text-lg md:text-xl font-semibold text-gray-700">
           Den lagar inte mat. Den lagar allt annat.
         </div>
         <a
           href="/"
-          className="mt-3 inline-flex items-center justify-center rounded-full border border-white/30 bg-white/10 px-5 py-2 text-sm font-semibold text-white/90 backdrop-blur hover:bg-white/20"
+          className="mt-3 inline-flex items-center justify-center rounded-full border border-pink-200 bg-pink-50 px-5 py-2 text-sm font-semibold text-pink-700 hover:bg-pink-100"
         >
           Driver du också restaurang? Upptäck Bokäta →
         </a>
-        <div className="mt-4 text-xs text-white/70">© 2026 Bokäta. Stockholm, Sweden. All rights reserved.</div>
+        <div className="mt-4 text-xs text-gray-400">© 2026 Bokäta. Stockholm, Sweden. All rights reserved.</div>
       </footer>
     </div>
   );
