@@ -464,71 +464,38 @@ export default function ReservationDashboard() {
         }
       }
 
-      let membership = await supabase
-        .from("memberships")
-        .select("restaurant_id,role")
-        .eq("user_id", userId)
-        .eq("role", "owner")
-        .limit(1)
-        .maybeSingle();
-
-      if (!membership.data) {
-        membership = await supabase
-          .from("memberships")
-          .select("restaurant_id,role")
-          .eq("user_id", userId)
-          .limit(1)
-          .maybeSingle();
+      let restaurant: { restaurantId: string | null; role?: string | null; name?: string | null } | null = null;
+      try {
+        const token = session?.access_token || "";
+        restaurant = await fetchRestaurantFromApi(token);
+        if (!restaurant?.restaurantId) {
+          const baseName = profileName.trim() ? `${profileName.trim()} Restaurant` : "Bokäta Restaurant";
+          restaurant = await createRestaurantFromApi(token, baseName);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Kunde inte hämta restaurang";
+        console.error(msg);
       }
 
-      if (!membership.data && typeof window !== "undefined") {
-        const storedId = window.localStorage.getItem("bokata_restaurant_id");
-        if (storedId) {
-          membership = { data: { restaurant_id: storedId, role: "owner" } } as typeof membership;
-        }
-      }
-
-      if (!membership.data) {
-        const baseName = profileName.trim() ? `${profileName.trim()} Restaurant` : "Bokäta Restaurant";
-        const { data: rest } = await supabase
-          .from("restaurants")
-          .insert({ name: baseName, owner_id: userId })
-          .select("id,name")
-          .single();
-
-        if (rest?.id) {
-          await supabase.from("memberships").insert({ restaurant_id: rest.id, user_id: userId, role: "owner" });
-          membership = { data: { restaurant_id: rest.id, role: "owner" } } as typeof membership;
-        }
-      }
-
-      if (membership.data) {
-        setRestaurantId(membership.data.restaurant_id);
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem("bokata_restaurant_id", membership.data.restaurant_id);
-        }
-        const { data: rest } = await supabase
-          .from("restaurants")
-          .select("name")
-          .eq("id", membership.data.restaurant_id)
-          .maybeSingle();
-        setRestaurantName(rest?.name ?? "");
+      if (restaurant?.restaurantId) {
+        setRestaurantId(restaurant.restaurantId);
+        setRestaurantName(restaurant.name ?? "");
       }
 
       const [{ data: profile }, { data: settings }, { data: bookingSettings }] = await Promise.all([
         supabase.from("profiles").select("full_name,email").eq("user_id", userId).maybeSingle(),
-        membership.data?.restaurant_id
+        restaurant?.restaurantId
           ? supabase
               .from("ai_settings")
               .select("knowledge,assistant_name,web_search_enabled,site_url,google_maps_url,facebook_url,instagram_url")
-              .eq("restaurant_id", membership.data.restaurant_id)
+              .eq("restaurant_id", restaurant.restaurantId)
               .maybeSingle()
           : Promise.resolve({ data: null }),
-        membership.data?.restaurant_id
+        restaurant?.restaurantId
           ? supabase
               .from("booking_public_settings")
               .select("hours,seating,notify_email,notify_enabled,require_manual_confirmation,knowledge_public")
-              .eq("public_id", membership.data.restaurant_id)
+              .eq("public_id", restaurant.restaurantId)
               .maybeSingle()
           : Promise.resolve({ data: null }),
       ]);
@@ -890,25 +857,32 @@ export default function ReservationDashboard() {
   const [onboardingFaqs, setOnboardingFaqs] = useState<{ q: string; a: string }[]>([]);
   const onboardInitRef = useRef(false);
 
-  const fetchRestaurantIdForUser = async (userId: string) => {
-    const { data: ownerMembership, error: ownerErr } = await supabase
-      .from("memberships")
-      .select("restaurant_id,role")
-      .eq("user_id", userId)
-      .eq("role", "owner")
-      .limit(1)
-      .maybeSingle();
-    if (ownerErr) return { restaurantId: null, error: ownerErr };
-    if (ownerMembership?.restaurant_id) return { restaurantId: ownerMembership.restaurant_id, error: null };
+  const fetchRestaurantFromApi = async (token: string) => {
+    const resp = await fetch("/api/restaurant", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(data?.error || `Kunde inte hämta restaurang (${resp.status})`);
+    }
+    return data as { restaurantId: string | null; role?: string | null; name?: string | null };
+  };
 
-    const { data: anyMembership, error: anyErr } = await supabase
-      .from("memberships")
-      .select("restaurant_id,role")
-      .eq("user_id", userId)
-      .limit(1)
-      .maybeSingle();
-    if (anyErr) return { restaurantId: null, error: anyErr };
-    return { restaurantId: anyMembership?.restaurant_id ?? null, error: null };
+  const createRestaurantFromApi = async (token: string, name: string) => {
+    const resp = await fetch("/api/restaurant", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(data?.error || `Kunde inte skapa restaurang (${resp.status})`);
+    }
+    return data as { restaurantId: string | null; role?: string | null; name?: string | null };
   };
 
   const commonFaqs = [
@@ -1135,47 +1109,30 @@ export default function ReservationDashboard() {
       setAiSaveMessage("Du måste vara inloggad för att spara.");
       return;
     }
+    const token = session?.access_token || "";
+    if (!token) {
+      setAiSaveState("error");
+      setAiSaveMessage("Autentisering saknas. Försök logga ut/in igen.");
+      return;
+    }
     let restId = restaurantId;
     if (!restId) {
-      const userId = session.user.id;
-      const { restaurantId: foundId, error: membershipError } = await fetchRestaurantIdForUser(userId);
-      if (membershipError) {
-        setAiSaveState("error");
-        setAiSaveMessage(`Kunde inte läsa medlemskap: ${membershipError.message}`);
-        return;
-      }
-      restId = foundId;
-      if (!restId) {
-        const { data: owned } = await supabase
-          .from("restaurants")
-          .select("id")
-          .eq("owner_id", userId)
-          .limit(1)
-          .maybeSingle();
-        restId = owned?.id ?? null;
+      try {
+        const restaurant = await fetchRestaurantFromApi(token);
+        restId = restaurant.restaurantId ?? null;
         if (!restId) {
-          const { data: created, error: createError } = await supabase
-            .from("restaurants")
-            .insert({ name: profileName?.trim() ? `${profileName.trim()} Restaurant` : "Bokäta Restaurant", owner_id: userId })
-            .select("id")
-            .single();
-          if (createError) {
-            setAiSaveState("error");
-            setAiSaveMessage(`Kunde inte skapa restaurang: ${createError.message}`);
-            return;
-          }
-          restId = created?.id ?? null;
+          const baseName = profileName?.trim() ? `${profileName.trim()} Restaurant` : "Bokäta Restaurant";
+          const created = await createRestaurantFromApi(token, baseName);
+          restId = created.restaurantId ?? null;
+          if (created.name) setRestaurantName(created.name);
+        } else if (restaurant.name) {
+          setRestaurantName(restaurant.name);
         }
-        if (restId) {
-          const { error: memberInsertError } = await supabase
-            .from("memberships")
-            .insert({ restaurant_id: restId, user_id: userId, role: "owner" });
-          if (memberInsertError) {
-            setAiSaveState("error");
-            setAiSaveMessage(`Kunde inte skapa medlemskap: ${memberInsertError.message}`);
-            return;
-          }
-        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Kunde inte hämta restaurang";
+        setAiSaveState("error");
+        setAiSaveMessage(msg);
+        return;
       }
       if (restId) setRestaurantId(restId);
     }
