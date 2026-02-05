@@ -321,6 +321,7 @@ function findAvailableTable(args: { date: string; time: string; guests: number; 
 export default function ReservationDashboard() {
   const [session, setSession] = useState<Session | null>(null);
   const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
   const location = useLocation();
   const [authMsg, setAuthMsg] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -1477,7 +1478,7 @@ export default function ReservationDashboard() {
     });
   };
 
-  const handleLogin = async () => {
+  const handleMagicLink = async () => {
     const email = authEmail.trim();
     if (!email) return;
     setAuthLoading(true);
@@ -1492,6 +1493,30 @@ export default function ReservationDashboard() {
         ? `Inloggning misslyckades: ${error.message}`
         : "Länk skickad! Kolla din e‑post och klicka på länken för att logga in."
     );
+  };
+
+  const handlePasswordLogin = async () => {
+    const email = authEmail.trim();
+    const password = authPassword;
+    if (!email || !password) return;
+    setAuthLoading(true);
+    setAuthMsg(null);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setAuthLoading(false);
+    setAuthMsg(error ? `Inloggning misslyckades: ${error.message}` : null);
+  };
+
+  const handleGoogleLogin = async () => {
+    setAuthLoading(true);
+    setAuthMsg(null);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/dashboard` },
+    });
+    if (error) {
+      setAuthLoading(false);
+      setAuthMsg(`Inloggning misslyckades: ${error.message}`);
+    }
   };
 
   useEffect(() => {
@@ -1543,7 +1568,7 @@ export default function ReservationDashboard() {
       <div className="min-h-screen bg-pink-50 p-6 flex items-center justify-center">
         <div className="w-full max-w-md rounded-2xl border border-pink-200 bg-white p-6 shadow-lg">
           <h1 className="text-2xl font-bold text-gray-900">Logga in</h1>
-          <p className="mt-1 text-sm text-gray-600">Skriv din e‑post för att få en inloggningslänk.</p>
+          <p className="mt-1 text-sm text-gray-600">Logga in med Google, lösenord eller magisk länk.</p>
           <label className="mt-4 block text-sm font-semibold text-gray-700">E‑post</label>
           <input
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
@@ -1551,10 +1576,35 @@ export default function ReservationDashboard() {
             onChange={(e) => setAuthEmail(e.target.value)}
             placeholder="name@restaurant.se"
           />
+          <label className="mt-4 block text-sm font-semibold text-gray-700">Lösenord</label>
+          <input
+            type="password"
+            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+            value={authPassword}
+            onChange={(e) => setAuthPassword(e.target.value)}
+            placeholder="••••••••"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handlePasswordLogin();
+            }}
+          />
           <button
             className="mt-4 w-full rounded-lg bg-pink-600 px-4 py-2 font-semibold text-white hover:bg-pink-700 disabled:opacity-60"
-            onClick={handleLogin}
+            onClick={handlePasswordLogin}
+            disabled={authLoading || !authEmail || !authPassword}
+          >
+            Logga in
+          </button>
+          <button
+            className="mt-3 w-full rounded-lg border border-pink-300 px-4 py-2 font-semibold text-pink-700 hover:bg-pink-50 disabled:opacity-60"
+            onClick={handleGoogleLogin}
             disabled={authLoading}
+          >
+            Logga in med Google
+          </button>
+          <button
+            className="mt-3 w-full rounded-lg border border-gray-300 px-4 py-2 font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+            onClick={handleMagicLink}
+            disabled={authLoading || !authEmail}
           >
             Skicka magisk länk
           </button>
