@@ -1569,7 +1569,6 @@ export default function ReservationDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <Stat label="Totalt denna vecka" value="348" />
         <Stat label="Stammiskunder" value="35" />
-        <Stat label="Google-recensioner" value="4.8 ★" sub="12 nya denna vecka" />
         <Stat label="Svar skickade av AI" value="37" sub="denna vecka" />
       </div>
 
