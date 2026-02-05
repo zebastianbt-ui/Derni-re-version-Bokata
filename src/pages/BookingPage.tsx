@@ -624,7 +624,7 @@ export default function BookingPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-pink-100 bg-white px-6 py-3 text-center text-sm text-gray-700">
+              <div className="rounded-2xl border border-pink-100 bg-white px-6 py-3 text-center text-sm text-gray-700 max-w-5xl mx-auto">
                 <span className="font-semibold text-gray-900">Snabböversikt</span>{" "}
                 {new Date(date).toLocaleDateString()} • {guests} gäster
                 {name ? ` • ${name}` : ""}
@@ -632,7 +632,7 @@ export default function BookingPage() {
                 {notes ? ` • ${notes}` : ""}
               </div>
 
-              <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 px-6 md:px-10 py-3 md:py-4">
+              <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 px-6 md:px-10 py-6 md:py-10">
                 <div className="max-w-6xl mx-auto flex flex-col lg:flex-row items-center gap-6">
                   <div className="w-full lg:w-[70%] rounded-3xl border border-violet-100 bg-white p-4 md:p-6 h-full flex flex-col">
                     <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
@@ -745,7 +745,7 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-0 py-0.5 text-center">
+      <footer className="mt-0 py-0 text-center">
         <div className="text-2xl md:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-pink-500 to-rose-500">
           Bokäta
         </div>
