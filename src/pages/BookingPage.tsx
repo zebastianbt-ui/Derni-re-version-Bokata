@@ -531,7 +531,7 @@ export default function BookingPage() {
                       <div className="mt-6 text-xs text-gray-500">
                         {settingsMissing
                           ? "Tiderna är inte konfigurerade än. Välj ändå en tid så uppdateras när restaurangen sparat sina tider."
-                          : "Demoöversikt. Den verkliga kapaciteten kopplas till Dashboard."}
+                          : ""}
                       </div>
                       <div className="mt-auto pt-6">
                         <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4">

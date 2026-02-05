@@ -632,6 +632,10 @@ export default function ReservationDashboard() {
 
   useEffect(() => {
     if (!session?.user?.id || !settingsReady || !restaurantId) return;
+    if (skipNextAiAutoSaveRef.current) {
+      skipNextAiAutoSaveRef.current = false;
+      return;
+    }
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
 
     saveTimer.current = window.setTimeout(async () => {
@@ -842,6 +846,7 @@ export default function ReservationDashboard() {
   const [holidayYear, setHolidayYear] = useState<number>(currentYear);
   const [onboardingDirty, setOnboardingDirty] = useState(false);
   const [saveFlash, setSaveFlash] = useState(false);
+  const skipNextAiAutoSaveRef = useRef(false);
   const [onboarding, setOnboarding] = useState({
     restaurantName: "",
     address: "",
@@ -1142,6 +1147,7 @@ export default function ReservationDashboard() {
       return;
     }
     const next = buildKnowledge(onboarding, onboardingFaqs, config.ai.webSearch.siteUrl || "");
+    skipNextAiAutoSaveRef.current = true;
     setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: next } }));
     setAiSaveState("saving");
     setAiSaveMessage("");
