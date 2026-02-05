@@ -429,7 +429,7 @@ export default function BookingPage() {
         {!created ? (
           <section id="booking">
             <form ref={formRef} onSubmit={submit} className="space-y-10">
-              <div className="-mx-4 md:-mx-6 rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 text-white p-6 md:p-10 relative overflow-hidden shadow-lg">
+              <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 text-white p-6 md:p-10 overflow-hidden shadow-lg">
                 <img
                   src={forkTransparent}
                   alt=""
@@ -604,7 +604,7 @@ export default function BookingPage() {
                 </div>
               </div>
 
-              <div className="-mx-4 md:-mx-6 rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 p-6 md:p-8">
+              <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 p-6 md:p-8">
                 <div className="max-w-6xl mx-auto rounded-3xl border border-violet-100 bg-white p-6 h-full flex flex-col">
                   <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
                   <p className="text-sm text-gray-600 mt-1">Ställ din fråga och AI:n svarar.</p>
