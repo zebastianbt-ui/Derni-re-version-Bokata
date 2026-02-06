@@ -221,7 +221,7 @@ function mockAvailability(date: string, time: string, guests: number) {
 export default function BookingPage() {
   const SECTION_PAD_Y = "py-10 md:py-12";
   const SECTION_PAD_X = "px-6 md:px-10";
-  const SECTION_PAD_Y_TIGHT = "py-6 md:py-8";
+  const SECTION_PAD_Y_TIGHT = "py-4 md:py-6";
   const [restaurantSlug, setRestaurantSlug] = useState("demo");
   const [restaurantName, setRestaurantName] = useState<string | null>(null);
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;

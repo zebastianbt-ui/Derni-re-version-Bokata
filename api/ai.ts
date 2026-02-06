@@ -262,7 +262,7 @@ ${dashboardFacts}
     return out;
   })();
   const isRestaurantTopic =
-    /(boka|bokning|reservation|reservera|bord|table|öppet|öppettider|tider|stängt|adress|address|hitta|var ligger|ligger|kontakt|telefon|email|e-post|meny|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|parking|tillgäng|wheelchair)/i.test(
+    /(boka|bokning|reservation|reservera|bord|table|öppet|öppettider|tider|stängt|adress|address|hitta|var ligger|ligger|kontakt|telefon|email|e-post|meny|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|parking|tillgäng|wheelchair|webbplats|hemsida|website|webb|länk|facebook|instagram|social)/i.test(
       msgLower
     );
   const lastAssistant = history?.slice().reverse().find((h) => h.role === "assistant")?.content || "";
