@@ -353,6 +353,7 @@ export default function ReservationDashboard() {
   const location = useLocation();
   const [authMsg, setAuthMsg] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [accessDenied, setAccessDenied] = useState<string | null>(null);
   const [settingsSaveError, setSettingsSaveError] = useState<string | null>(null);
   const [profileName, setProfileName] = useState("");
   const [profileEmail, setProfileEmail] = useState("");
@@ -415,11 +416,11 @@ export default function ReservationDashboard() {
     () => ({
       info: { email: "bookings@example.se" },
       seating: {
-        groupThreshold: 6,
-        highChairs: 3,
+        groupThreshold: 0,
+        highChairs: 0,
         allowCombineTables: false,
-        maxGuests: 60,
-        maxTables: 20,
+        maxGuests: 0,
+        maxTables: 0,
         maxBookingDurationMin: 90,
       },
       policies: {
@@ -468,7 +469,7 @@ export default function ReservationDashboard() {
           instagramUrl: "",
         },
       },
-      escalation: { maxGuestsPerReservation: 22, manualReviewKeywords: ["privat event", "bröllop", "afterwork"] },
+      escalation: { maxGuestsPerReservation: 0, manualReviewKeywords: ["privat event", "bröllop", "afterwork"] },
       notifications: {
         to: "bookings@example.se",
         notifyOnNewBooking: true,
@@ -590,6 +591,28 @@ export default function ReservationDashboard() {
       if (!session?.user?.id) return;
       const userId = session.user.id;
       const userEmail = session.user.email ?? "";
+
+      setAccessDenied(null);
+      const { data: member } = await supabase
+        .from("memberships")
+        .select("id")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle();
+
+      const { data: sub } = await supabase
+        .from("stripe_subscriptions")
+        .select("status")
+        .eq("email", userEmail)
+        .in("status", ["active", "trialing"])
+        .limit(1)
+        .maybeSingle();
+
+      if (!member && !sub) {
+        setAccessDenied("Du saknar aktivt abonnemang. Kontakta oss om du behöver åtkomst.");
+        await supabase.auth.signOut();
+        return;
+      }
 
       const { data: pendingInvites } = await supabase
         .from("invites")
@@ -1711,6 +1734,7 @@ export default function ReservationDashboard() {
             Skicka magisk länk
           </button>
           {authMsg ? <div className="mt-3 text-sm text-gray-700">{authMsg}</div> : null}
+          {accessDenied ? <div className="mt-3 text-sm text-rose-700">{accessDenied}</div> : null}
         </div>
       </div>
     );
@@ -1783,11 +1807,11 @@ export default function ReservationDashboard() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <Stat icon="💗" label="Stammiskunder" value="35" />
+            <Stat icon="💗" label="Stammiskunder" value="0" />
             <Stat
               icon={<img src={bokataFork} alt="Bokata" className="h-4 w-4" />}
               label="Svar skickade av AI"
-              value="37"
+              value="0"
               sub="denna vecka"
             />
             <Stat icon="📈" label="Totalt denna vecka" value={String(weekStats.curGuests)} sub="gäster" />
@@ -2442,7 +2466,7 @@ export default function ReservationDashboard() {
                   Kunde inte spara inställningar: {settingsSaveError}
                 </div>
               ) : null}
-              <Field label="Lien de réservation">
+              <Field label="Bokningslänk">
                 <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
                     className="w-full flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700"
@@ -2460,7 +2484,7 @@ export default function ReservationDashboard() {
                   {bookingLinkStatus ? <span className="text-xs text-gray-500">{bookingLinkStatus}</span> : null}
                 </div>
                 <div className="mt-1 text-xs text-gray-500">
-                  À coller sur votre site ou Facebook pour diriger les clients vers la page de réservation Bokäta.
+                  Klistra in på din webbplats eller Facebook för att leda gäster till Bokätas bokningssida.
                 </div>
               </Field>
               <Field label="E-post för bokningar">

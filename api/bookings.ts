@@ -121,7 +121,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const requireManual = !!s.require_manual_confirmation;
   const notifyEnabled = !!s.notify_enabled;
   const notifyEmail = s.notify_email || null;
-  const durationMin = s.seating?.maxBookingDurationMin ?? 90;
+  const rawDuration = s.seating?.maxBookingDurationMin ?? 90;
+  const durationMin = rawDuration && rawDuration > 0 ? rawDuration : 90;
   const maxGuests = s.seating?.maxGuests ?? 60;
   const maxTables = s.seating?.maxTables ?? 20;
   const maxGuestsPerReservation = s.seating?.maxGuestsPerReservation ?? 22;

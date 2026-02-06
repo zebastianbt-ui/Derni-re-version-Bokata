@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Stripe from "stripe";
+import { createClient } from "@supabase/supabase-js";
 
 export const config = {
   api: {
@@ -31,6 +32,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const stripe = new Stripe(secretKey, { apiVersion: "2023-10-16" });
+  const supabaseUrl = getEnv("SUPABASE_URL") || getEnv("VITE_SUPABASE_URL");
+  const serviceKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const supabase =
+    supabaseUrl && serviceKey ? createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } }) : null;
   const resendKey = getEnv("RESEND_API_KEY");
   const resendFrom = getEnv("RESEND_FROM") || "Bokäta <no-reply@bokata.se>";
   const sig = req.headers["stripe-signature"];
@@ -65,6 +70,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   };
 
+  const upsertSubscription = async (sub: Stripe.Subscription) => {
+    if (!supabase) return;
+    const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
+    let email: string | null = null;
+    if (customerId) {
+      const customer = await stripe.customers.retrieve(customerId);
+      if (!("deleted" in customer)) {
+        email = (customer.email ?? null) as string | null;
+      }
+    }
+    await supabase.from("stripe_subscriptions").upsert(
+      {
+        stripe_subscription_id: sub.id,
+        stripe_customer_id: customerId,
+        email,
+        status: sub.status,
+        current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        cancel_at_period_end: sub.cancel_at_period_end ?? false,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "stripe_subscription_id" }
+    );
+  };
+
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -82,9 +111,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       break;
     }
-    case "customer.subscription.updated":
-    case "customer.subscription.deleted":
+    case "customer.subscription.created":
+    case "customer.subscription.updated": {
+      const sub = event.data.object as Stripe.Subscription;
+      await upsertSubscription(sub);
       break;
+    }
+    case "customer.subscription.deleted": {
+      const sub = event.data.object as Stripe.Subscription;
+      await upsertSubscription({ ...sub, status: "canceled" } as Stripe.Subscription);
+      break;
+    }
     default:
       break;
   }
