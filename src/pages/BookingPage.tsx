@@ -219,6 +219,8 @@ function mockAvailability(date: string, time: string, guests: number) {
 }
 
 export default function BookingPage() {
+  const SECTION_PAD_Y = "py-10 md:py-12";
+  const SECTION_PAD_X = "px-6 md:px-10";
   const [restaurantSlug, setRestaurantSlug] = useState("demo");
   const [restaurantName, setRestaurantName] = useState<string | null>(null);
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
@@ -545,7 +547,7 @@ export default function BookingPage() {
         {!created ? (
           <section id="booking">
             <form ref={formRef} onSubmit={submit} className="space-y-10">
-              <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 text-white p-6 md:p-10 overflow-hidden shadow-lg">
+              <div className={`relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 text-white ${SECTION_PAD_Y} ${SECTION_PAD_X} overflow-hidden shadow-lg`}>
                 <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
                   <div className="rounded-3xl border border-violet-200 bg-white p-6 h-full min-h-[440px] flex flex-col">
                     <div className="flex items-center justify-between mb-4">
@@ -608,18 +610,10 @@ export default function BookingPage() {
                         );
                       })}
                     </div>
-                    {turnstileSiteKey ? (
-                      <div className="mt-6">
-                        <div ref={turnstileRef} className="min-h-[65px]" />
-                        {turnstileError ? (
-                          <div className="mt-2 text-xs text-rose-600">{turnstileError}</div>
-                        ) : null}
-                      </div>
-                    ) : null}
                     <button
                       type="submit"
                       disabled={!date || !time || !guests || !name || !email || submitting || !avail.canFit || (turnstileSiteKey ? !turnstileToken : false)}
-                      className="mt-4 w-full px-5 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-600 to-pink-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
+                      className="mt-4 w-full px-5 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-700 via-purple-600 to-fuchsia-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
                     >
                       {submitting ? "Skickar…" : "BOKA"}
                     </button>
@@ -711,6 +705,20 @@ export default function BookingPage() {
                       </div>
                     </div>
                   </div>
+
+                  {turnstileSiteKey ? (
+                    <div className="lg:col-span-2">
+                      <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-violet-200 bg-white/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="text-xs font-semibold uppercase tracking-wider text-violet-700">Bokäta</div>
+                        <div className="flex flex-col items-start sm:items-end">
+                          <div ref={turnstileRef} className="min-h-[65px]" />
+                          {turnstileError ? (
+                            <div className="mt-2 text-xs text-rose-600">{turnstileError}</div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -722,7 +730,7 @@ export default function BookingPage() {
                 {notes ? ` • ${notes}` : ""}
               </div>
 
-              <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 p-6 md:p-10">
+              <div className={`relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 ${SECTION_PAD_Y} ${SECTION_PAD_X}`}>
                 <div className="max-w-6xl mx-auto flex flex-col lg:flex-row items-center gap-6">
                   <div className="w-full lg:w-[70%] rounded-3xl border border-violet-100 bg-white p-4 md:p-6 h-full flex flex-col">
                     <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
@@ -739,7 +747,7 @@ export default function BookingPage() {
                           type="button"
                           onClick={askAi}
                           disabled={qaLoading || !qaQuestion.trim()}
-                          className="rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                          className="rounded-xl bg-gradient-to-r from-violet-700 via-purple-600 to-fuchsia-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
                         >
                           {qaLoading ? "Svarar..." : "Fråga AI"}
                         </button>
