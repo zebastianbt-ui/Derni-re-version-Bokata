@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { rateLimit } from "./_rateLimit";
 import crypto from "crypto";
 
 type BookingSettings = {
@@ -18,7 +19,6 @@ const getEnv = (key: string) => process.env[key] ?? "";
 const getSiteUrl = () => getEnv("SITE_URL") || "https://www.bokata.se";
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 20;
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
 const getClientIp = (req: VercelRequest) => {
   const xfwd = req.headers["x-forwarded-for"];
@@ -26,19 +26,6 @@ const getClientIp = (req: VercelRequest) => {
   return (ip || req.socket.remoteAddress || "unknown").split(",")[0].trim();
 };
 
-const rateLimit = (key: string) => {
-  const now = Date.now();
-  const entry = rateLimitStore.get(key);
-  if (!entry || now > entry.resetAt) {
-    rateLimitStore.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return { ok: true, remaining: RATE_LIMIT_MAX - 1, resetAt: now + RATE_LIMIT_WINDOW_MS };
-  }
-  if (entry.count >= RATE_LIMIT_MAX) {
-    return { ok: false, remaining: 0, resetAt: entry.resetAt };
-  }
-  entry.count += 1;
-  return { ok: true, remaining: RATE_LIMIT_MAX - entry.count, resetAt: entry.resetAt };
-};
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const timeToMin = (t: string) => {
@@ -89,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const ip = getClientIp(req);
-  const limiter = rateLimit(`bookings:${ip}`);
+  const limiter = await rateLimit(`bookings:${ip}`, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
   if (!limiter.ok) {
     res.status(429).json({ error: "För många försök. Försök igen om en minut." });
     return;
@@ -314,6 +301,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const confirmToken = requireManual ? crypto.randomUUID() : null;
+  const confirmTtlHours = Number(getEnv("BOOKING_CONFIRM_TTL_HOURS") || 48);
+  const confirmExpiresAt =
+    requireManual && confirmTtlHours > 0 ? new Date(Date.now() + confirmTtlHours * 3600_000).toISOString() : null;
   const status = requireManual ? "pending" : "confirmed";
 
   const { data: inserted, error } = await supabase
@@ -332,6 +322,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       client_email: email,
       client_phone: phone || null,
       confirm_token: confirmToken,
+      confirm_expires_at: confirmExpiresAt,
     })
     .select("id")
     .single();

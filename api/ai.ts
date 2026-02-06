@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { rateLimit } from "./_rateLimit";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -7,27 +8,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const RATE_LIMIT_WINDOW_MS = 60_000;
-  const RATE_LIMIT_MAX = 30;
-  const rateLimitStore = (globalThis as any).__bokataAiRateLimit ?? new Map<string, { count: number; resetAt: number }>();
-  (globalThis as any).__bokataAiRateLimit = rateLimitStore;
   const getClientIp = () => {
     const xfwd = req.headers["x-forwarded-for"];
     const ip = Array.isArray(xfwd) ? xfwd[0] : xfwd;
     return (ip || req.socket.remoteAddress || "unknown").split(",")[0].trim();
   };
-  const rateLimit = (key: string) => {
-    const now = Date.now();
-    const entry = rateLimitStore.get(key);
-    if (!entry || now > entry.resetAt) {
-      rateLimitStore.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-      return { ok: true, remaining: RATE_LIMIT_MAX - 1, resetAt: now + RATE_LIMIT_WINDOW_MS };
-    }
-    if (entry.count >= RATE_LIMIT_MAX) return { ok: false, remaining: 0, resetAt: entry.resetAt };
-    entry.count += 1;
-    return { ok: true, remaining: RATE_LIMIT_MAX - entry.count, resetAt: entry.resetAt };
-  };
-  const limiter = rateLimit(`ai:${getClientIp()}`);
+  const RATE_LIMIT_WINDOW_MS = 60_000;
+  const RATE_LIMIT_MAX = 30;
+  const limiter = await rateLimit(`ai:${getClientIp()}`, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
   if (!limiter.ok) {
     res.status(429).json({ error: "För många AI-förfrågningar. Försök igen om en minut." });
     return;

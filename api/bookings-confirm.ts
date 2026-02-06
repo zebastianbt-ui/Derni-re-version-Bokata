@@ -26,13 +26,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data: booking } = await supabase
     .from("bookings")
-    .select("id,name,date,time,guests,client_email,confirm_token,status")
+    .select("id,name,date,time,guests,client_email,confirm_token,status,confirm_expires_at")
     .eq("confirm_token", token)
     .maybeSingle();
 
   if (!booking) {
     res.status(404).send("Bokningen hittades inte.");
     return;
+  }
+  if (booking.confirm_expires_at) {
+    const expiresAt = new Date(booking.confirm_expires_at).getTime();
+    if (Number.isFinite(expiresAt) && Date.now() > expiresAt) {
+      res.status(410).send("Länken har gått ut. Kontakta restaurangen för hjälp.");
+      return;
+    }
   }
 
   const nextStatus = action === "confirm" ? "confirmed" : "cancelled";

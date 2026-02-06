@@ -607,7 +607,7 @@ export default function ReservationDashboard() {
         ? await supabase
             .from("stripe_subscriptions")
             .select("status")
-            .eq("email", userEmail)
+            .or(`email.eq.${userEmail},supabase_user_id.eq.${userId}`)
             .in("status", ["active", "trialing"])
             .limit(1)
             .maybeSingle()

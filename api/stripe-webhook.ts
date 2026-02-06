@@ -58,6 +58,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  const recordEvent = async () => {
+    const { error } = await supabase.from("stripe_events").insert({
+      stripe_event_id: event.id,
+      type: event.type,
+      created_at: new Date((event.created ?? Math.floor(Date.now() / 1000)) * 1000).toISOString(),
+    });
+    if (error) {
+      if (error.code === "23505") return false;
+      console.error("Stripe webhook event insert error", error);
+      return true;
+    }
+    return true;
+  };
+
+  const shouldProcess = await recordEvent();
+  if (!shouldProcess) {
+    res.status(200).json({ received: true, duplicate: true });
+    return;
+  }
+
   const sendEmail = async (to: string, subject: string, html: string) => {
     if (!resendKey) return;
     const resp = await fetch("https://api.resend.com/emails", {
@@ -84,11 +104,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
     if (email) email = email.trim().toLowerCase();
+    let supabaseUserId: string | null = null;
+    if (email) {
+      const { data: profile } = await supabase.from("profiles").select("user_id").ilike("email", email).maybeSingle();
+      supabaseUserId = (profile as { user_id?: string | null })?.user_id ?? null;
+    }
     const { error } = await supabase.from("stripe_subscriptions").upsert(
       {
         stripe_subscription_id: sub.id,
         stripe_customer_id: customerId,
         email,
+        supabase_user_id: supabaseUserId,
         status: sub.status,
         current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
         cancel_at_period_end: sub.cancel_at_period_end ?? false,
