@@ -218,9 +218,30 @@ function mockAvailability(date: string, time: string, guests: number) {
   return { capacity, booked, available, canFit: guests <= available };
 }
 
+function linkify(text: string) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, i) => {
+    if (/^https?:\/\//.test(part)) {
+      return (
+        <a
+          key={`link-${i}`}
+          href={part}
+          target="_blank"
+          rel="noreferrer"
+          className="text-pink-700 underline underline-offset-2"
+        >
+          {part}
+        </a>
+      );
+    }
+    return <span key={`text-${i}`}>{part}</span>;
+  });
+}
+
 export default function BookingPage() {
   const SECTION_PAD_Y = "py-10 md:py-12";
   const SECTION_PAD_X = "px-6 md:px-10";
+  const SECTION_PAD_Y_TIGHT = "py-6 md:py-8";
   const [restaurantSlug, setRestaurantSlug] = useState("demo");
   const [restaurantName, setRestaurantName] = useState<string | null>(null);
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
@@ -500,6 +521,8 @@ export default function BookingPage() {
           context: {
             baseDate: date,
             nowTime: `${new Date().getHours().toString().padStart(2, "0")}:${new Date().getMinutes().toString().padStart(2, "0")}`,
+            hoursConfigured: !!publicSettings?.hours,
+            requireManualConfirmation: !!publicSettings?.require_manual_confirmation,
             seating: effectiveSettings.seating,
             hours: normalizedHours,
           },
@@ -717,7 +740,7 @@ export default function BookingPage() {
                 {notes ? ` • ${notes}` : ""}
               </div>
 
-              <div className={`relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 ${SECTION_PAD_Y} ${SECTION_PAD_X}`}>
+              <div className={`relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 ${SECTION_PAD_Y_TIGHT} ${SECTION_PAD_X}`}>
                 <div className="max-w-6xl mx-auto flex flex-col lg:flex-row items-center gap-6">
                   <div className="w-full lg:w-[70%] rounded-3xl border border-violet-100 bg-white p-4 md:p-6 h-full flex flex-col">
                     <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
@@ -738,7 +761,7 @@ export default function BookingPage() {
                         >
                           {qaLoading ? "Svarar..." : "Fråga AI"}
                         </button>
-                        {qaAnswer && <div className="text-sm text-gray-700">{qaAnswer}</div>}
+                        {qaAnswer && <div className="text-sm text-gray-700">{linkify(qaAnswer)}</div>}
                       </div>
                     </div>
                   </div>

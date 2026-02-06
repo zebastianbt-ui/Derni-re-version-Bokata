@@ -41,6 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     context?: {
       baseDate?: string;
       nowTime?: string;
+      hoursConfigured?: boolean;
+      requireManualConfirmation?: boolean;
       seating?: {
         maxGuests?: number;
         maxGuestsPerReservation?: number;
@@ -142,23 +144,202 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   ].filter(Boolean).join("\n");
 
   const systemPrompt = `
-Du är en restaurangassistent för Bokäta.
-Svara alltid på svenska.
-Var kort, tydlig och vänlig.
+# 🔒 BOKÄTA – PROMPT SYSTÈME (MODE ZÉRO ERREUR)
 
-Viktig policy:
-- Du får ENDAST svara på frågor som handlar om restaurangen, bokningar, öppettider, meny, allergier, adress, kontakt, betalning, policyer, tillgänglighet eller liknande.
-- Om frågan inte handlar om restaurangen: svara exakt
-  "Jag kan tyvärr bara svara på frågor om restaurangen."
+## Rôle
 
-Kunskapsbas:
-- Använd informationen i KUNSKAPSBAS som primär källa.
-- Om KUNSKAPSBAS saknar svaret, använd FAKTA FRÅN DASHBOARD.
-- Tolka olika formuleringar som betyder samma sak.
-- Om något är oklart, ställ en kort följdfråga istället för att vägra.
+Tu es **Bokäta Assistant**, l’assistant officiel de réservation et d’information du restaurant.
 
-Tolkningsregel:
-- Förstå olika sätt att fråga samma sak (ex: "öppet måndag?" = "Har ni öppet på måndag?").
+Tu représentes **exclusivement** le restaurant connecté à Bokäta.
+Tu ne représentes ni Internet, ni une opinion personnelle, ni un service externe.
+
+---
+
+## 1. Source de vérité (règle non négociable)
+
+Tu dois répondre **uniquement** à partir des données fournies dans Bokäta, notamment:
+
+* Informations générales du restaurant
+* Horaires et exceptions
+* Menu et ingrédients
+* Allergènes déclarés
+* Capacité, tables, limites par groupe
+* Règles de réservation
+* Règles internes définies par le restaurateur
+* FAQ personnalisée du restaurateur
+
+👉 **Toute information absente = information inconnue.**
+
+Tu n’inventes jamais.
+Tu ne complètes jamais avec des suppositions.
+Tu ne “raisonnes” pas pour deviner.
+
+---
+
+## 2. Langue
+
+* Tu réponds **dans la langue du client**, parmi:
+
+  * Suédois (SV)
+  * Anglais (EN)
+  * Français (FR)
+* Si la langue n’est pas identifiable, tu réponds dans la langue par défaut définie par le restaurateur.
+
+Tu ne mélanges jamais les langues.
+
+---
+
+## 3. Ton et style
+
+* Ton professionnel, calme, neutre
+* Réponses courtes et factuelles
+* Aucune exagération
+*  humour sympa
+*  emoji autorisés
+* Aucune formulation vague
+
+Tutoiement ou vouvoiement **strictement selon la règle définie par le restaurateur**.
+
+---
+
+## 4. Allergies & sécurité alimentaire (priorité absolue)
+
+* Tu **ne garantis jamais** l’absence totale d’allergènes
+* Tu indiques uniquement les allergènes explicitement déclarés
+* Tu ne recommandes jamais un plat en cas de doute
+* En cas d’allergie sévère:
+
+  * tu refuses toute affirmation
+  * tu rediriges systématiquement vers le personnel Et tu donnes l-email qui se trouve dans inställningar: E-post för bokningar
+
+Exemples acceptables:
+
+* “Nous ne pouvons pas garantir l’absence totale de traces.”
+* “Pour une allergie sévère, merci de contacter directement le personnel. Et tu donnes l-email qui se trouve dans inställningar: E-post för bokningar”
+
+La sécurité du client passe avant toute autre considération.
+
+---
+
+## 5. Réservations & capacité
+
+Tu respectes **strictement**:
+
+* Nombre total de tables
+* Capacité maximale
+* Limite par groupe
+* Règles de réservation (obligatoire ou non)
+
+Si le restaurant est complet:
+
+* Tu le dis clairement
+* Tu ne promets jamais une place
+* Tu proposes uniquement les alternatives autorisées:
+
+  * autre horaire
+  * autre jour
+  * take away
+  * liste d’attente (si activée)
+
+Tu ne négocies jamais les règles.
+
+---
+
+## 6. Horaires & exceptions
+
+* Tu donnes uniquement les horaires exacts enregistrés
+* Tu mentionnes toujours les exceptions (jours fériés, saisonnalité)
+* Si l’information n’est pas définie, tu le dis explicitement
+
+Tu n’utilises jamais:
+
+* “en général”
+* “normalement”
+* “habituellement”
+
+---
+
+## 7. Menu & recommandations
+
+* Tu décris uniquement les plats existants
+* Tu n’ajoutes jamais d’ingrédients
+* Tu ne proposes des adaptations que si elles sont explicitement autorisées
+* Tu utilises les recommandations définies par le restaurateur
+
+Tu ne fais aucune suggestion créative.
+
+---
+
+## 8. Cas d’incertitude (règle clé Bokäta)
+
+Si une information est:
+
+* absente
+* ambiguë
+* contradictoire
+
+👉 Tu dois:
+
+1. le dire clairement
+2. rester neutre
+3. rediriger vers le personnel (Et tu donnes l-email qui se trouve dans inställningar: E-post för bokningar)
+
+Exemple:
+
+> “Je n’ai pas cette information dans Bokäta. Pour être sûr, merci de demander directement au personnel. Et tu donnes l-email qui se trouve dans inställningar: E-post för bokningar”
+
+---
+
+## 9. Internet & sources externes
+
+* Tu **n’utilises jamais Internet** pour:
+
+  * horaires
+  * menu
+  * réservations
+  * allergies
+  * règles internes
+* Les informations externes générales ne sont autorisées **que si explicitement activées**
+* Toute information externe doit être présentée comme générale et non contractuelle
+
+Les données Bokäta priment toujours.
+
+---
+
+## 10. Objectif Bokäta
+
+Ton objectif est de:
+
+* réduire la charge du personnel
+* éviter toute erreur client
+* fournir des réponses fiables
+* orienter vers une solution valide
+
+Tu n’es pas un vendeur.
+Tu es un assistant opérationnel.
+
+---
+
+## 11. Principe final (à toujours respecter)
+
+En cas de doute, tu choisis toujours:
+
+* la prudence
+* la clarté
+* la sécurité
+
+Tu préfères **ne pas répondre** plutôt que mal répondre.
+
+---
+
+### Résultat concret
+
+Avec ce prompt:
+
+* ton IA ne “hallucine” pas
+* ton IA ne contredit jamais le restaurateur
+* ton IA se comporte comme un employé bien formé
+* Bokäta devient crédible face aux restaurateurs sérieux
 
 KUNSKAPSBAS:
 ${knowledge ?? ""}
@@ -210,6 +391,13 @@ ${dashboardFacts}
   };
 
   const msgLower = message.toLowerCase();
+  const detectLang = () => {
+    if (/(aujourd|demain|ouvert|horaires|réservation|reservation|table|menu|adresse|merci)/i.test(msgLower)) return "fr";
+    if (/(today|tomorrow|open|opening|hours|reservation|booking|menu|address|thanks)/i.test(msgLower)) return "en";
+    return "sv";
+  };
+  const lang = detectLang();
+  const t = (sv: string, fr: string, en: string) => (lang === "fr" ? fr : lang === "en" ? en : sv);
   const normalize = (s: string) =>
     s
       .toLowerCase()
@@ -262,7 +450,7 @@ ${dashboardFacts}
     return out;
   })();
   const isRestaurantTopic =
-    /(boka|bokning|reservation|reservera|bord|table|öppet|öppettider|tider|stängt|adress|address|hitta|var ligger|ligger|kontakt|telefon|email|e-post|meny|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|parking|tillgäng|wheelchair|webbplats|hemsida|website|webb|länk|facebook|instagram|social)/i.test(
+    /(boka|bokning|reservation|reservera|réservation|reserver|bord|table|öppet|öppettider|tider|stängt|open|opening|ouvert|horaires|adress|address|adresse|hitta|var ligger|ligger|kontakt|contact|telefon|email|e-post|meny|menu|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|parking|tillgäng|wheelchair|webbplats|hemsida|website|webb|länk|facebook|instagram|social)/i.test(
       msgLower
     );
   const lastAssistant = history?.slice().reverse().find((h) => h.role === "assistant")?.content || "";
@@ -328,11 +516,23 @@ ${dashboardFacts}
     return;
   }
   if (!isRestaurantTopic && !isFollowUp) {
-    res.status(200).json({ reply: "Jag kan tyvärr bara svara på frågor om restaurangen." });
+    res.status(200).json({
+      reply: t(
+        "Jag kan tyvärr bara svara på frågor om restaurangen.",
+        "Je peux seulement répondre aux questions sur le restaurant.",
+        "I can only answer questions about the restaurant."
+      ),
+    });
     return;
   }
   if (!isRestaurantTopic && isFollowUp && !lastAssistant) {
-    res.status(200).json({ reply: "Jag kan tyvärr bara svara på frågor om restaurangen." });
+    res.status(200).json({
+      reply: t(
+        "Jag kan tyvärr bara svara på frågor om restaurangen.",
+        "Je peux seulement répondre aux questions sur le restaurant.",
+        "I can only answer questions about the restaurant."
+      ),
+    });
     return;
   }
 
@@ -373,7 +573,11 @@ ${dashboardFacts}
     return;
   }
   if (/(meny|menu|à la carte|rätter|mat)/i.test(msgLower) && kbInfo.website) {
-    res.status(200).json({ reply: `Menyn finns här: ${kbInfo.website}` });
+    res.status(200).json({ reply: t(`Menyn finns här: ${kbInfo.website}`, `Le menu est ici : ${kbInfo.website}`, `The menu is here: ${kbInfo.website}`) });
+    return;
+  }
+  if (/(hemsida|webbplats|website|webb|site)/i.test(msgLower) && kbInfo.website) {
+    res.status(200).json({ reply: t(`Vår hemsida: ${kbInfo.website}`, `Notre site : ${kbInfo.website}`, `Our website: ${kbInfo.website}`) });
     return;
   }
   if (/(instagram|insta)/i.test(msgLower) && kbInfo.instagram) {
@@ -384,8 +588,14 @@ ${dashboardFacts}
     res.status(200).json({ reply: `Facebook: ${kbInfo.facebook}.` });
     return;
   }
-  if (/(google maps|karta|maps)/i.test(msgLower) && kbInfo.googleMaps) {
-    res.status(200).json({ reply: `Google Maps: ${kbInfo.googleMaps}.` });
+  if (/(google maps|karta|maps|vägbeskrivning|hur långt|hur länge|restid|avstånd|kör)/i.test(msgLower) && kbInfo.googleMaps) {
+    res.status(200).json({
+      reply: t(
+        `Här hittar du oss och kan se restid: ${kbInfo.googleMaps}`,
+        `Voici notre adresse et le temps de trajet : ${kbInfo.googleMaps}`,
+        `Here is our location and travel time: ${kbInfo.googleMaps}`
+      ),
+    });
     return;
   }
   if (/(betal|kort|kontant|swish)/i.test(msgLower) && kbInfo.payment) {
@@ -432,6 +642,8 @@ ${dashboardFacts}
     const base = baseDate ?? fmtDate(new Date());
     if (/i\s*dag|idag/.test(txt)) return base;
     if (/i\s*morgon|imorgon/.test(txt)) return addDays(base, 1);
+    if (/aujourd['’]hui|aujourdhui/.test(txt)) return base;
+    if (/demain/.test(txt)) return addDays(base, 1);
     const iso = txt.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
     if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
     const dmy = txt.match(/\b(\d{1,2})[\/\.](\d{1,2})\b/);
@@ -522,10 +734,20 @@ ${dashboardFacts}
     return { dayName, ...d };
   };
 
-  const isHoursQuestion = /(öppet|öppettider|öppettid|stängt|stängda)/i.test(msgLower);
+  const isHoursQuestion = /(öppet|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
   if (isHoursQuestion) {
     const base = context?.baseDate ?? fmtDate(new Date());
-    if (/nästa vecka/i.test(msgLower)) {
+    if (context && "hoursConfigured" in context && context.hoursConfigured === false) {
+      res.status(200).json({
+        reply: t(
+          "Våra öppettider är inte publicerade just nu. Kontakta oss så hjälper vi dig.",
+          "Nos horaires ne sont pas publiés pour le moment. Contactez‑nous et on vous aide.",
+          "Our opening hours aren’t published right now. Please contact us and we’ll help."
+        ),
+      });
+      return;
+    }
+    if (/nästa vecka|semaine prochaine|next week/i.test(msgLower)) {
       const baseDt = toUtcDate(base) ?? new Date();
       const cur = baseDt.getUTCDay();
       const deltaToNextMon = ((1 - cur + 7) % 7) || 7;
@@ -546,11 +768,17 @@ ${dashboardFacts}
         }
       }
       if (!openDays.length) {
-        res.status(200).json({ reply: "Vi har stängt hela nästa vecka." });
+        res.status(200).json({
+          reply: t("Vi har stängt hela nästa vecka.", "Nous sommes fermés toute la semaine prochaine.", "We’re closed all next week."),
+        });
         return;
       }
       res.status(200).json({
-        reply: `Nästa vecka har vi öppet: ${openDays.join(", ")}.${closedDays.length ? ` Stängt: ${closedDays.join(", ")}.` : ""}`,
+        reply: t(
+          `Nästa vecka har vi öppet: ${openDays.join(", ")}.${closedDays.length ? ` Stängt: ${closedDays.join(", ")}.` : ""}`,
+          `Semaine prochaine, nous sommes ouverts : ${openDays.join(", ")}.${closedDays.length ? ` Fermé : ${closedDays.join(", ")}.` : ""}`,
+          `Next week we’re open: ${openDays.join(", ")}.${closedDays.length ? ` Closed: ${closedDays.join(", ")}.` : ""}`
+        ),
       });
       return;
     }
@@ -564,23 +792,47 @@ ${dashboardFacts}
       }
       const hours = getDayHours(date);
       if (!hours || hours.closed || isClosedDate(date)) {
-        res.status(200).json({ reply: `Vi har stängt ${hours?.dayName ? `på ${hours.dayName}` : "den dagen"}.` });
+        res.status(200).json({
+          reply: t(
+            `Vi har stängt ${hours?.dayName ? `på ${hours.dayName}` : "den dagen"}.`,
+            `Nous sommes fermés ${hours?.dayName ? `ce ${hours.dayName}` : "ce jour‑là"}.`,
+            `We’re closed ${hours?.dayName ? `on ${hours.dayName}` : "that day"}.`
+          ),
+        });
         return;
       }
-      if (/idag|nu|just nu/i.test(msgLower) && context?.nowTime) {
+      if (/idag|nu|just nu|today|right now|aujourd/i.test(msgLower) && context?.nowTime) {
         const nowMin = timeToMin(context.nowTime);
         const openMin = timeToMin(hours.open);
         const closeMin = timeToMin(hours.close);
         if (nowMin < openMin) {
-          res.status(200).json({ reply: `Vi öppnar kl ${hours.open} idag.` });
+          res.status(200).json({
+            reply: t(
+              `Vi öppnar kl ${hours.open} idag.`,
+              `Nous ouvrons à ${hours.open} aujourd’hui.`,
+              `We open at ${hours.open} today.`
+            ),
+          });
           return;
         }
         if (nowMin > closeMin) {
-          res.status(200).json({ reply: `Vi har stängt för idag. Vi stängde kl ${hours.close}.` });
+          res.status(200).json({
+            reply: t(
+              `Vi har stängt för idag. Vi stängde kl ${hours.close}.`,
+              `Nous sommes fermés pour aujourd’hui. Nous avons fermé à ${hours.close}.`,
+              `We’re closed for today. We closed at ${hours.close}.`
+            ),
+          });
           return;
         }
       }
-      res.status(200).json({ reply: `Vi har öppet ${hours.open}–${hours.close}.` });
+      res.status(200).json({
+        reply: t(
+          `Vi har öppet ${hours.open}–${hours.close}.`,
+          `Nous sommes ouverts de ${hours.open} à ${hours.close}.`,
+          `We’re open ${hours.open}–${hours.close}.`
+        ),
+      });
       return;
     }
   }
@@ -633,9 +885,22 @@ ${dashboardFacts}
     const date = parseDate(msgLower, baseDate);
     const time = parseTime(msgLower);
     const guests = parseGuests(msgLower);
+    const isTerrace = /(uteservering|ute|terrass|terrasse|patio)/i.test(msgLower);
 
     if (!guests) {
-      res.status(200).json({ reply: "Hur många gäster gäller det?" });
+      res.status(200).json({
+        reply: isTerrace
+          ? t(
+              "Gärna! Hur många gäster gäller det för uteserveringen?",
+              "Avec plaisir ! Pour combien de personnes souhaitez‑vous la terrasse ?",
+              "Sure! How many guests is it for the outdoor seating?"
+            )
+          : t(
+              "Hur många gäster gäller det?",
+              "Pour combien de personnes ?",
+              "How many guests is it for?"
+            ),
+      });
       return;
     }
 
@@ -643,20 +908,54 @@ ${dashboardFacts}
     const maxTotal = context.seating?.maxGuests ?? 60;
     const group = context.seating?.groupThreshold ?? maxPer;
     if (guests > maxTotal) {
-      res.status(200).json({ reply: `Vi har tyvärr max ${maxTotal} gäster samtidigt. Vill du välja en mindre grupp?` });
+      res.status(200).json({
+        reply: t(
+          `Vi har tyvärr max ${maxTotal} gäster samtidigt. Vill du välja en mindre grupp?`,
+          `Nous accueillons au maximum ${maxTotal} personnes en même temps. Voulez‑vous un groupe plus petit ?`,
+          `We can host up to ${maxTotal} guests at the same time. Would you like a smaller group?`
+        ),
+      });
       return;
     }
     if (guests > maxPer || guests >= group) {
-      res.status(200).json({ reply: `För ${guests} gäster behöver vi manuell bekräftelse. Vi återkommer snarast.` });
+      if (isTerrace) {
+        res.status(200).json({
+          reply: t(
+            `Vi kan gärna ta emot önskemål om uteservering. För ${guests} gäster behöver vi manuell bekräftelse — skriv gärna "uteservering" i kommentaren så återkommer vi snarast.`,
+            `Nous pouvons prendre en compte une demande de terrasse. Pour ${guests} personnes, une confirmation manuelle est nécessaire — indiquez "terrasse" dans le commentaire et nous reviendrons vers vous rapidement.`,
+            `We can take outdoor seating requests. For ${guests} guests we need manual confirmation — please mention "outdoor seating" in the comment and we’ll get back to you shortly.`
+          ),
+        });
+        return;
+      }
+      res.status(200).json({
+        reply: t(
+          `För ${guests} gäster behöver vi manuell bekräftelse. Vi återkommer snarast.`,
+          `Pour ${guests} personnes, une confirmation manuelle est nécessaire. Nous reviendrons vers vous rapidement.`,
+          `For ${guests} guests, we need manual confirmation. We’ll get back to you shortly.`
+        ),
+      });
       return;
     }
 
     if (!date) {
-      res.status(200).json({ reply: "Vilket datum önskar du boka?" });
+      res.status(200).json({
+        reply: t(
+          "Vilket datum önskar du boka?",
+          "Quelle date souhaitez‑vous réserver ?",
+          "What date would you like to book?"
+        ),
+      });
       return;
     }
     if (!time) {
-      res.status(200).json({ reply: "Vilken tid önskar du?" });
+      res.status(200).json({
+        reply: t(
+          "Vilken tid önskar du?",
+          "À quelle heure souhaitez‑vous réserver ?",
+          "What time would you like?"
+        ),
+      });
       return;
     }
 
@@ -664,12 +963,24 @@ ${dashboardFacts}
     const dayName = day != null ? weekdaySv[day] : null;
     const range = closedRangeForDate(date);
     if (range) {
-      res.status(200).json({ reply: `Vi har en stängd period: ${range.start}–${range.end}.` });
+      res.status(200).json({
+        reply: t(
+          `Vi har en stängd period: ${range.start}–${range.end}.`,
+          `Nous sommes fermés du ${range.start} au ${range.end}.`,
+          `We’re closed from ${range.start}–${range.end}.`
+        ),
+      });
       return;
     }
     const hours = getDayHours(date);
     if (!hours || hours.closed || isClosedDate(date)) {
-      res.status(200).json({ reply: `Tyvärr, vi har stängt ${dayName ? `på ${dayName}ar` : "den dagen"}.` });
+      res.status(200).json({
+        reply: t(
+          `Tyvärr, vi har stängt ${dayName ? `på ${dayName}ar` : "den dagen"}.`,
+          `Désolé, nous sommes fermés ${dayName ? `le ${dayName}` : "ce jour‑là"}.`,
+          `Sorry, we’re closed ${dayName ? `on ${dayName}` : "that day"}.`
+        ),
+      });
       return;
     }
     const open = hours.open;
@@ -680,7 +991,11 @@ ${dashboardFacts}
       const latestStart = Math.max(timeToMin(open), timeToMin(close) - lastBookingBufferMin);
       if (t < timeToMin(open) || t > latestStart) {
         res.status(200).json({
-          reply: `Vi har öppet ${open}–${close}. Sista bokningsbara tiden är ${minToTime(latestStart)}.`,
+          reply: t(
+            `Vi har öppet ${open}–${close}. Sista bokningsbara tiden är ${minToTime(latestStart)}.`,
+            `Nous sommes ouverts de ${open} à ${close}. La dernière heure réservable est ${minToTime(latestStart)}.`,
+            `We’re open ${open}–${close}. The last bookable time is ${minToTime(latestStart)}.`
+          ),
         });
         return;
       }
@@ -691,11 +1006,23 @@ ${dashboardFacts}
     const bookings = context.bookings ?? [];
     const tableId = findAvailableTable({ date, time, guests, bookings, tables, durationMin });
     if (!tableId) {
-      res.status(200).json({ reply: "Tyvärr är det fullt den tiden. Vill du prova en annan tid?" });
+      res.status(200).json({
+        reply: t(
+          "Tyvärr är det fullt den tiden. Vill du prova en annan tid?",
+          "Désolé, c’est complet à cette heure‑là. Voulez‑vous essayer une autre heure ?",
+          "Sorry, we’re fully booked at that time. Would you like to try another time?"
+        ),
+      });
       return;
     }
 
-    res.status(200).json({ reply: `Ja, det finns plats. Vill du att jag bokar ${date} kl ${time} för ${guests} gäster?` });
+    res.status(200).json({
+      reply: t(
+        `Ja, det finns plats. Vill du att jag bokar ${date} kl ${time} för ${guests} gäster?`,
+        `Oui, il y a de la place. Voulez‑vous que je réserve le ${date} à ${time} pour ${guests} personnes ?`,
+        `Yes, we have availability. Would you like me to book ${date} at ${time} for ${guests} guests?`
+      ),
+    });
     return;
   }
 
