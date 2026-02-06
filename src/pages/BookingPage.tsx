@@ -221,6 +221,7 @@ function mockAvailability(date: string, time: string, guests: number) {
 export default function BookingPage() {
   const SECTION_PAD_Y = "py-10 md:py-12";
   const SECTION_PAD_X = "px-6 md:px-10";
+  const SECTION_PAD_Y_TIGHT = "py-6 md:py-8";
   const [restaurantSlug, setRestaurantSlug] = useState("demo");
   const [restaurantName, setRestaurantName] = useState<string | null>(null);
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
@@ -706,19 +707,6 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  {turnstileSiteKey ? (
-                    <div className="lg:col-span-2">
-                      <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-violet-200 bg-white/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="text-xs font-semibold uppercase tracking-wider text-violet-700">Bokäta</div>
-                        <div className="flex flex-col items-start sm:items-end">
-                          <div ref={turnstileRef} className="min-h-[65px]" />
-                          {turnstileError ? (
-                            <div className="mt-2 text-xs text-rose-600">{turnstileError}</div>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
               </div>
 
@@ -730,7 +718,7 @@ export default function BookingPage() {
                 {notes ? ` • ${notes}` : ""}
               </div>
 
-              <div className={`relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 ${SECTION_PAD_Y} ${SECTION_PAD_X}`}>
+              <div className={`relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 ${SECTION_PAD_Y_TIGHT} ${SECTION_PAD_X}`}>
                 <div className="max-w-6xl mx-auto flex flex-col lg:flex-row items-center gap-6">
                   <div className="w-full lg:w-[70%] rounded-3xl border border-violet-100 bg-white p-4 md:p-6 h-full flex flex-col">
                     <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
@@ -843,20 +831,32 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-0 py-0 text-center">
-        <div className="text-2xl md:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-pink-500 to-rose-500">
-          Bokäta
+      <footer className="mt-0 py-10 text-center">
+        <div className="mx-auto max-w-5xl px-4">
+          <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:justify-between md:text-left">
+            <div>
+              <div className="text-2xl md:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-pink-500 to-rose-500">
+                Bokäta
+              </div>
+              <div className="mt-1 text-lg md:text-xl font-semibold text-gray-700">
+                Den lagar inte mat. Den lagar allt annat.
+              </div>
+              <a
+                href="/"
+                className="mt-3 inline-flex items-center justify-center rounded-full border border-pink-200 bg-pink-50 px-5 py-2 text-sm font-semibold text-pink-700 hover:bg-pink-100"
+              >
+                Driver du också restaurang? Upptäck Bokäta →
+              </a>
+            </div>
+            {!created && turnstileSiteKey ? (
+              <div className="flex flex-col items-center md:items-end">
+                <div ref={turnstileRef} className="min-h-[65px]" />
+                {turnstileError ? <div className="mt-2 text-xs text-rose-600">{turnstileError}</div> : null}
+              </div>
+            ) : null}
+          </div>
+          <div className="mt-4 text-xs text-gray-400">© 2026 Bokäta. Stockholm, Sweden. All rights reserved.</div>
         </div>
-        <div className="mt-1 text-lg md:text-xl font-semibold text-gray-700">
-          Den lagar inte mat. Den lagar allt annat.
-        </div>
-        <a
-          href="/"
-          className="mt-3 inline-flex items-center justify-center rounded-full border border-pink-200 bg-pink-50 px-5 py-2 text-sm font-semibold text-pink-700 hover:bg-pink-100"
-        >
-          Driver du också restaurang? Upptäck Bokäta →
-        </a>
-        <div className="mt-4 text-xs text-gray-400">© 2026 Bokäta. Stockholm, Sweden. All rights reserved.</div>
       </footer>
     </div>
   );
