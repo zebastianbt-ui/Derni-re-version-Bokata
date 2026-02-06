@@ -1759,7 +1759,7 @@ export default function ReservationDashboard() {
           src={forkTransparent}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute right-20 top-1/2 hidden md:block h-80 lg:h-[26rem] w-auto -translate-y-1/2 opacity-95"
+          className="pointer-events-none absolute right-16 top-1/2 hidden md:block h-64 lg:h-72 w-auto -translate-y-1/2 opacity-95"
         />
         <div className="max-w-6xl mx-auto text-center relative">
           <div className="flex items-center justify-center gap-4">
@@ -2495,23 +2495,25 @@ export default function ReservationDashboard() {
                   </button>
                   {bookingLinkStatus ? <span className="text-xs text-gray-500">{bookingLinkStatus}</span> : null}
                 </div>
-                <div className="mt-1 text-xs text-gray-500">
+                <div className="mt-2 text-xs text-gray-500 leading-relaxed">
                   Klistra in på din webbplats eller Facebook för att leda gäster till Bokätas bokningssida.
                 </div>
               </Field>
-              <Field label="E-post för bokningar">
-                <input
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                  value={config.info.email}
-                  onChange={(e) =>
-                    setConfig({
-                      ...config,
-                      info: { ...config.info, email: e.target.value },
-                      notifications: { ...config.notifications, to: e.target.value },
-                    })
-                  }
-                />
-              </Field>
+              <div className="mt-4">
+                <Field label="E-post för bokningar">
+                  <input
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    value={config.info.email}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        info: { ...config.info, email: e.target.value },
+                        notifications: { ...config.notifications, to: e.target.value },
+                      })
+                    }
+                  />
+                </Field>
+              </div>
               <div className="mt-3 grid grid-cols-1 gap-2 text-sm">
                 <label className="inline-flex items-center gap-2">
                   <input
