@@ -221,7 +221,7 @@ function mockAvailability(date: string, time: string, guests: number) {
 export default function BookingPage() {
   const SECTION_PAD_Y = "py-10 md:py-12";
   const SECTION_PAD_X = "px-6 md:px-10";
-  const SECTION_PAD_Y_TIGHT = "py-4 md:py-6";
+  const SECTION_PAD_Y_TIGHT = "py-2 md:py-4";
   const [restaurantSlug, setRestaurantSlug] = useState("demo");
   const [restaurantName, setRestaurantName] = useState<string | null>(null);
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
@@ -831,9 +831,9 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-0 py-10 text-center">
+      <footer className="mt-0 py-10 text-left">
         <div className="mx-auto max-w-5xl px-4">
-          <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:justify-between md:text-left">
+          <div className="flex flex-col items-start gap-6 md:flex-row md:items-center md:justify-between">
             <div>
               <div className="text-2xl md:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-pink-500 to-rose-500">
                 Bokäta
@@ -849,8 +849,10 @@ export default function BookingPage() {
               </a>
             </div>
             {!created && turnstileSiteKey ? (
-              <div className="flex flex-col items-center md:items-end">
-                <div ref={turnstileRef} className="min-h-[65px]" />
+              <div className="flex flex-col items-start md:items-end">
+                <div className="origin-top-left scale-50">
+                  <div ref={turnstileRef} className="min-h-[65px]" />
+                </div>
                 {turnstileError ? <div className="mt-2 text-xs text-rose-600">{turnstileError}</div> : null}
               </div>
             ) : null}
