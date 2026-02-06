@@ -1458,30 +1458,29 @@ export default function ReservationDashboard() {
       source: "web",
     };
     if (restaurantId && settingsReady) {
-      supabase
-        .from("bookings")
-        .insert({
-          restaurant_id: restaurantId,
-          date: b.date,
-          time: b.time,
-          name: b.name,
-          guests: b.guests,
-          notes: b.notes || null,
-          table_id: b.tableId ?? null,
-          duration_min: b.durationMin ?? config.seating.maxBookingDurationMin,
-          status: b.status ?? "confirmed",
-          source: b.source ?? "walkin",
-        })
-        .select("id")
-        .single()
-        .then(({ data }) => {
-          if (data?.id) {
-            setBookings((prev) =>
-              assignTablesForDate(d.date, prev.map((x) => (x.id === b.id ? { ...x, id: data.id } : x)))
-            );
-          }
-        })
-        .catch(() => {});
+      (async () => {
+        const { data } = await supabase
+          .from("bookings")
+          .insert({
+            restaurant_id: restaurantId,
+            date: b.date,
+            time: b.time,
+            name: b.name,
+            guests: b.guests,
+            notes: b.notes || null,
+            table_id: b.tableId ?? null,
+            duration_min: b.durationMin ?? config.seating.maxBookingDurationMin,
+            status: b.status ?? "confirmed",
+            source: b.source ?? "walkin",
+          })
+          .select("id")
+          .single();
+        if (data?.id) {
+          setBookings((prev) =>
+            assignTablesForDate(d.date, prev.map((x) => (x.id === b.id ? { ...x, id: data.id } : x)))
+          );
+        }
+      })().catch(() => {});
     }
 
     setBookings((prev) => assignTablesForDate(d.date, [...prev, b]));
@@ -2369,7 +2368,7 @@ export default function ReservationDashboard() {
                     const updated = prev.map((b) =>
                       b.id === openBooking.id ? { ...b, ...next, note: !!next.notes } : b
                     );
-                    const dates = Array.from(new Set(updated.map((b) => b.date)));
+                    const dates = Array.from(new Set<string>(updated.map((b) => b.date)));
                     let out = updated;
                     for (const d of dates) out = assignTablesForDate(d, out);
                     return out;
