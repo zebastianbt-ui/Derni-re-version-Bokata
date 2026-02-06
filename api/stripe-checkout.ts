@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Stripe from "stripe";
 
 const getEnv = (key: string) => process.env[key] ?? "";
+const getSiteUrl = () => getEnv("SITE_URL") || "https://www.bokata.se";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -50,7 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     planKey === "ettar" ? priceYearly : planKey === "tvar" ? price2Year : priceMonthly;
 
   const stripe = new Stripe(secretKey, { apiVersion: "2023-10-16" });
-  const origin = req.headers.origin || `https://${req.headers.host}`;
+  const origin = getSiteUrl();
 
   try {
     const session = await stripe.checkout.sessions.create({

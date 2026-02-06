@@ -2,6 +2,15 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import forkTransparent from "../assets/fork-transparent.png";
 
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (el: HTMLElement, options: { sitekey: string; callback: (token: string) => void; "expired-callback"?: () => void; "error-callback"?: () => void }) => string | number;
+      reset: (widgetId?: string | number) => void;
+    };
+  }
+}
+
 /**
  * Bokäta – Bokningssida (v2, rosa+lila)
  * Komplett bokningsflöde på svenska.
@@ -212,6 +221,7 @@ function mockAvailability(date: string, time: string, guests: number) {
 export default function BookingPage() {
   const [restaurantSlug, setRestaurantSlug] = useState("demo");
   const [restaurantName, setRestaurantName] = useState<string | null>(null);
+  const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -237,6 +247,58 @@ export default function BookingPage() {
   const [qaAnswer, setQaAnswer] = useState<string | null>(null);
   const [qaLoading, setQaLoading] = useState(false);
   const [qaHistory, setQaHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileError, setTurnstileError] = useState<string | null>(null);
+  const turnstileRef = useRef<HTMLDivElement | null>(null);
+  const turnstileWidgetId = useRef<string | number | null>(null);
+
+  useEffect(() => {
+    if (!turnstileSiteKey || typeof window === "undefined") return;
+    if (!turnstileRef.current) return;
+
+    const ensureScript = () =>
+      new Promise<void>((resolve) => {
+        if (window.turnstile) return resolve();
+        const existing = document.querySelector('script[src^="https://challenges.cloudflare.com/turnstile/"]');
+        if (existing) {
+          existing.addEventListener("load", () => resolve(), { once: true });
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve();
+        document.head.appendChild(script);
+      });
+
+    let cancelled = false;
+    ensureScript().then(() => {
+      if (cancelled || !window.turnstile || !turnstileRef.current) return;
+      if (turnstileWidgetId.current != null) return;
+      turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
+        sitekey: turnstileSiteKey,
+        callback: (token) => {
+          setTurnstileToken(token);
+          setTurnstileError(null);
+        },
+        "expired-callback": () => setTurnstileToken(""),
+        "error-callback": () => setTurnstileError("Kunde inte verifiera. Försök igen."),
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [turnstileSiteKey]);
+
+  const consumeTurnstileToken = () => {
+    const token = turnstileToken;
+    setTurnstileToken("");
+    if (window.turnstile && turnstileWidgetId.current != null) {
+      window.turnstile.reset(turnstileWidgetId.current);
+    }
+    return token;
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -357,6 +419,10 @@ export default function BookingPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!date || !time || !guests || !name || !email) return;
+    if (turnstileSiteKey && !turnstileToken) {
+      setSubmitError("Bekräfta att du inte är en robot.");
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     const resv: Reservation = {
@@ -381,6 +447,7 @@ export default function BookingPage() {
       return;
     }
     try {
+      const token = turnstileSiteKey ? consumeTurnstileToken() : "";
       const r = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -393,6 +460,7 @@ export default function BookingPage() {
           email: email.trim(),
           phone: phone.trim() || null,
           notes: notes.trim() || null,
+          turnstileToken: token || undefined,
         }),
       });
       const data = await r.json();
@@ -410,10 +478,15 @@ export default function BookingPage() {
   const askAi = async () => {
     const text = qaQuestion.trim();
     if (!text) return;
+    if (turnstileSiteKey && !turnstileToken) {
+      setQaAnswer("Bekräfta att du inte är en robot.");
+      return;
+    }
     setQaLoading(true);
     setQaAnswer(null);
     try {
       const nextHistory = [...qaHistory, { role: "user", content: text }];
+      const token = turnstileSiteKey ? consumeTurnstileToken() : "";
       const r = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -421,6 +494,7 @@ export default function BookingPage() {
           message: text,
           knowledge: publicSettings?.knowledge_public ?? "",
           history: nextHistory,
+          turnstileToken: token || undefined,
           context: {
             baseDate: date,
             nowTime: `${new Date().getHours().toString().padStart(2, "0")}:${new Date().getMinutes().toString().padStart(2, "0")}`,
@@ -534,10 +608,18 @@ export default function BookingPage() {
                         );
                       })}
                     </div>
+                    {turnstileSiteKey ? (
+                      <div className="mt-6">
+                        <div ref={turnstileRef} className="min-h-[65px]" />
+                        {turnstileError ? (
+                          <div className="mt-2 text-xs text-rose-600">{turnstileError}</div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <button
                       type="submit"
-                      disabled={!date || !time || !guests || !name || !email || submitting || !avail.canFit}
-                      className="mt-6 w-full px-5 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-600 to-pink-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
+                      disabled={!date || !time || !guests || !name || !email || submitting || !avail.canFit || (turnstileSiteKey ? !turnstileToken : false)}
+                      className="mt-4 w-full px-5 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-600 to-pink-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
                     >
                       {submitting ? "Skickar…" : "BOKA"}
                     </button>

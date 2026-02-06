@@ -15,6 +15,7 @@ type BookingSettings = {
 };
 
 const getEnv = (key: string) => process.env[key] ?? "";
+const getSiteUrl = () => getEnv("SITE_URL") || "https://www.bokata.se";
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 20;
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
@@ -67,13 +68,28 @@ const pickPeriodForDate = (periods: any[], iso: string) => {
 };
 const normalizeTime = (t: string) => (t?.length >= 5 ? t.slice(0, 5) : t);
 
+const verifyTurnstile = async (token: string, ip: string) => {
+  const secret = getEnv("TURNSTILE_SECRET_KEY");
+  if (!secret) return { ok: false, error: "Missing TURNSTILE_SECRET_KEY" };
+  const body = new URLSearchParams({ secret, response: token });
+  if (ip) body.set("remoteip", ip);
+  const resp = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const data = (await resp.json()) as { success?: boolean };
+  return { ok: !!data?.success, error: data?.success ? null : "Turnstile failed" };
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method Not Allowed" });
     return;
   }
 
-  const limiter = rateLimit(`bookings:${getClientIp(req)}`);
+  const ip = getClientIp(req);
+  const limiter = rateLimit(`bookings:${ip}`);
   if (!limiter.ok) {
     res.status(429).json({ error: "För många försök. Försök igen om en minut." });
     return;
@@ -109,10 +125,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     email?: string;
     phone?: string | null;
     notes?: string | null;
+    turnstileToken?: string;
   };
+  const turnstileToken = (req.body as { turnstileToken?: string })?.turnstileToken ?? "";
 
   if (!restaurantId || !date || !time || !guests || !name || !email) {
     res.status(400).json({ error: "Missing booking fields" });
+    return;
+  }
+
+  if (!turnstileToken) {
+    res.status(403).json({ error: "Turnstile verification required." });
+    return;
+  }
+  const turnstile = await verifyTurnstile(turnstileToken, ip);
+  if (!turnstile.ok) {
+    res.status(403).json({ error: "Turnstile verification failed." });
     return;
   }
 
@@ -313,7 +341,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const origin = `https://${req.headers.host}`;
+  const origin = getSiteUrl();
   const summary = `${date} kl ${time} • ${guests} gäster`;
 
   const sendEmail = async (to: string, subject: string, html: string) => {

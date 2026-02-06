@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
 const getEnv = (key: string) => process.env[key] ?? "";
+const getSiteUrl = () => getEnv("SITE_URL") || "https://www.bokata.se";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = String(req.query.token || "");
@@ -82,7 +83,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
   }
 
-  res
-    .status(200)
-    .send(action === "confirm" ? "Bokningen är bekräftad. Kunden har informerats." : "Bokningen är avböjd.");
+  res.status(200).send(
+    action === "confirm"
+      ? "Bokningen är bekräftad. Kunden har informerats."
+      : `Bokningen är avböjd.`
+  );
 }

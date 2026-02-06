@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { createClient } from "@supabase/supabase-js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -32,10 +33,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { message, knowledge, context, history } = (req.body ?? {}) as {
+  const { message, knowledge, context, history, turnstileToken } = (req.body ?? {}) as {
     message?: string;
     knowledge?: string;
     history?: { role: "user" | "assistant"; content: string }[];
+    turnstileToken?: string;
     context?: {
       baseDate?: string;
       nowTime?: string;
@@ -58,6 +60,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!message || typeof message !== "string") {
     res.status(400).json({ error: "Missing message" });
     return;
+  }
+
+  const verifyTurnstile = async (token: string, ip: string) => {
+    const secret = process.env.TURNSTILE_SECRET_KEY;
+    if (!secret) return { ok: false };
+    const body = new URLSearchParams({ secret, response: token });
+    if (ip) body.set("remoteip", ip);
+    const resp = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    const data = (await resp.json()) as { success?: boolean };
+    return { ok: !!data?.success };
+  };
+
+  const authHeader = req.headers.authorization || "";
+  const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  let authOk = false;
+  if (bearer) {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (supabaseUrl && anonKey) {
+      const authClient = createClient(supabaseUrl, anonKey, { auth: { persistSession: false } });
+      const { data } = await authClient.auth.getUser(bearer);
+      authOk = !!data?.user;
+    }
+  }
+
+  if (!authOk) {
+    if (!turnstileToken) {
+      res.status(403).json({ error: "Turnstile verification required." });
+      return;
+    }
+    const ip = (() => {
+      const xfwd = req.headers["x-forwarded-for"];
+      const val = Array.isArray(xfwd) ? xfwd[0] : xfwd;
+      return (val || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+    })();
+    const check = await verifyTurnstile(turnstileToken, ip);
+    if (!check.ok) {
+      res.status(403).json({ error: "Turnstile verification failed." });
+      return;
+    }
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
