@@ -221,7 +221,6 @@ function mockAvailability(date: string, time: string, guests: number) {
 export default function BookingPage() {
   const SECTION_PAD_Y = "py-10 md:py-12";
   const SECTION_PAD_X = "px-6 md:px-10";
-  const SECTION_PAD_Y_TIGHT = "py-2 md:py-4";
   const [restaurantSlug, setRestaurantSlug] = useState("demo");
   const [restaurantName, setRestaurantName] = useState<string | null>(null);
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
@@ -718,7 +717,7 @@ export default function BookingPage() {
                 {notes ? ` • ${notes}` : ""}
               </div>
 
-              <div className={`relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 ${SECTION_PAD_Y_TIGHT} ${SECTION_PAD_X}`}>
+              <div className={`relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 ${SECTION_PAD_Y} ${SECTION_PAD_X}`}>
                 <div className="max-w-6xl mx-auto flex flex-col lg:flex-row items-center gap-6">
                   <div className="w-full lg:w-[70%] rounded-3xl border border-violet-100 bg-white p-4 md:p-6 h-full flex flex-col">
                     <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
@@ -831,10 +830,10 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-0 py-10 text-left">
+      <footer className="mt-0 pt-4 pb-8 text-center">
         <div className="mx-auto max-w-5xl px-4">
-          <div className="flex flex-col items-start gap-6 md:flex-row md:items-center md:justify-between">
-            <div>
+          <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:justify-between">
+            <div className="md:flex-1 md:text-center">
               <div className="text-2xl md:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-pink-500 to-rose-500">
                 Bokäta
               </div>
@@ -849,7 +848,7 @@ export default function BookingPage() {
               </a>
             </div>
             {!created && turnstileSiteKey ? (
-              <div className="flex flex-col items-start md:items-end">
+              <div className="flex flex-col items-center md:flex-1 md:items-end">
                 <div className="origin-top-left scale-50">
                   <div ref={turnstileRef} className="min-h-[65px]" />
                 </div>
