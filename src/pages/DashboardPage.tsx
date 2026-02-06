@@ -590,26 +590,38 @@ export default function ReservationDashboard() {
     const load = async () => {
       if (!session?.user?.id) return;
       const userId = session.user.id;
-      const userEmail = session.user.email ?? "";
+      const userEmail = (session.user.email ?? "").trim().toLowerCase();
 
       setAccessDenied(null);
-      const { data: member } = await supabase
+      const { data: member, error: memberError } = await supabase
         .from("memberships")
         .select("id")
         .eq("user_id", userId)
         .limit(1)
         .maybeSingle();
+      if (memberError) {
+        console.error("Membership lookup error", memberError);
+      }
 
-      const { data: sub } = await supabase
-        .from("stripe_subscriptions")
-        .select("status")
-        .eq("email", userEmail)
-        .in("status", ["active", "trialing"])
-        .limit(1)
-        .maybeSingle();
+      const { data: sub, error: subError } = userEmail
+        ? await supabase
+            .from("stripe_subscriptions")
+            .select("status")
+            .eq("email", userEmail)
+            .in("status", ["active", "trialing"])
+            .limit(1)
+            .maybeSingle()
+        : { data: null, error: null };
+      if (subError) {
+        console.error("Stripe subscription lookup error", subError);
+      }
 
       if (!member && !sub) {
-        setAccessDenied("Du saknar aktivt abonnemang. Kontakta oss om du behöver åtkomst.");
+        const baseMsg = "Du saknar aktivt abonnemang. Kontakta oss om du behöver åtkomst.";
+        const emailMsg = userEmail ? ` (${userEmail})` : "";
+        const memberErrMsg = memberError ? ` | membership: ${memberError.message}` : "";
+        const subErrMsg = subError ? ` | subscription: ${subError.message}` : "";
+        setAccessDenied(`${baseMsg}${emailMsg}${memberErrMsg}${subErrMsg}`.trim());
         await supabase.auth.signOut();
         return;
       }

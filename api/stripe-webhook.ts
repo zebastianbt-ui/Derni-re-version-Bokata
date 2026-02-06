@@ -36,6 +36,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const serviceKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
   const supabase =
     supabaseUrl && serviceKey ? createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } }) : null;
+  if (!supabase) {
+    res.status(500).send("Missing Supabase env vars");
+    return;
+  }
   const resendKey = getEnv("RESEND_API_KEY");
   const resendFrom = getEnv("RESEND_FROM") || "Bokäta <no-reply@bokata.se>";
   const sig = req.headers["stripe-signature"];
@@ -71,7 +75,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
 
   const upsertSubscription = async (sub: Stripe.Subscription) => {
-    if (!supabase) return;
     const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
     let email: string | null = null;
     if (customerId) {
@@ -80,7 +83,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         email = (customer.email ?? null) as string | null;
       }
     }
-    await supabase.from("stripe_subscriptions").upsert(
+    if (email) email = email.trim().toLowerCase();
+    const { error } = await supabase.from("stripe_subscriptions").upsert(
       {
         stripe_subscription_id: sub.id,
         stripe_customer_id: customerId,
@@ -92,6 +96,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       { onConflict: "stripe_subscription_id" }
     );
+    if (error) {
+      console.error("Stripe webhook upsert error", error);
+    }
   };
 
   switch (event.type) {
@@ -108,6 +115,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             <p>Har du frågor? Svara på detta mail så hjälper vi dig.</p>
           `
         );
+      }
+      if (session.subscription) {
+        try {
+          const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
+          if (subId) {
+            const sub = await stripe.subscriptions.retrieve(subId);
+            await upsertSubscription(sub);
+          }
+        } catch (err) {
+          console.error("Stripe webhook checkout upsert error", err);
+        }
       }
       break;
     }

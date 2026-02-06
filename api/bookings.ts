@@ -3,7 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 
 type BookingSettings = {
-  seating?: { maxBookingDurationMin?: number };
+  seating?: {
+    maxBookingDurationMin?: number;
+    maxGuests?: number;
+    maxTables?: number;
+    maxGuestsPerReservation?: number;
+  };
   notify_email?: string | null;
   notify_enabled?: boolean | null;
   require_manual_confirmation?: boolean | null;
