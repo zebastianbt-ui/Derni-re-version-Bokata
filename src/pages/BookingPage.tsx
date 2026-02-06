@@ -239,7 +239,7 @@ function linkify(text: string) {
 }
 
 export default function BookingPage() {
-  const SECTION_PAD_Y = "py-10 md:py-12";
+  const SECTION_PAD_Y = "py-6 md:py-8";
   const SECTION_PAD_X = "px-6 md:px-10";
   const SECTION_PAD_Y_TIGHT = "py-6 md:py-8";
   const [restaurantSlug, setRestaurantSlug] = useState("demo");
@@ -640,6 +640,17 @@ export default function BookingPage() {
                     >
                       {submitting ? "Skickar…" : "BOKA"}
                     </button>
+                    {turnstileSiteKey ? (
+                      <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-violet-200 bg-white/80 px-4 py-3">
+                        <div className="text-xs font-semibold uppercase tracking-wider text-violet-700">Bokäta</div>
+                        <div className="flex flex-col items-end">
+                          <div ref={turnstileRef} className="min-h-[65px]" />
+                          {turnstileError ? (
+                            <div className="mt-2 text-xs text-rose-600">{turnstileError}</div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
                     {submitError ? (
                       <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 text-center">
                         {submitError}
@@ -870,14 +881,7 @@ export default function BookingPage() {
                 Driver du också restaurang? Upptäck Bokäta →
               </a>
             </div>
-            {!created && turnstileSiteKey ? (
-              <div className="flex flex-col items-center md:flex-1 md:items-end">
-                <div className="origin-top-left scale-50">
-                  <div ref={turnstileRef} className="min-h-[65px]" />
-                </div>
-                {turnstileError ? <div className="mt-2 text-xs text-rose-600">{turnstileError}</div> : null}
-              </div>
-            ) : null}
+            {null}
           </div>
           <div className="mt-4 text-xs text-gray-400">© 2026 Bokäta. Stockholm, Sweden. All rights reserved.</div>
         </div>
