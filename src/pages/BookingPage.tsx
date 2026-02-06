@@ -230,6 +230,7 @@ export default function BookingPage() {
   const [notes, setNotes] = useState("");
   const [created, setCreated] = useState<Reservation | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const [publicSettings, setPublicSettings] = useState<BookingPublicSettings | null>(null);
   const [qaQuestion, setQaQuestion] = useState("");
@@ -357,6 +358,7 @@ export default function BookingPage() {
     e.preventDefault();
     if (!date || !time || !guests || !name || !email) return;
     setSubmitting(true);
+    setSubmitError(null);
     const resv: Reservation = {
       id: makeId(),
       restaurantSlug,
@@ -396,11 +398,12 @@ export default function BookingPage() {
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error || "Kunde inte skicka bokning.");
       setCreated({ ...resv, status: data.status ?? resv.status });
+      setSubmitError(null);
       setSubmitting(false);
     } catch (err) {
       console.error(err);
       setSubmitting(false);
-      alert(err instanceof Error ? err.message : "Kunde inte skicka bokning.");
+      setSubmitError(err instanceof Error ? err.message : "Kunde inte skicka bokning.");
     }
   }
 
@@ -538,6 +541,11 @@ export default function BookingPage() {
                     >
                       {submitting ? "Skickar…" : "BOKA"}
                     </button>
+                    {submitError ? (
+                      <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 text-center">
+                        {submitError}
+                      </div>
+                    ) : null}
                   </div>
 
                   <div>

@@ -59,6 +59,32 @@ type HoursPeriod = {
   days: Record<DayName, { closed: boolean; open: string; close: string }>;
 };
 
+type FloorplanTable = {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  seats: number;
+  label?: string;
+};
+
+type FloorplanZone = {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  name: string;
+};
+
+type Floorplan = {
+  width: number;
+  height: number;
+  tables: FloorplanTable[];
+  zones: FloorplanZone[];
+};
+
 const makeDefaultDays = () => ({
   söndag: { closed: false, open: "11:00", close: "17:00" },
   måndag: { closed: false, open: "11:00", close: "17:00" },
@@ -206,6 +232,7 @@ const round30 = (t: string) => {
 const overlap = (aS: number, aE: number, bS: number, bE: number) => aS < bE && bS < aE;
 
 const uid = () => Math.random().toString(36).slice(2, 10);
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
 const toIsoDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const defaultPeriodRange = () => {
@@ -331,6 +358,7 @@ export default function ReservationDashboard() {
   const [profileEmail, setProfileEmail] = useState("");
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [restaurantName, setRestaurantName] = useState("");
+  const [restaurantRole, setRestaurantRole] = useState<string | null>(null);
   const [bookingLinkStatus, setBookingLinkStatus] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
@@ -346,6 +374,7 @@ export default function ReservationDashboard() {
   const [openBooking, setOpenBooking] = useState<Booking | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"overview" | "tableplan">("overview");
 
   const today = useMemo(() => new Date(), []);
 
@@ -451,6 +480,26 @@ export default function ReservationDashboard() {
 
   const [config, setConfig] = useState<Settings>(defaultSettings);
 
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const [floorplan, setFloorplan] = useState<Floorplan>({
+    width: 900,
+    height: 520,
+    tables: [
+      { id: uid(), x: 80, y: 80, w: 80, h: 60, seats: 2, label: "T1" },
+      { id: uid(), x: 200, y: 80, w: 80, h: 60, seats: 2, label: "T2" },
+      { id: uid(), x: 320, y: 80, w: 100, h: 70, seats: 4, label: "T3" },
+      { id: uid(), x: 80, y: 180, w: 120, h: 80, seats: 6, label: "T4" },
+    ],
+    zones: [
+      { id: uid(), x: 520, y: 70, w: 280, h: 160, name: "Terrass" },
+    ],
+  });
+  const [selectedItem, setSelectedItem] = useState<{ type: "table" | "zone"; id: string } | null>(null);
+  const [dragging, setDragging] = useState<{ type: "table" | "zone"; id: string; offsetX: number; offsetY: number } | null>(
+    null
+  );
+  const floorplanSaveTimer = useRef<number | null>(null);
+
   useEffect(() => {
     let active = true;
 
@@ -474,6 +523,67 @@ export default function ReservationDashboard() {
       sub.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    const loadPlan = async () => {
+      if (!restaurantId) return;
+      const { data, error } = await supabase
+        .from("floorplans")
+        .select("layout")
+        .eq("restaurant_id", restaurantId)
+        .maybeSingle();
+      if (error) return;
+      const layout = (data as { layout?: Floorplan })?.layout;
+      if (layout?.tables && layout?.zones) setFloorplan(layout);
+    };
+    loadPlan();
+  }, [restaurantId]);
+
+  useEffect(() => {
+    if (!restaurantId || restaurantRole !== "owner") return;
+    if (floorplanSaveTimer.current) window.clearTimeout(floorplanSaveTimer.current);
+    floorplanSaveTimer.current = window.setTimeout(async () => {
+      await supabase.from("floorplans").upsert(
+        {
+          restaurant_id: restaurantId,
+          layout: floorplan,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "restaurant_id" }
+      );
+    }, 800);
+    return () => {
+      if (floorplanSaveTimer.current) window.clearTimeout(floorplanSaveTimer.current);
+    };
+  }, [floorplan, restaurantId, restaurantRole]);
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: PointerEvent) => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const x = clamp(e.clientX - rect.left - dragging.offsetX, 0, rect.width - 40);
+      const y = clamp(e.clientY - rect.top - dragging.offsetY, 0, rect.height - 40);
+      if (dragging.type === "table") {
+        setFloorplan((prev) => ({
+          ...prev,
+          tables: prev.tables.map((t) => (t.id === dragging.id ? { ...t, x, y } : t)),
+        }));
+      } else {
+        setFloorplan((prev) => ({
+          ...prev,
+          zones: prev.zones.map((z) => (z.id === dragging.id ? { ...z, x, y } : z)),
+        }));
+      }
+    };
+    const onUp = () => setDragging(null);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [dragging]);
 
   useEffect(() => {
     const load = async () => {
@@ -510,6 +620,7 @@ export default function ReservationDashboard() {
       if (restaurant?.restaurantId) {
         setRestaurantId(restaurant.restaurantId);
         setRestaurantName(restaurant.name ?? "");
+        setRestaurantRole(restaurant.role ?? null);
       }
 
       const [{ data: profile }, { data: settings }, { data: bookingSettings }] = await Promise.all([
@@ -795,6 +906,58 @@ export default function ReservationDashboard() {
   }, []);
 
   const dayBookings = useMemo(() => bookings.filter((b) => b.date === dateSel), [bookings, dateSel]);
+
+  const bookingDates = useMemo(() => {
+    const set = new Set<string>();
+    bookings.forEach((b) => set.add(b.date));
+    return set;
+  }, [bookings]);
+
+  const isClosedDate = (iso: string) => {
+    const special = config.hours.special.find((s) => s.date === iso);
+    if (special) return special.closed;
+    const dt = new Date(iso + "T00:00:00Z");
+    if (Number.isNaN(dt.getTime())) return false;
+    const dayName = DAYS_SV[dt.getUTCDay()];
+    const periods = config.hours.periods ?? [];
+    const matches = periods.filter((p) => iso >= p.from && iso <= p.to);
+    const period =
+      matches.length > 0
+        ? matches.sort((a, b) => {
+            const spanA = Math.max(0, Math.floor((new Date(a.to).getTime() - new Date(a.from).getTime()) / 86400000));
+            const spanB = Math.max(0, Math.floor((new Date(b.to).getTime() - new Date(b.from).getTime()) / 86400000));
+            return spanA - spanB;
+          })[0]
+        : periods[periods.length - 1];
+    const day = (period?.days ?? config.hours.normal)[dayName];
+    return day?.closed ?? false;
+  };
+
+  const weekStats = useMemo(() => {
+    const toISO = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    const startOfWeek = (d: Date) => {
+      const copy = new Date(d);
+      const day = (copy.getDay() + 6) % 7;
+      copy.setDate(copy.getDate() - day);
+      copy.setHours(0, 0, 0, 0);
+      return copy;
+    };
+    const addDays = (d: Date, n: number) => {
+      const c = new Date(d);
+      c.setDate(c.getDate() + n);
+      return c;
+    };
+    const start = startOfWeek(today);
+    const end = addDays(start, 7);
+    const prevStart = addDays(start, -7);
+    const prevEnd = start;
+    const inRange = (iso: string, a: Date, b: Date) => iso >= toISO(a) && iso < toISO(b);
+    const curGuests = bookings.filter((b) => inRange(b.date, start, end)).reduce((s, b) => s + b.guests, 0);
+    const prevGuests = bookings.filter((b) => inRange(b.date, prevStart, prevEnd)).reduce((s, b) => s + b.guests, 0);
+    const diff = curGuests - prevGuests;
+    const pct = prevGuests > 0 ? Math.round((diff / prevGuests) * 100) : null;
+    return { curGuests, prevGuests, diff, pct };
+  }, [bookings, today]);
 
   const filtered = useMemo(() => {
     const [a, b] = MEAL_RANGES[activeMeal];
@@ -1590,27 +1753,54 @@ export default function ReservationDashboard() {
         </div>
       </header>
 
-      {/* Top stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Stat icon="📅" label="Bokningar idag" value={String(dayBookings.length)} />
-        <Stat icon="👥" label="Antal gäster idag" value={String(totalGuestsDay)} />
-        <Stat icon="🕒" label="Mest bokade tid" value={busiestLeast.max} />
-        <Stat icon="🕘" label="Minst bokade tid" value={busiestLeast.min} />
+      <div className="mb-6 flex flex-wrap gap-2">
+        <button
+          className={`px-4 py-2 rounded-full text-sm font-semibold border ${
+            activeTab === "overview" ? "bg-white text-pink-700 border-pink-300" : "bg-pink-100 text-pink-700 border-pink-200"
+          }`}
+          onClick={() => setActiveTab("overview")}
+        >
+          Översikt
+        </button>
+        <button
+          className={`px-4 py-2 rounded-full text-sm font-semibold border ${
+            activeTab === "tableplan" ? "bg-white text-pink-700 border-pink-300" : "bg-pink-100 text-pink-700 border-pink-200"
+          }`}
+          onClick={() => setActiveTab("tableplan")}
+        >
+          Tableplan
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Stat icon="📈" label="Totalt denna vecka" value="348" />
-        <Stat icon="💗" label="Stammiskunder" value="35" />
-        <Stat
-          icon={<img src={bokataFork} alt="Bokata" className="h-4 w-4" />}
-          label="Svar skickade av AI"
-          value="37"
-          sub="denna vecka"
-        />
-      </div>
+      {activeTab === "overview" ? (
+        <>
+          {/* Top stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <Stat icon="📅" label="Bokningar idag" value={String(dayBookings.length)} />
+            <Stat icon="👥" label="Antal gäster idag" value={String(totalGuestsDay)} />
+            <Stat icon="🕒" label="Mest bokade tid" value={busiestLeast.max} />
+            <Stat icon="🕘" label="Minst bokade tid" value={busiestLeast.min} />
+          </div>
 
-      {/* Calendar + Day view */}
-      <div className="bg-white shadow rounded-lg p-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <Stat icon="💗" label="Stammiskunder" value="35" />
+            <Stat
+              icon={<img src={bokataFork} alt="Bokata" className="h-4 w-4" />}
+              label="Svar skickade av AI"
+              value="37"
+              sub="denna vecka"
+            />
+            <Stat icon="📈" label="Totalt denna vecka" value={String(weekStats.curGuests)} sub="gäster" />
+            <Stat
+              icon="↕️"
+              label="Vs förra veckan"
+              value={`${weekStats.diff >= 0 ? "+" : ""}${weekStats.diff} gäster`}
+              sub={weekStats.pct != null ? `${weekStats.pct >= 0 ? "+" : ""}${weekStats.pct}%` : "—"}
+            />
+          </div>
+
+          {/* Calendar + Day view */}
+          <div className="bg-white shadow rounded-lg p-4">
         <h3 className="text-lg font-bold text-gray-700 mb-4">
           {(() => {
             const dd = new Date(year, month, selectedSafe);
@@ -1668,7 +1858,8 @@ export default function ReservationDashboard() {
                 if (!c.day) return <div key={c.key} />;
                 const sel = c.day === selectedSafe;
                 const dateStr = `${year}-${pad2(month + 1)}-${pad2(c.day)}`;
-                const isClosed = config.hours.special.some((s) => s.date === dateStr && s.closed);
+                const isClosed = isClosedDate(dateStr);
+                const hasBooking = bookingDates.has(dateStr);
                 return (
                   <div
                     key={c.key}
@@ -1683,7 +1874,10 @@ export default function ReservationDashboard() {
                     role="button"
                     tabIndex={0}
                   >
-                    <div className="text-sm font-semibold">{c.day}</div>
+                    <div className="text-sm font-semibold flex items-center gap-1">
+                      {c.day}
+                      {hasBooking ? <span className="text-[9px] leading-none">🔴</span> : null}
+                    </div>
                     {isClosed && <div className="text-[10px] text-gray-500">Stängt</div>}
                   </div>
                 );
@@ -1746,7 +1940,7 @@ export default function ReservationDashboard() {
                                     className="inline-flex items-center rounded-full bg-pink-200 text-pink-800 text-[10px] px-2 py-0.5 font-semibold"
                                     title={b.notes || "Särskilt önskemål"}
                                   >
-                                    !
+                                    📎
                                   </span>
                                 )}
                               </div>
@@ -1762,6 +1956,273 @@ export default function ReservationDashboard() {
           </div>
         </div>
       </div>
+        </>
+      ) : (
+        <div className="bg-white shadow rounded-lg p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-gray-700">Tableplan</h3>
+              <p className="text-sm text-gray-500">Dra och släpp bord samt zoner.</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                className="px-3 py-2 rounded-lg border border-pink-200 text-pink-700 bg-pink-50 hover:bg-pink-100 text-sm disabled:opacity-60"
+                disabled={restaurantRole !== "owner"}
+                onClick={() =>
+                  setFloorplan((prev) => ({
+                    ...prev,
+                    tables: [
+                      ...prev.tables,
+                      { id: uid(), x: 80, y: 80, w: 90, h: 60, seats: 4, label: `T${prev.tables.length + 1}` },
+                    ],
+                  }))
+                }
+              >
+                + Bord
+              </button>
+              <button
+                className="px-3 py-2 rounded-lg border border-pink-200 text-pink-700 bg-pink-50 hover:bg-pink-100 text-sm disabled:opacity-60"
+                disabled={restaurantRole !== "owner"}
+                onClick={() =>
+                  setFloorplan((prev) => ({
+                    ...prev,
+                    zones: [
+                      ...prev.zones,
+                      { id: uid(), x: 460, y: 90, w: 260, h: 140, name: `Zon ${prev.zones.length + 1}` },
+                    ],
+                  }))
+                }
+              >
+                + Zon
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            <div className="lg:col-span-3">
+              <div
+                ref={canvasRef}
+                className="relative w-full rounded-2xl border border-pink-200 bg-gradient-to-br from-pink-50 to-purple-50 overflow-hidden"
+                style={{ height: 520 }}
+              >
+                {floorplan.zones.map((z) => (
+                  <div
+                    key={z.id}
+                    onPointerDown={(e) => {
+                      if (restaurantRole !== "owner") return;
+                      const rect = canvasRef.current?.getBoundingClientRect();
+                      if (!rect) return;
+                      setSelectedItem({ type: "zone", id: z.id });
+                      setDragging({
+                        type: "zone",
+                        id: z.id,
+                        offsetX: e.clientX - rect.left - z.x,
+                        offsetY: e.clientY - rect.top - z.y,
+                      });
+                    }}
+                    className={`absolute rounded-xl border-2 border-dashed ${
+                      selectedItem?.type === "zone" && selectedItem.id === z.id ? "border-pink-400" : "border-pink-200"
+                    } bg-white/60`}
+                    style={{ left: z.x, top: z.y, width: z.w, height: z.h }}
+                  >
+                    <div className="text-xs font-semibold text-pink-700 px-2 py-1">{z.name}</div>
+                  </div>
+                ))}
+                {floorplan.tables.map((t) => (
+                  <div
+                    key={t.id}
+                    onPointerDown={(e) => {
+                      if (restaurantRole !== "owner") return;
+                      const rect = canvasRef.current?.getBoundingClientRect();
+                      if (!rect) return;
+                      setSelectedItem({ type: "table", id: t.id });
+                      setDragging({
+                        type: "table",
+                        id: t.id,
+                        offsetX: e.clientX - rect.left - t.x,
+                        offsetY: e.clientY - rect.top - t.y,
+                      });
+                    }}
+                    className={`absolute rounded-xl border ${
+                      selectedItem?.type === "table" && selectedItem.id === t.id ? "border-pink-500" : "border-pink-300"
+                    } bg-white shadow-sm flex items-center justify-center`}
+                    style={{ left: t.x, top: t.y, width: t.w, height: t.h }}
+                  >
+                    <div className="text-center">
+                      <div className="text-xs font-semibold text-gray-700">{t.label || "Bord"}</div>
+                      <div className="text-[11px] text-gray-500">{t.seats} platser</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-pink-200 bg-white p-4">
+              <div className="text-sm font-semibold text-gray-700 mb-3">Egenskaper</div>
+              {restaurantRole !== "owner" ? (
+                <div className="text-xs text-gray-500 mb-3">Endast ägaren kan redigera tableplan.</div>
+              ) : null}
+              {selectedItem ? (
+                selectedItem.type === "table" ? (
+                  (() => {
+                    const t = floorplan.tables.find((x) => x.id === selectedItem.id);
+                    if (!t) return null;
+                    return (
+                      <div className="space-y-3 text-sm">
+                        <Field label="Label">
+                          <input
+                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                            value={t.label ?? ""}
+                            disabled={restaurantRole !== "owner"}
+                            onChange={(e) =>
+                              setFloorplan((prev) => ({
+                                ...prev,
+                                tables: prev.tables.map((x) => (x.id === t.id ? { ...x, label: e.target.value } : x)),
+                              }))
+                            }
+                          />
+                        </Field>
+                        <Field label="Platser">
+                          <input
+                            type="number"
+                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                            value={t.seats}
+                            disabled={restaurantRole !== "owner"}
+                            onChange={(e) =>
+                              setFloorplan((prev) => ({
+                                ...prev,
+                                tables: prev.tables.map((x) =>
+                                  x.id === t.id ? { ...x, seats: Number(e.target.value) || 0 } : x
+                                ),
+                              }))
+                            }
+                          />
+                        </Field>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Field label="Bredd">
+                            <input
+                              type="number"
+                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                              value={t.w}
+                              disabled={restaurantRole !== "owner"}
+                              onChange={(e) =>
+                                setFloorplan((prev) => ({
+                                  ...prev,
+                                  tables: prev.tables.map((x) =>
+                                    x.id === t.id ? { ...x, w: Number(e.target.value) || 40 } : x
+                                  ),
+                                }))
+                              }
+                            />
+                          </Field>
+                          <Field label="Höjd">
+                            <input
+                              type="number"
+                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                              value={t.h}
+                              disabled={restaurantRole !== "owner"}
+                              onChange={(e) =>
+                                setFloorplan((prev) => ({
+                                  ...prev,
+                                  tables: prev.tables.map((x) =>
+                                    x.id === t.id ? { ...x, h: Number(e.target.value) || 40 } : x
+                                  ),
+                                }))
+                              }
+                            />
+                          </Field>
+                        </div>
+                        <button
+                          className="w-full rounded-lg border border-rose-200 bg-rose-50 text-rose-700 px-3 py-2 disabled:opacity-60"
+                          disabled={restaurantRole !== "owner"}
+                          onClick={() =>
+                            setFloorplan((prev) => ({
+                              ...prev,
+                              tables: prev.tables.filter((x) => x.id !== t.id),
+                            }))
+                          }
+                        >
+                          Ta bort bord
+                        </button>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  (() => {
+                    const z = floorplan.zones.find((x) => x.id === selectedItem.id);
+                    if (!z) return null;
+                    return (
+                      <div className="space-y-3 text-sm">
+                        <Field label="Namn">
+                          <input
+                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                            value={z.name}
+                            disabled={restaurantRole !== "owner"}
+                            onChange={(e) =>
+                              setFloorplan((prev) => ({
+                                ...prev,
+                                zones: prev.zones.map((x) => (x.id === z.id ? { ...x, name: e.target.value } : x)),
+                              }))
+                            }
+                          />
+                        </Field>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Field label="Bredd">
+                            <input
+                              type="number"
+                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                              value={z.w}
+                              disabled={restaurantRole !== "owner"}
+                              onChange={(e) =>
+                                setFloorplan((prev) => ({
+                                  ...prev,
+                                  zones: prev.zones.map((x) =>
+                                    x.id === z.id ? { ...x, w: Number(e.target.value) || 80 } : x
+                                  ),
+                                }))
+                              }
+                            />
+                          </Field>
+                          <Field label="Höjd">
+                            <input
+                              type="number"
+                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                              value={z.h}
+                              disabled={restaurantRole !== "owner"}
+                              onChange={(e) =>
+                                setFloorplan((prev) => ({
+                                  ...prev,
+                                  zones: prev.zones.map((x) =>
+                                    x.id === z.id ? { ...x, h: Number(e.target.value) || 80 } : x
+                                  ),
+                                }))
+                              }
+                            />
+                          </Field>
+                        </div>
+                        <button
+                          className="w-full rounded-lg border border-rose-200 bg-rose-50 text-rose-700 px-3 py-2 disabled:opacity-60"
+                          disabled={restaurantRole !== "owner"}
+                          onClick={() =>
+                            setFloorplan((prev) => ({
+                              ...prev,
+                              zones: prev.zones.filter((x) => x.id !== z.id),
+                            }))
+                          }
+                        >
+                          Ta bort zon
+                        </button>
+                      </div>
+                    );
+                  })()
+                )
+              ) : (
+                <div className="text-xs text-gray-500">Klicka på ett bord eller en zon.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Note modal */}
   {openBooking && (

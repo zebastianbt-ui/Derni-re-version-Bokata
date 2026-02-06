@@ -10,10 +10,67 @@ type BookingSettings = {
 };
 
 const getEnv = (key: string) => process.env[key] ?? "";
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 20;
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+const getClientIp = (req: VercelRequest) => {
+  const xfwd = req.headers["x-forwarded-for"];
+  const ip = Array.isArray(xfwd) ? xfwd[0] : xfwd;
+  return (ip || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+};
+
+const rateLimit = (key: string) => {
+  const now = Date.now();
+  const entry = rateLimitStore.get(key);
+  if (!entry || now > entry.resetAt) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { ok: true, remaining: RATE_LIMIT_MAX - 1, resetAt: now + RATE_LIMIT_WINDOW_MS };
+  }
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return { ok: false, remaining: 0, resetAt: entry.resetAt };
+  }
+  entry.count += 1;
+  return { ok: true, remaining: RATE_LIMIT_MAX - entry.count, resetAt: entry.resetAt };
+};
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const timeToMin = (t: string) => {
+  const [h, m] = t.split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return NaN;
+  return h * 60 + m;
+};
+const minToTime = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+const overlap = (aS: number, aE: number, bS: number, bE: number) => aS < bE && bS < aE;
+const toDayNameSv = (iso: string) => {
+  const d = new Date(iso + "T00:00:00Z");
+  if (Number.isNaN(d.getTime())) return null;
+  const names = ["söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag"];
+  return names[d.getUTCDay()];
+};
+const isIsoInRange = (iso: string, from: string, to: string) => iso >= from && iso <= to;
+const periodSpanDays = (from: string, to: string) => {
+  const a = new Date(from + "T00:00:00Z");
+  const b = new Date(to + "T00:00:00Z");
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return Number.POSITIVE_INFINITY;
+  return Math.max(0, Math.floor((b.getTime() - a.getTime()) / 86400000));
+};
+const pickPeriodForDate = (periods: any[], iso: string) => {
+  const matches = periods.filter((p) => isIsoInRange(iso, p.from, p.to));
+  if (!matches.length) return null;
+  return matches.sort((a, b) => periodSpanDays(a.from, a.to) - periodSpanDays(b.from, b.to))[0];
+};
+const normalizeTime = (t: string) => (t?.length >= 5 ? t.slice(0, 5) : t);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method Not Allowed" });
+    return;
+  }
+
+  const limiter = rateLimit(`bookings:${getClientIp(req)}`);
+  if (!limiter.ok) {
+    res.status(429).json({ error: "För många försök. Försök igen om en minut." });
     return;
   }
 
@@ -56,15 +113,171 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data: settings } = await supabase
     .from("booking_public_settings")
-    .select("seating,notify_email,notify_enabled,require_manual_confirmation")
+    .select("seating,hours,notify_email,notify_enabled,require_manual_confirmation")
     .eq("public_id", restaurantId)
     .maybeSingle();
 
-  const s = (settings ?? {}) as BookingSettings;
+  const s = (settings ?? {}) as BookingSettings & { hours?: any };
   const requireManual = !!s.require_manual_confirmation;
   const notifyEnabled = !!s.notify_enabled;
   const notifyEmail = s.notify_email || null;
   const durationMin = s.seating?.maxBookingDurationMin ?? 90;
+  const maxGuests = s.seating?.maxGuests ?? 60;
+  const maxTables = s.seating?.maxTables ?? 20;
+  const maxGuestsPerReservation = s.seating?.maxGuestsPerReservation ?? 22;
+
+  if (guests > maxGuestsPerReservation) {
+    res.status(400).json({ error: `För många gäster per bokning (max ${maxGuestsPerReservation}).` });
+    return;
+  }
+
+  const hours = s.hours ?? null;
+  if (hours) {
+    const special = Array.isArray(hours.special) ? hours.special : [];
+    const periods = Array.isArray(hours.periods) ? hours.periods : [];
+    const normal = hours.normal ?? null;
+    const dayName = toDayNameSv(date);
+    if (!dayName) {
+      res.status(400).json({ error: "Ogiltigt datum." });
+      return;
+    }
+    const specialDay = special.find((d: any) => d.date === date);
+    if (specialDay?.closed) {
+      res.status(400).json({ error: "Restaurangen är stängd den dagen." });
+      return;
+    }
+    let dayHours: { open: string; close: string } | null = null;
+    if (specialDay && !specialDay.closed) {
+      dayHours = { open: specialDay.open, close: specialDay.close };
+    } else {
+      const period = periods.length ? pickPeriodForDate(periods, date) : null;
+      const d = (period?.days ?? normal)?.[dayName];
+      if (!d || d.closed) {
+        res.status(400).json({ error: "Restaurangen är stängd den dagen." });
+        return;
+      }
+      dayHours = { open: d.open, close: d.close };
+    }
+    const t = timeToMin(time);
+    const openMin = timeToMin(dayHours.open);
+    const closeMin = timeToMin(dayHours.close);
+    const lastBookingBufferMin = 60;
+    const latestStart = Math.max(openMin, closeMin - lastBookingBufferMin);
+    if (!Number.isFinite(t) || t < openMin || t > latestStart) {
+      res.status(400).json({
+        error: `Ogiltig tid. Vi har öppet ${dayHours.open}–${dayHours.close}. Sista bokningsbara tiden är ${minToTime(latestStart)}.`,
+      });
+      return;
+    }
+  }
+
+  const { data: sameDayBookings } = await supabase
+    .from("bookings")
+    .select("time,guests,duration_min,status,table_id")
+    .eq("restaurant_id", restaurantId)
+    .eq("date", date)
+    .neq("status", "cancelled");
+
+  const startMin = timeToMin(normalizeTime(time));
+  const endMin = startMin + durationMin;
+  const overlapGuests =
+    (sameDayBookings ?? []).reduce((sum, b: any) => {
+      const bs = timeToMin(normalizeTime(b.time));
+      const bd = b.duration_min ?? durationMin;
+      const be = bs + bd;
+      if (!Number.isFinite(bs)) return sum;
+      if (!overlap(startMin, endMin, bs, be)) return sum;
+      return sum + (b.guests ?? 0);
+    }, 0) + guests;
+
+  if (overlapGuests > maxGuests) {
+    res.status(400).json({ error: "Tyvärr är det fullt vid den tiden." });
+    return;
+  }
+
+  let assignedTableId: number | null = null;
+  const { data: floorplanRow } = await supabase
+    .from("floorplans")
+    .select("layout")
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+
+  const planTables = (floorplanRow as any)?.layout?.tables as Array<{ seats?: number }> | undefined;
+  const tables =
+    Array.isArray(planTables) && planTables.length
+      ? planTables.map((t, i) => ({ id: i + 1, seats: Number(t.seats) || 0 })).filter((t) => t.seats > 0)
+      : [];
+
+  if (tables.length) {
+    const existing = (sameDayBookings ?? []).map((b: any) => ({
+      time: normalizeTime(b.time),
+      guests: Number(b.guests) || 0,
+      durationMin: b.duration_min ?? durationMin,
+      tableId: b.table_id ?? null,
+    }));
+
+    const assigned: Array<{ tableId: number; time: string; guests: number; durationMin: number }> = [];
+
+    for (const b of existing) {
+      if (b.tableId) {
+        assigned.push({ tableId: b.tableId, time: b.time, guests: b.guests, durationMin: b.durationMin });
+      }
+    }
+
+    const needsAssign = existing
+      .filter((b) => !b.tableId)
+      .sort((a, b) => b.guests - a.guests || timeToMin(a.time) - timeToMin(b.time));
+
+    let overbooked = false;
+    const canUseTable = (tableId: number, t: string, dur: number) => {
+      const s = timeToMin(t);
+      const e = s + dur;
+      return !assigned.some((x) => {
+        if (x.tableId !== tableId) return false;
+        const xs = timeToMin(x.time);
+        const xe = xs + x.durationMin;
+        return overlap(s, e, xs, xe);
+      });
+    };
+
+    for (const b of needsAssign) {
+      const eligible = tables.filter((t) => t.seats >= b.guests).sort((a, b) => a.seats - b.seats);
+      const chosen = eligible.find((t) => canUseTable(t.id, b.time, b.durationMin));
+      if (chosen) {
+        assigned.push({ tableId: chosen.id, time: b.time, guests: b.guests, durationMin: b.durationMin });
+      } else {
+        overbooked = true;
+      }
+    }
+
+    if (overbooked) {
+      res.status(400).json({ error: "Tyvärr finns det inga lediga bord vid den tiden." });
+      return;
+    }
+
+    const eligible = tables.filter((t) => t.seats >= guests).sort((a, b) => a.seats - b.seats);
+    const chosen = eligible.find((t) => canUseTable(t.id, normalizeTime(time), durationMin));
+    if (!chosen) {
+      res.status(400).json({ error: "Tyvärr finns det inga lediga bord vid den tiden." });
+      return;
+    }
+    assignedTableId = chosen.id;
+  } else {
+    const overlapTables =
+      (sameDayBookings ?? []).reduce((sum, b: any) => {
+        const bs = timeToMin(normalizeTime(b.time));
+        const bd = b.duration_min ?? durationMin;
+        const be = bs + bd;
+        if (!Number.isFinite(bs)) return sum;
+        if (!overlap(startMin, endMin, bs, be)) return sum;
+        return sum + 1;
+      }, 0) + 1;
+
+    if (overlapTables > maxTables) {
+      res.status(400).json({ error: "Tyvärr finns det inga lediga bord vid den tiden." });
+      return;
+    }
+  }
 
   const confirmToken = requireManual ? crypto.randomUUID() : null;
   const status = requireManual ? "pending" : "confirmed";
@@ -81,6 +294,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       status,
       source: "web",
       duration_min: durationMin,
+      table_id: assignedTableId,
       client_email: email,
       client_phone: phone || null,
       confirm_token: confirmToken,
