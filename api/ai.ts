@@ -111,10 +111,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  const hoursOrder = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"];
   const hoursSummary = (() => {
     const normal = context?.hours?.normal;
     const periods = context?.hours?.periods;
-    const order = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"];
     const base = context?.baseDate;
     const period =
       base && Array.isArray(periods)
@@ -124,7 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : null;
     const days = period?.days ?? normal;
     if (!days) return "";
-    const lines = order.map((d) => {
+    const lines = hoursOrder.map((d) => {
       const day = days[d];
       if (!day) return null;
       return day.closed ? `${d}: stängt` : `${d}: ${day.open}–${day.close}`;
@@ -132,6 +132,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const range = period ? ` (${period.from}–${period.to})` : "";
     return `${lines.filter(Boolean).join(", ")}${range}`;
   })();
+
+  const describePeriodHours = (period?: { from: string; to: string; days: Record<string, { closed: boolean; open: string; close: string }> } | null) => {
+    if (!period) return "";
+    const days = period.days ?? context?.hours?.normal;
+    if (!days) return "";
+    const lines = hoursOrder
+      .map((d) => {
+        const day = days[d];
+        if (!day) return null;
+        return day.closed ? `${d}: stängt` : `${d}: ${day.open}–${day.close}`;
+      })
+      .filter(Boolean);
+    const range = period.from && period.to ? ` (${period.from}–${period.to})` : "";
+    return `${lines.join(", ")}${range}`;
+  };
 
   const pad2Local = (n: number) => String(n).padStart(2, "0");
   const realToday = (() => {
@@ -1212,6 +1227,31 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
         ),
       });
       return;
+    }
+    if (/(sommar|sommaröppettider|été|ete|summer|summer hours)/i.test(msgLower)) {
+      const periods = context?.hours?.periods ?? [];
+      const byName = periods.find((p) => (p?.name ? /(sommar|été|ete|summer)/i.test(p.name) : false)) ?? null;
+      const byMonth =
+        byName ??
+        periods.find((p) => {
+          const fromMonth = Number(p?.from?.slice(5, 7));
+          const toMonth = Number(p?.to?.slice(5, 7));
+          if (!fromMonth || !toMonth) return false;
+          if (fromMonth <= toMonth) return fromMonth <= 8 && toMonth >= 6;
+          return false;
+        }) ??
+        null;
+      const summary = describePeriodHours(byMonth);
+      if (summary) {
+        res.status(200).json({
+          reply: t(
+            `Sommaröppettider: ${summary}.`,
+            `Horaires d'été : ${summary}.`,
+            `Summer hours: ${summary}.`
+          ),
+        });
+        return;
+      }
     }
     if (/nästa vecka|semaine prochaine|next week/i.test(msgLower)) {
       const baseDt = toUtcDate(base) ?? new Date();

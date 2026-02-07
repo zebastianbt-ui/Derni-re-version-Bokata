@@ -1209,7 +1209,8 @@ export default function ReservationDashboard() {
     addOnboardingFaq(pick);
   };
 
-  const buildKnowledge = (data: typeof onboarding, faqs: { q: string; a: string }[], siteUrl: string) => {
+  const buildKnowledge = (data: typeof onboarding, faqs: { q: string; a: string }[], webSearch: Settings["ai"]["webSearch"]) => {
+    const web = webSearch?.enabled ? webSearch : null;
     const kidsParts = [
       data.kidsChair ? "barnstol" : "",
       data.kidsMenu ? "barnmeny" : "",
@@ -1222,7 +1223,10 @@ export default function ReservationDashboard() {
       data.address ? `Adress: ${data.address}` : "",
       data.phone ? `Telefon: ${data.phone}` : "",
       data.email ? `E-post: ${data.email}` : "",
-      siteUrl ? `Webbplats: ${siteUrl}` : "",
+      web?.siteUrl ? `Webbplats: ${web.siteUrl}` : "",
+      web?.googleMapsUrl ? `Google Maps: ${web.googleMapsUrl}` : "",
+      web?.facebookUrl ? `Facebook: ${web.facebookUrl}` : "",
+      web?.instagramUrl ? `Instagram: ${web.instagramUrl}` : "",
       data.payment ? `Betalning: ${data.payment}` : "",
       data.allergies ? `Allergier: ${data.allergies}` : "",
       kidsLine,
@@ -1253,9 +1257,18 @@ export default function ReservationDashboard() {
 
   useEffect(() => {
     if (!onboardingDirty) return;
-    const next = buildKnowledge(onboarding, onboardingFaqs, config.ai.webSearch.siteUrl || "");
+    const next = buildKnowledge(onboarding, onboardingFaqs, config.ai.webSearch);
     setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: next } }));
-  }, [onboarding, onboardingFaqs, onboardingDirty, config.ai.webSearch.siteUrl]);
+  }, [
+    onboarding,
+    onboardingFaqs,
+    onboardingDirty,
+    config.ai.webSearch.enabled,
+    config.ai.webSearch.siteUrl,
+    config.ai.webSearch.googleMapsUrl,
+    config.ai.webSearch.facebookUrl,
+    config.ai.webSearch.instagramUrl,
+  ]);
 
   useEffect(() => {
     if (onboardingDirty) return;
@@ -3488,17 +3501,47 @@ function Stat({
 }
 
 function linkify(text: string) {
-  const parts = text.split(/(https?:\/\/[^\s)]+)\b/);
-  return parts.map((part, idx) => {
-    if (/^https?:\/\//i.test(part)) {
-      return (
-        <a key={`${part}-${idx}`} href={part} target="_blank" rel="noreferrer" className="text-pink-700 underline">
-          {part}
-        </a>
-      );
+  const nodes: React.ReactNode[] = [];
+  const mdLink = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null = null;
+  let key = 0;
+
+  const pushPlain = (segment: string) => {
+    const parts = segment.split(/(https?:\/\/[^\s)]+)\b/);
+    parts.forEach((part) => {
+      if (!part) return;
+      if (/^https?:\/\//i.test(part)) {
+        nodes.push(
+          <a key={`url-${key++}`} href={part} target="_blank" rel="noreferrer" className="text-pink-700 underline">
+            {part}
+          </a>
+        );
+        return;
+      }
+      nodes.push(<React.Fragment key={`txt-${key++}`}>{part}</React.Fragment>);
+    });
+  };
+
+  while ((match = mdLink.exec(text))) {
+    if (match.index > lastIndex) {
+      pushPlain(text.slice(lastIndex, match.index));
     }
-    return <React.Fragment key={`${part}-${idx}`}>{part}</React.Fragment>;
-  });
+    const label = match[1];
+    const url = match[2];
+    nodes.push(
+      <a key={`md-${key++}`} href={url} target="_blank" rel="noreferrer" className="text-pink-700 underline">
+        {label}
+      </a>
+    );
+    lastIndex = mdLink.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    pushPlain(text.slice(lastIndex));
+  }
+
+  return nodes;
 }
 
 function Modal({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
