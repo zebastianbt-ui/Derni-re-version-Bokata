@@ -1348,7 +1348,8 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
             const label = rawLabel && !/^period\s*\d+/i.test(rawLabel) ? rawLabel : "";
             const summary = describePeriodHours(p as any);
             if (!summary) return "";
-            return label ? `${label}: ${summary}` : summary;
+            const range = p?.from && p?.to ? ` (${p.from}–${p.to})` : "";
+            return label ? `${label}: ${summary}${range}` : `${summary}${range}`;
           })
           .filter(Boolean);
         if (lines.length) {
@@ -1357,6 +1358,38 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
               `Sommaröppettider: ${lines.join(" | ")}`,
               `Horaires d'été : ${lines.join(" | ")}`,
               `Summer hours: ${lines.join(" | ")}`
+            )
+          );
+          return;
+        }
+      }
+    }
+    if (/(höst|host|autumn|fall|automne)/i.test(msgLower)) {
+      const periods = context?.hours?.periods ?? [];
+      const autumnPeriods = periods.filter((p) => {
+        if (p?.name && /(höst|host|autumn|fall|automne)/i.test(p.name)) return true;
+        return overlapsMonths(p?.from, p?.to, [9, 10, 11, 12]);
+      });
+      if (autumnPeriods.length) {
+        const lines = autumnPeriods
+          .map((p) => {
+            const rawLabel = p?.name?.trim() ? p.name.trim() : "";
+            const label = rawLabel && !/^period\s*\d+/i.test(rawLabel) ? rawLabel : "";
+            const summary = describePeriodHours(p as any);
+            if (!summary) return "";
+            const range = p?.from && p?.to ? ` (${p.from}–${p.to})` : "";
+            return label ? `${label}: ${summary}${range}` : `${summary}${range}`;
+          })
+          .filter(Boolean);
+        if (lines.length) {
+          const closedNotice = closedRanges.length
+            ? ` Stängt under: ${closedRanges.map((r) => `${r.start}–${r.end}`).join(", ")}.`
+            : "";
+          sendReply(
+            t(
+              `Höstens öppettider: ${lines.join(" | ")}.${closedNotice}`,
+              `Horaires d'automne : ${lines.join(" | ")}.${closedNotice}`,
+              `Autumn hours: ${lines.join(" | ")}.${closedNotice}`
             )
           );
           return;
