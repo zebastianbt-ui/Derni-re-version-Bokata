@@ -338,6 +338,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  const closedRanges = (() => {
+    const ranges: { start: string; end: string }[] = [];
+    const closedDates =
+      context?.hours?.special
+        ?.filter((s) => s.closed && s.date)
+        .map((s) => s.date)
+        .sort() ?? [];
+    if (closedDates.length) {
+      let start = closedDates[0];
+      let prev = closedDates[0];
+      for (let i = 1; i < closedDates.length; i++) {
+        const cur = closedDates[i];
+        const nextExpected = addDays(prev, 1);
+        if (nextExpected && cur === nextExpected) {
+          prev = cur;
+        } else {
+          ranges.push({ start, end: prev });
+          start = cur;
+          prev = cur;
+        }
+      }
+      ranges.push({ start, end: prev });
+    }
+    const periods = context?.hours?.periods ?? [];
+    for (const p of periods) {
+      const days = p?.days ? Object.values(p.days) : [];
+      if (days.length && days.every((d) => d?.closed)) {
+        ranges.push({ start: p.from, end: p.to });
+      }
+    }
+    if (!ranges.length) return ranges;
+    const sorted = ranges.slice().sort((a, b) => a.start.localeCompare(b.start));
+    const merged: { start: string; end: string }[] = [sorted[0]];
+    for (let i = 1; i < sorted.length; i++) {
+      const cur = sorted[i];
+      const last = merged[merged.length - 1];
+      const nextExpected = addDays(last.end, 1);
+      if (cur.start <= last.end || (nextExpected && cur.start === nextExpected)) {
+        if (cur.end > last.end) last.end = cur.end;
+      } else {
+        merged.push({ ...cur });
+      }
+    }
+    return merged;
+  })();
+  const closedRangeForDate = (iso?: string | null) => {
+    if (!iso) return null;
+    return closedRanges.find((r) => iso >= r.start && iso <= r.end) ?? null;
+  };
+
   let systemPrompt = "";
   const guardrailPrompt = `Rappel: tu parles toujours au nom de ${identityForPrompt.name}. Ne demande jamais quel établissement. Si une info est "Inconnu", dis-le clairement et invite à compléter la base Bokäta.`;
 
@@ -828,6 +878,99 @@ INTERDIT:
 Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE restaurant uniquement.
 `.trim();
 
+  const parseTime = (txt: string) => {
+    const m = txt.match(/\b(\d{1,2})(?:[:\.h](\d{2}))\b/);
+    if (m) {
+      const h = Number(m[1]);
+      const mm = Number(m[2]);
+      if (h >= 0 && h <= 23 && mm >= 0 && mm <= 59) return `${pad2(h)}:${pad2(mm)}`;
+    }
+    const hOnly = txt.match(/\bkl\s*(\d{1,2})\b/i) || txt.match(/\b(\d{1,2})\s*(?:tiden|tiden|tiden)\b/i);
+    if (hOnly) {
+      const h = Number(hOnly[1]);
+      if (h >= 0 && h <= 23) return `${pad2(h)}:00`;
+    }
+    return null;
+  };
+
+  const parseDate = (txt: string, baseDate?: string) => {
+    const realBase = fmtDate(new Date());
+    const base = baseDate ?? realBase;
+    if (/i\s*dag|idag/.test(txt)) return realBase;
+    if (/i\s*morgon|imorgon/.test(txt)) return addDays(realBase, 1);
+    if (/aujourd['’]hui|aujourdhui/.test(txt)) return realBase;
+    if (/demain/.test(txt)) return addDays(realBase, 1);
+    const iso = txt.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    const dmy = txt.match(/\b(\d{1,2})[\/\.](\d{1,2})\b/);
+    if (dmy) {
+      const d = Number(dmy[1]);
+      const m = Number(dmy[2]);
+      const [y] = base.split("-").map(Number);
+      if (d >= 1 && d <= 31 && m >= 1 && m <= 12) return `${y}-${pad2(m)}-${pad2(d)}`;
+    }
+    const months: Record<string, number> = {
+      jan: 1,
+      januari: 1,
+      feb: 2,
+      februari: 2,
+      mar: 3,
+      mars: 3,
+      apr: 4,
+      april: 4,
+      maj: 5,
+      jun: 6,
+      juni: 6,
+      jul: 7,
+      juli: 7,
+      aug: 8,
+      augusti: 8,
+      sep: 9,
+      september: 9,
+      okt: 10,
+      oktober: 10,
+      nov: 11,
+      november: 11,
+      dec: 12,
+      december: 12,
+    };
+    const dm = txt.match(/\b(\d{1,2})\s+([a-zåäö]+)\b/);
+    if (dm) {
+      const d = Number(dm[1]);
+      const m = months[dm[2]];
+      const [y] = base.split("-").map(Number);
+      if (d >= 1 && d <= 31 && m) return `${y}-${pad2(m)}-${pad2(d)}`;
+    }
+    const hasNext = /nästa/i.test(txt);
+    for (const d of weekdaySv) {
+      if (new RegExp(`\\b${d}\\b`, "i").test(txt)) {
+        const baseDt = toUtcDate(base);
+        if (!baseDt) return null;
+        const cur = baseDt.getUTCDay();
+        const target = weekdayIndex[d];
+        let delta = (target - cur + 7) % 7;
+        if (hasNext) delta = delta === 0 ? 7 : delta + 7;
+        return addDays(base, delta);
+      }
+    }
+    return null;
+  };
+
+  const parseGuests = (txt: string) => {
+    const m = txt.match(/\b(\d{1,3})\s*(gäster|pers|personer|person|guests)\b/i);
+    if (m) return Number(m[1]);
+    const v = txt.match(/\bvi\s*är\s*(\d{1,3})\b/i);
+    if (v) return Number(v[1]);
+    const nums = (txt.match(/\b\d{1,3}\b/g) || []).map(Number);
+    const filtered = nums.filter((n) => n > 0 && n <= 200);
+    return filtered.length ? filtered[0] : null;
+  };
+
+  const isBookingIntent = (txt: string) =>
+    /(boka|bokning|reservation|reservera|bord|table)/i.test(txt) ||
+    /\b\d{1,2}[:\.h]\d{2}\b/.test(txt) ||
+    /\b\d{1,3}\s*(gäster|guests|personer|pers)\b/i.test(txt);
+
   if (!FORCE_OPENAI) {
   const isRestaurantTopic =
     /(boka|bokning|reservation|reservera|réservation|reserver|bord|table|öppet|öppnar|öppning|öppettider|tider|stängt|open|opening|ouvert|horaires|adress|address|adresse|hitta|var ligger|ligger|kontakt|contact|telefon|email|e-post|meny|menu|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|parking|tillgäng|wheelchair|webbplats|hemsida|website|webb|länk|facebook|instagram|social|bus|m[ée]tro|tram|transport|transports|arr[êe]t|gare)/i.test(
@@ -838,58 +981,6 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     /^(varför|varfor|var|hur|vad|vilken|vilket|vilka|och|då|sa|så|ok|okej|tack)\b/i.test(msgLower) ||
     msgLower.length <= 12;
   const isWhyFollowUp = /^(varför|varfor)\b/i.test(msgLower);
-  const closedRanges = (() => {
-    const ranges: { start: string; end: string }[] = [];
-    const closedDates =
-      context?.hours?.special
-        ?.filter((s) => s.closed && s.date)
-        .map((s) => s.date)
-        .sort() ?? [];
-    if (closedDates.length) {
-      let start = closedDates[0];
-      let prev = closedDates[0];
-      for (let i = 1; i < closedDates.length; i++) {
-        const cur = closedDates[i];
-        const nextExpected = addDays(prev, 1);
-        if (nextExpected && cur === nextExpected) {
-          prev = cur;
-        } else {
-          ranges.push({ start, end: prev });
-          start = cur;
-          prev = cur;
-        }
-      }
-      ranges.push({ start, end: prev });
-    }
-    const periods = context?.hours?.periods ?? [];
-    for (const p of periods) {
-      const days = p?.days ? Object.values(p.days) : [];
-      if (days.length && days.every((d) => d?.closed)) {
-        ranges.push({ start: p.from, end: p.to });
-      }
-    }
-    if (!ranges.length) return ranges;
-    const sorted = ranges.slice().sort((a, b) => a.start.localeCompare(b.start));
-    const merged: { start: string; end: string }[] = [sorted[0]];
-    for (let i = 1; i < sorted.length; i++) {
-      const cur = sorted[i];
-      const last = merged[merged.length - 1];
-      const nextExpected = addDays(last.end, 1);
-      if (cur.start <= last.end || (nextExpected && cur.start === nextExpected)) {
-        if (cur.end > last.end) last.end = cur.end;
-      } else {
-        merged.push({ ...cur });
-      }
-    }
-    return merged;
-  })();
-  const closedRangeForDate = (iso?: string | null) => {
-    if (!iso) return null;
-    return closedRanges.find((r) => iso >= r.start && iso <= r.end) ?? null;
-  };
-
-  const siteUrl = kbInfo.website;
-
   if (isWhyFollowUp && closedRanges.length) {
     const rangesText = closedRanges
       .map((r) => (r.start === r.end ? r.start : `${r.start}–${r.end}`))
@@ -1084,84 +1175,6 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     return;
   }
 
-  const parseTime = (txt: string) => {
-    const m = txt.match(/\b(\d{1,2})(?:[:\.h](\d{2}))\b/);
-    if (m) {
-      const h = Number(m[1]);
-      const mm = Number(m[2]);
-      if (h >= 0 && h <= 23 && mm >= 0 && mm <= 59) return `${pad2(h)}:${pad2(mm)}`;
-    }
-    const hOnly = txt.match(/\bkl\s*(\d{1,2})\b/i) || txt.match(/\b(\d{1,2})\s*(?:tiden|tiden|tiden)\b/i);
-    if (hOnly) {
-      const h = Number(hOnly[1]);
-      if (h >= 0 && h <= 23) return `${pad2(h)}:00`;
-    }
-    return null;
-  };
-
-  const parseDate = (txt: string, baseDate?: string) => {
-    const realBase = fmtDate(new Date());
-    const base = baseDate ?? realBase;
-    if (/i\s*dag|idag/.test(txt)) return realBase;
-    if (/i\s*morgon|imorgon/.test(txt)) return addDays(realBase, 1);
-    if (/aujourd['’]hui|aujourdhui/.test(txt)) return realBase;
-    if (/demain/.test(txt)) return addDays(realBase, 1);
-    const iso = txt.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
-    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-    const dmy = txt.match(/\b(\d{1,2})[\/\.](\d{1,2})\b/);
-    if (dmy) {
-      const d = Number(dmy[1]);
-      const m = Number(dmy[2]);
-      const [y] = base.split("-").map(Number);
-      if (d >= 1 && d <= 31 && m >= 1 && m <= 12) return `${y}-${pad2(m)}-${pad2(d)}`;
-    }
-    const months: Record<string, number> = {
-      jan: 1,
-      januari: 1,
-      feb: 2,
-      februari: 2,
-      mar: 3,
-      mars: 3,
-      apr: 4,
-      april: 4,
-      maj: 5,
-      jun: 6,
-      juni: 6,
-      jul: 7,
-      juli: 7,
-      aug: 8,
-      augusti: 8,
-      sep: 9,
-      september: 9,
-      okt: 10,
-      oktober: 10,
-      nov: 11,
-      november: 11,
-      dec: 12,
-      december: 12,
-    };
-    const dm = txt.match(/\b(\d{1,2})\s+([a-zåäö]+)\b/);
-    if (dm) {
-      const d = Number(dm[1]);
-      const m = months[dm[2]];
-      const [y] = base.split("-").map(Number);
-      if (d >= 1 && d <= 31 && m) return `${y}-${pad2(m)}-${pad2(d)}`;
-    }
-    const hasNext = /nästa/i.test(txt);
-    for (const d of weekdaySv) {
-      if (new RegExp(`\\b${d}\\b`, "i").test(txt)) {
-        const baseDt = toUtcDate(base);
-        if (!baseDt) return null;
-        const cur = baseDt.getUTCDay();
-        const target = weekdayIndex[d];
-        let delta = (target - cur + 7) % 7;
-        if (hasNext) delta = delta === 0 ? 7 : delta + 7;
-        return addDays(base, delta);
-      }
-    }
-    return null;
-  };
-
   const isHoursQuestion = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
   if (isHoursQuestion) {
     const base = context?.baseDate ?? fmtDate(new Date());
@@ -1295,21 +1308,6 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       return;
     }
   }
-
-  const parseGuests = (txt: string) => {
-    const m = txt.match(/\b(\d{1,3})\s*(gäster|pers|personer|person|guests)\b/i);
-    if (m) return Number(m[1]);
-    const v = txt.match(/\bvi\s*är\s*(\d{1,3})\b/i);
-    if (v) return Number(v[1]);
-    const nums = (txt.match(/\b\d{1,3}\b/g) || []).map(Number);
-    const filtered = nums.filter((n) => n > 0 && n <= 200);
-    return filtered.length ? filtered[0] : null;
-  };
-
-  const isBookingIntent = (txt: string) =>
-    /(boka|bokning|reservation|reservera|bord|table)/i.test(txt) ||
-    /\b\d{1,2}[:\.h]\d{2}\b/.test(txt) ||
-    /\b\d{1,3}\s*(gäster|guests|personer|pers)\b/i.test(txt);
 
   const findAvailableTable = (args: {
     date: string;
@@ -1484,6 +1482,36 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     });
     return;
   }
+  }
+
+  if (context && isBookingIntent(message)) {
+    const date = parseDate(msgLower, context.baseDate);
+    if (date) {
+      const day = toUtcDate(date)?.getUTCDay();
+      const dayName = day != null ? weekdaySv[day] : null;
+      const range = closedRangeForDate(date);
+      if (range) {
+        res.status(200).json({
+          reply: t(
+            `Vi har en stängd period: ${range.start}–${range.end}.`,
+            `Nous sommes fermés du ${range.start} au ${range.end}.`,
+            `We’re closed from ${range.start}–${range.end}.`
+          ),
+        });
+        return;
+      }
+      const hours = getDayHours(date);
+      if (!hours || hours.closed || isClosedDate(date)) {
+        res.status(200).json({
+          reply: t(
+            `Tyvärr, vi har stängt ${dayName ? `på ${dayName}ar` : "den dagen"}.`,
+            `Désolé, nous sommes fermés ${dayName ? `le ${dayName}` : "ce jour‑là"}.`,
+            `Sorry, we’re closed ${dayName ? `on ${dayName}` : "that day"}.`
+          ),
+        });
+        return;
+      }
+    }
   }
 
   systemPrompt = buildSystemPrompt();

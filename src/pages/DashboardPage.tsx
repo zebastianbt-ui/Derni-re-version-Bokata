@@ -1081,7 +1081,9 @@ export default function ReservationDashboard() {
     email: "",
     payment: "",
     allergies: "",
-    kids: "",
+    kidsChair: false,
+    kidsMenu: false,
+    kidsNote: "",
     pets: "",
     parking: "",
     transport: "",
@@ -1178,7 +1180,7 @@ export default function ReservationDashboard() {
       "Webbplats: ...",
       "Betalning: ...",
       "Allergier: ...",
-      "Barn: ...",
+      "Barn: barnstol, barnmeny",
       "Djurpolicy: ...",
       "Parkering: ...",
       "Kollektivtrafik: ...",
@@ -1208,6 +1210,12 @@ export default function ReservationDashboard() {
   };
 
   const buildKnowledge = (data: typeof onboarding, faqs: { q: string; a: string }[], siteUrl: string) => {
+    const kidsParts = [
+      data.kidsChair ? "barnstol" : "",
+      data.kidsMenu ? "barnmeny" : "",
+      data.kidsNote ? data.kidsNote : "",
+    ].filter(Boolean);
+    const kidsLine = kidsParts.length ? `Barn: ${kidsParts.join(", ")}` : "";
     const lines = [
       "INFOS:",
       data.restaurantName ? `Namn: ${data.restaurantName}` : "",
@@ -1217,7 +1225,7 @@ export default function ReservationDashboard() {
       siteUrl ? `Webbplats: ${siteUrl}` : "",
       data.payment ? `Betalning: ${data.payment}` : "",
       data.allergies ? `Allergier: ${data.allergies}` : "",
-      data.kids ? `Barn: ${data.kids}` : "",
+      kidsLine,
       data.pets ? `Djurpolicy: ${data.pets}` : "",
       data.parking ? `Parkering: ${data.parking}` : "",
       data.transport ? `Kollektivtrafik: ${data.transport}` : "",
@@ -1266,7 +1274,18 @@ export default function ReservationDashboard() {
     data.email = mapField("E-post");
     data.payment = mapField("Betalning");
     data.allergies = mapField("Allergier");
-    data.kids = mapField("Barn");
+    const barnLine = mapField("Barn");
+    const barnstolField = mapField("Barnstol");
+    const barnmenyField = mapField("Barnmeny");
+    const barnTokens = barnLine
+      .split(/[,;]+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const hasBarnstol = /barnstol/i.test(barnLine) || /^(ja|yes|true)$/i.test(barnstolField);
+    const hasBarnmeny = /barnmeny/i.test(barnLine) || /^(ja|yes|true)$/i.test(barnmenyField);
+    data.kidsChair = hasBarnstol;
+    data.kidsMenu = hasBarnmeny;
+    data.kidsNote = barnTokens.filter((t) => !/barnstol|barnmeny/i.test(t)).join(", ");
     data.pets = mapField("Djurpolicy");
     data.parking = mapField("Parkering");
     data.transport = mapField("Kollektivtrafik");
@@ -3112,12 +3131,34 @@ export default function ReservationDashboard() {
                       setOnboardingDirty(true);
                     }}
                   />
+                  <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={onboarding.kidsChair}
+                      onChange={(e) => {
+                        setOnboarding({ ...onboarding, kidsChair: e.target.checked });
+                        setOnboardingDirty(true);
+                      }}
+                    />
+                    Barnstol
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={onboarding.kidsMenu}
+                      onChange={(e) => {
+                        setOnboarding({ ...onboarding, kidsMenu: e.target.checked });
+                        setOnboardingDirty(true);
+                      }}
+                    />
+                    Barnmeny
+                  </label>
                   <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                    placeholder="Barn (barnstol/barnmeny)"
-                    value={onboarding.kids}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
+                    placeholder="Barn (övrigt)"
+                    value={onboarding.kidsNote}
                     onChange={(e) => {
-                      setOnboarding({ ...onboarding, kids: e.target.value });
+                      setOnboarding({ ...onboarding, kidsNote: e.target.value });
                       setOnboardingDirty(true);
                     }}
                   />
