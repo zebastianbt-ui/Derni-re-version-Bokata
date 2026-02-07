@@ -292,9 +292,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!cleaned) return cleaned;
     return hasSmiley(cleaned) ? cleaned : `${cleaned} :)`;
   };
-  const sendReply = (text: string) => {
-    res.status(200).json({ reply: formatReply(text) });
-  };
   const normalize = (s: string) =>
     s
       .toLowerCase()
@@ -313,6 +310,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (/(hemsida|webbplats|website|site)/i.test(text)) return `${text} ${asUrl(kbInfo.website)}`;
     return text;
   };
+  const sendReply = (text: string) => {
+    res.status(200).json({ reply: formatReply(appendWebsiteIfMissing(text)) });
+  };
 
   const knowledgeText = (knowledge ?? "").trim();
   const knowledgeLines = knowledgeText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -327,12 +327,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     return "";
   };
+  const findFirstUrl = (text: string) => {
+    const match = text.match(/https?:\/\/[^\s]+/i);
+    return match ? match[0] : "";
+  };
   const kbInfo = {
     name: getField("Namn"),
     address: getField("Adress"),
     phone: getField("Telefon"),
     email: getField("E-post"),
-    website: asUrl(getFieldAny(["Webbplats", "Hemsida", "Website", "Site"]) || context?.restaurant?.website || ""),
+    website: asUrl(getFieldAny(["Webbplats", "Hemsida", "Website", "Site"]) || context?.restaurant?.website || findFirstUrl(knowledgeText) || ""),
     payment: getField("Betalning"),
     allergies: getField("Allergier"),
     kids: getField("Barn"),
@@ -1282,6 +1286,18 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
   const isHoursQuestion = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
   if (isHoursQuestion) {
     const base = context?.baseDate ?? fmtDate(new Date());
+    const currentClosed = closedRangeForDate(realToday);
+    const requestedDate = parseDate(msgLower, base);
+    if (currentClosed && (!requestedDate || (requestedDate >= currentClosed.start && requestedDate <= currentClosed.end))) {
+      sendReply(
+        t(
+          `Vi har stängt till ${currentClosed.end}.`,
+          `Nous sommes fermés jusqu’au ${currentClosed.end}.`,
+          `We’re closed until ${currentClosed.end}.`
+        )
+      );
+      return;
+    }
     const periodForBase = getPeriodForDate(base);
     if (isPeriodAllClosed(periodForBase, context?.hours?.normal)) {
       const range = periodForBase ? ` (${periodForBase.from}–${periodForBase.to})` : "";
@@ -1377,7 +1393,7 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       return;
     }
 
-    const date = parseDate(msgLower, base);
+    const date = requestedDate;
     if (date) {
       const range = closedRangeForDate(date);
       if (range) {

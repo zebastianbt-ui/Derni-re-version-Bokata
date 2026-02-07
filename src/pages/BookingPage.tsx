@@ -346,6 +346,17 @@ export default function BookingPage() {
     const value = nameLine.split(":").slice(1).join(":").trim();
     return value || null;
   };
+  const parseWebsiteFromKnowledge = (knowledge?: string | null) => {
+    if (!knowledge) return null;
+    const lines = knowledge.split(/\r?\n/).map((l) => l.trim());
+    const siteLine = lines.find((l) => l.toLowerCase().startsWith("webbplats:") || l.toLowerCase().startsWith("hemsida:") || l.toLowerCase().startsWith("website:"));
+    if (siteLine) {
+      const value = siteLine.split(":").slice(1).join(":").trim();
+      return value || null;
+    }
+    const match = knowledge.match(/https?:\/\/[^\s]+/i);
+    return match ? match[0] : null;
+  };
 
   useEffect(() => {
     const loadName = async () => {
@@ -368,6 +379,10 @@ export default function BookingPage() {
       setRestaurantName(parsed);
     }
   }, [publicSettings?.knowledge_public, restaurantName]);
+  const restaurantWebsite = useMemo(
+    () => parseWebsiteFromKnowledge(publicSettings?.knowledge_public ?? ""),
+    [publicSettings?.knowledge_public]
+  );
 
   const effectiveSettings = publicSettings ?? { public_id: restaurantSlug, hours: DEFAULT_HOURS, seating: DEFAULT_SEATING };
   const normalizedHours = useMemo(() => normalizeHours(effectiveSettings.hours), [effectiveSettings.hours]);
@@ -521,12 +536,13 @@ export default function BookingPage() {
           history: nextHistory,
           turnstileToken: token || undefined,
           context: {
-            baseDate: date,
+            baseDate: toISODateInputValue(),
             nowTime: `${new Date().getHours().toString().padStart(2, "0")}:${new Date().getMinutes().toString().padStart(2, "0")}`,
             hoursConfigured: !!publicSettings?.hours,
             requireManualConfirmation: !!publicSettings?.require_manual_confirmation,
             seating: effectiveSettings.seating,
             hours: publicSettings?.hours ? normalizedHours : undefined,
+            restaurant: restaurantWebsite ? { website: restaurantWebsite } : undefined,
           },
         }),
       });
@@ -568,7 +584,7 @@ export default function BookingPage() {
         </div>
       </header>
 
-      <main className={`max-w-6xl mx-auto px-4 pt-8 ${created ? "pb-8" : "pb-24 md:pb-4"}`}>
+      <main className={`max-w-6xl mx-auto px-4 pt-8 ${created ? "pb-8" : "pb-24 md:pb-0"}`}>
         {!created ? (
           <section id="booking">
             <form ref={formRef} onSubmit={submit} className="space-y-10">
@@ -745,7 +761,7 @@ export default function BookingPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-pink-100 bg-white px-6 py-4 text-center text-base md:text-lg text-gray-700 max-w-5xl mx-auto">
+              <div className="rounded-2xl border border-pink-100 bg-white px-6 py-5 text-center text-lg md:text-xl text-gray-700 max-w-5xl mx-auto">
                 <span className="font-semibold text-gray-900">Snabböversikt</span>{" "}
                 {new Date(date).toLocaleDateString()} • {guests} gäster
                 {name ? ` • ${name}` : ""}
@@ -778,12 +794,12 @@ export default function BookingPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="hidden lg:flex w-[30%] items-end justify-center">
+                  <div className="hidden lg:flex w-[30%] self-stretch items-center justify-center">
                     <img
                       src={forkTransparent}
                       alt=""
                       aria-hidden="true"
-                      className="h-32 w-auto pointer-events-none select-none"
+                      className="h-[80%] w-auto pointer-events-none select-none"
                     />
                   </div>
                 </div>
@@ -871,7 +887,7 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-0 pt-0 pb-8 text-center">
+      <footer className="mt-0 -mt-6 md:-mt-10 pt-0 pb-8 text-center">
         <div className="mx-auto max-w-5xl px-4">
           <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:justify-between">
             <div className="md:flex-1 md:text-center">
