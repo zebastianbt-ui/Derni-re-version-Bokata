@@ -1024,6 +1024,20 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     });
     return;
   }
+  if (
+    /(bra\s+ställe|bra\s+stalle|trevlig|trevligt|mysig|mysigt|härlig|harlig|fin\s+miljö|fin\s+miljo|stämning|stamning|atmosfär|atmosfar|ambiance|ambiance|sympa|agréable|agreable|good\s+place|nice\s+place|great\s+place|good\s+vibes|vibes|good\s+atmosphere|nice\s+atmosphere|food\s+good|maten\s+är\s+bra|maten\s+är\s+god|nourriture\s+est\s+bien|nourriture\s+est\s+bonne|food\s+is\s+great)/i.test(
+      msgLower
+    )
+  ) {
+    res.status(200).json({
+      reply: t(
+        "Ja! Vi gör vårt bästa för en varm, trivsam atmosfär och god mat. Du är varmt välkommen — vill du boka ett bord?",
+        "Oui ! On fait notre maximum pour une ambiance chaleureuse et une cuisine soignée. Vous êtes les bienvenus — souhaitez‑vous réserver ?",
+        "Yes! We aim for a warm, welcoming atmosphere and great food. You’re very welcome — would you like to book a table?"
+      ),
+    });
+    return;
+  }
 
   if (!FORCE_OPENAI) {
   const isRestaurantTopic =
