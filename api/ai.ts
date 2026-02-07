@@ -52,6 +52,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  const FORCE_OPENAI = true;
+
   const verifyTurnstile = async (token: string, ip: string) => {
     const secret = process.env.TURNSTILE_SECRET_KEY;
     if (!secret) return { ok: false };
@@ -130,6 +132,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     context?.seating?.maxGuests ? `Max gäster i restaurangen: ${context.seating.maxGuests}` : "",
     context?.seating?.maxGuestsPerReservation ? `Max gäster per bokning: ${context.seating.maxGuestsPerReservation}` : "",
   ].filter(Boolean).join("\n");
+
+  const qualityChecks = (() => {
+    const k = (knowledge ?? "").toLowerCase();
+    const anyOpenDay = context?.hours?.periods?.length
+      ? context.hours.periods.some((p) => Object.values(p.days ?? {}).some((d) => !d?.closed))
+      : context?.hours?.normal
+      ? Object.values(context.hours.normal).some((d) => !d?.closed)
+      : false;
+    return [
+      { key: "Öppettider", ok: anyOpenDay },
+      { key: "Adress", ok: /adress/.test(k) },
+      { key: "Telefon", ok: /telefon|tel|phone/.test(k) },
+      { key: "E-post", ok: /e-post|email|mail/.test(k) },
+      { key: "Bordsbokningstid", ok: (context?.seating?.maxBookingDurationMin ?? 0) > 0 },
+      { key: "Max gäster", ok: (context?.seating?.maxGuests ?? 0) > 0 },
+      { key: "Betalning", ok: /betala|kort|kontant|swish|visa|mastercard|amex/.test(k) },
+      { key: "Allergier", ok: /allergi|gluten|laktos|nöt/.test(k) },
+      { key: "Barn", ok: /barnstol|barnvagn|barnmeny|barn/.test(k) },
+      { key: "Djurpolicy", ok: /hund|djur|terrass/.test(k) },
+      { key: "Parkering", ok: /parkering/.test(k) },
+      { key: "Kollektivtrafik", ok: /kollektivtrafik|buss|tunnelbana|tram|spårvagn|bus|m[ée]tro|transport/.test(k) },
+    ];
+  })();
+  const qualityScore = Math.round((qualityChecks.filter((c) => c.ok).length / qualityChecks.length) * 100);
+  const qualityMissing = qualityChecks.filter((c) => !c.ok).map((c) => c.key);
 
   const systemPrompt = `
 # 🔒 BOKÄTA – PROMPT SYSTÈME (MODE ZÉRO ERREUR)
@@ -334,6 +361,15 @@ ${knowledge ?? ""}
 
 FAKTA FRÅN DASHBOARD:
 ${dashboardFacts}
+
+WEBBINFORMATION (endast om Bokäta saknas):
+${externalHints.trim() || "—"}
+
+KUNSKAPSKVALITET: ${qualityScore}%${qualityMissing.length ? ` (Saknas: ${qualityMissing.join(", ")})` : ""}
+
+REGEL – KVALITETSBLOCK:
+Om KUNSKAPSKVALITET < 70%, begränsa svaret till: öppettider, adress, kontakt, enkel bokning.
+För allt annat: be restaurangen fylla i kunskapsbasen och hänvisa till e-post.
 `.trim();
 
   const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -380,7 +416,7 @@ ${dashboardFacts}
 
   const msgLower = message.toLowerCase();
   const detectLang = () => {
-    if (/(aujourd|demain|ouvert|horaires|réservation|reservation|table|menu|adresse|merci)/i.test(msgLower)) return "fr";
+    if (/(aujourd|demain|ouvert|horaires|réservation|reservation|table|menu|adresse|merci|bus|m[ée]tro|tram|transport|transports|arr[êe]t|gare)/i.test(msgLower)) return "fr";
     if (/(today|tomorrow|open|opening|hours|reservation|booking|menu|address|thanks)/i.test(msgLower)) return "en";
     return "sv";
   };
@@ -423,6 +459,31 @@ ${dashboardFacts}
     googleMaps: getFieldAny(["Google Maps", "Maps", "GoogleMaps"]),
   };
   const hasMenuInfo = /meny|menu/i.test(knowledgeText);
+  const isHoursQuestionLite = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
+  const needsWebForHours =
+    isHoursQuestionLite &&
+    (context?.hoursConfigured === false ||
+      !context?.hours ||
+      (!context?.hours?.normal && !context?.hours?.periods?.length));
+  const needsWebForMenu = /(meny|menu|à la carte|rätter|mat|vegetar|vegan|gluten|laktos|galett|crêpe|crepe)/i.test(msgLower) && !hasMenuInfo;
+  const siteUrl = kbInfo.website;
+  let externalHints = "";
+  if (siteUrl && (needsWebForHours || needsWebForMenu)) {
+    if (needsWebForHours) {
+      const webData = await getWebData(siteUrl);
+      if (webData.hoursSummary) {
+        externalHints += `Webbhours (officiell hemsida, ej verifierad): ${webData.hoursSummary}\n`;
+      }
+    }
+    if (needsWebForMenu) {
+      const menuData = await getMenuContent(siteUrl);
+      if (menuData.menuText) {
+        externalHints += `Menu (officiell hemsida, ej verifierad): ${menuData.menuText.slice(0, 4000)}\n`;
+      } else if (menuData.menuUrl) {
+        externalHints += `Menu URL (officiell hemsida): ${menuData.menuUrl}\n`;
+      }
+    }
+  }
 
   const sanitizeUrl = (input: string) => {
     try {
@@ -611,8 +672,9 @@ ${dashboardFacts}
     }
     return out;
   })();
+  if (!FORCE_OPENAI) {
   const isRestaurantTopic =
-    /(boka|bokning|reservation|reservera|réservation|reserver|bord|table|öppet|öppettider|tider|stängt|open|opening|ouvert|horaires|adress|address|adresse|hitta|var ligger|ligger|kontakt|contact|telefon|email|e-post|meny|menu|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|parking|tillgäng|wheelchair|webbplats|hemsida|website|webb|länk|facebook|instagram|social)/i.test(
+    /(boka|bokning|reservation|reservera|réservation|reserver|bord|table|öppet|öppnar|öppning|öppettider|tider|stängt|open|opening|ouvert|horaires|adress|address|adresse|hitta|var ligger|ligger|kontakt|contact|telefon|email|e-post|meny|menu|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|parking|tillgäng|wheelchair|webbplats|hemsida|website|webb|länk|facebook|instagram|social|bus|m[ée]tro|tram|transport|transports|arr[êe]t|gare)/i.test(
       msgLower
     );
   const lastAssistant = history?.slice().reverse().find((h) => h.role === "assistant")?.content || "";
@@ -676,7 +738,13 @@ ${dashboardFacts}
     const rangesText = closedRanges
       .map((r) => (r.start === r.end ? r.start : `${r.start}–${r.end}`))
       .join(", ");
-    res.status(200).json({ reply: `Vi har en stängd period: ${rangesText}.` });
+    res.status(200).json({
+      reply: t(
+        `Vi har en stängd period: ${rangesText}.`,
+        `Nous sommes fermés pendant cette période : ${rangesText}.`,
+        `We’re closed during this period: ${rangesText}.`
+      ),
+    });
     return;
   }
   if (!isRestaurantTopic && !isFollowUp) {
@@ -706,10 +774,22 @@ ${dashboardFacts}
         const rangesText = closedRanges
           .map((r) => (r.start === r.end ? r.start : `${r.start}–${r.end}`))
           .join(", ");
-        res.status(200).json({ reply: `Vi har en stängd period: ${rangesText}.` });
+        res.status(200).json({
+          reply: t(
+            `Vi har en stängd period: ${rangesText}.`,
+            `Nous sommes fermés pendant cette période : ${rangesText}.`,
+            `We’re closed during this period: ${rangesText}.`
+          ),
+        });
         return;
       }
-      res.status(200).json({ reply: "Vi är stängda enligt våra öppettider den dagen." });
+      res.status(200).json({
+        reply: t(
+          "Vi är stängda enligt våra öppettider den dagen.",
+          "Nous sommes fermés ce jour‑là selon nos horaires.",
+          "We’re closed that day according to our opening hours."
+        ),
+      });
       return;
     }
   }
@@ -837,8 +917,14 @@ ${dashboardFacts}
     res.status(200).json({ reply: `Parkering: ${kbInfo.parking}.` });
     return;
   }
-  if (/(kollektiv|buss|tåg|spårvagn|tunnelbana)/i.test(msgLower) && kbInfo.transport) {
-    res.status(200).json({ reply: `Kollektivtrafik: ${kbInfo.transport}.` });
+  if (/(kollektiv|buss|tåg|spårvagn|tunnelbana|bus|m[ée]tro|tram|transport|transports|arr[êe]t|gare)/i.test(msgLower) && kbInfo.transport) {
+    res.status(200).json({
+      reply: t(
+        `Kollektivtrafik: ${kbInfo.transport}.`,
+        `Transports en commun : ${kbInfo.transport}.`,
+        `Public transport: ${kbInfo.transport}.`
+      ),
+    });
     return;
   }
 
@@ -960,7 +1046,7 @@ ${dashboardFacts}
     return { dayName, ...d };
   };
 
-  const isHoursQuestion = /(öppet|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
+  const isHoursQuestion = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
   if (isHoursQuestion) {
     const base = context?.baseDate ?? fmtDate(new Date());
     const periodForBase = getPeriodForDate(base);
@@ -1038,7 +1124,13 @@ ${dashboardFacts}
     if (date) {
       const range = closedRangeForDate(date);
       if (range) {
-        res.status(200).json({ reply: `Vi har en stängd period: ${range.start}–${range.end}.` });
+        res.status(200).json({
+          reply: t(
+            `Vi har en stängd period: ${range.start}–${range.end}.`,
+            `Nous sommes fermés pendant cette période : ${range.start}–${range.end}.`,
+            `We’re closed during this period: ${range.start}–${range.end}.`
+          ),
+        });
         return;
       }
       const hours = getDayHours(date);
@@ -1275,6 +1367,7 @@ ${dashboardFacts}
       ),
     });
     return;
+  }
   }
 
   const r = await fetch("https://api.openai.com/v1/chat/completions", {

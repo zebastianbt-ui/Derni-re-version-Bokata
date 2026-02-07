@@ -1087,6 +1087,7 @@ export default function ReservationDashboard() {
     transport: "",
   });
   const [onboardingFaqs, setOnboardingFaqs] = useState<{ q: string; a: string }[]>([]);
+  const [showTemplate, setShowTemplate] = useState(false);
   const onboardInitRef = useRef(false);
 
   const fetchRestaurantFromApi = async (token: string) => {
@@ -1162,6 +1163,30 @@ export default function ReservationDashboard() {
     "Kan vi ta med egen tårta?",
     "Har ni privat rum?",
   ];
+
+  const addCoreFaqs = () => {
+    commonFaqs.forEach((q) => addOnboardingFaq(q));
+  };
+
+  const knowledgeTemplate = useMemo(() => {
+    const lines = [
+      "INFOS:",
+      "Namn: ...",
+      "Adress: ...",
+      "Telefon: ...",
+      "E-post: ...",
+      "Webbplats: ...",
+      "Betalning: ...",
+      "Allergier: ...",
+      "Barn: ...",
+      "Djurpolicy: ...",
+      "Parkering: ...",
+      "Kollektivtrafik: ...",
+      "",
+      ...commonFaqs.flatMap((q) => [`FRÅGA: ${q}`, "SVAR: ...", ""]),
+    ];
+    return lines.join("\n").trim();
+  }, []);
 
   const addOnboardingFaq = (q: string) => {
     const trimmed = q.trim();
@@ -1287,7 +1312,7 @@ export default function ReservationDashboard() {
     const score = Math.round((ok / checks.length) * 100);
     const missing = checks.filter((c) => !c.ok).map((c) => c.key);
     return { score, missing };
-  }, [config.ai.knowledge]);
+  }, [config.ai.knowledge, config.hours, config.seating]);
 
   const callAi = async (text: string) => {
     const r = await fetch("/api/ai", {
@@ -2985,10 +3010,44 @@ export default function ReservationDashboard() {
               </div>
 
               <div className="mt-2 rounded-lg border border-pink-200 bg-pink-50/30 p-3">
-                <div className="text-sm font-semibold text-gray-700 mb-2">Kunskapsbas</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                  <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+              <div className="text-sm font-semibold text-gray-700 mb-2">Kunskapsbas</div>
+              <div className="mb-3 rounded-lg border border-pink-100 bg-pink-50 px-3 py-2 text-xs text-gray-700">
+                <div className="font-semibold">
+                  Kvalitet: {knowledgeScore.score}% {knowledgeScore.missing.length ? `• Saknas: ${knowledgeScore.missing.join(", ")}` : "• Bra!"}
+                </div>
+                {knowledgeScore.score < 70 ? (
+                  <div className="mt-1 text-rose-700">
+                    AI är begränsad tills kunskapsbasen är tillräckligt komplett.
+                  </div>
+                ) : null}
+              </div>
+              <div className="mb-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs"
+                  onClick={addCoreFaqs}
+                >
+                  Lägg till standardfrågor
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs"
+                  onClick={() => setShowTemplate((s) => !s)}
+                >
+                  {showTemplate ? "Dölj mall" : "Visa mall"}
+                </button>
+              </div>
+              {showTemplate ? (
+                <textarea
+                  rows={8}
+                  readOnly
+                  className="mb-3 w-full rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-xs"
+                  value={knowledgeTemplate}
+                />
+              ) : null}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                <input
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
                     placeholder="Namn på restaurang"
                     value={onboarding.restaurantName}
                     onChange={(e) => {
@@ -3189,9 +3248,6 @@ export default function ReservationDashboard() {
                 </div>
               </div>
 
-              <div className="mt-2 text-xs text-gray-500">
-                Kvalitet: {knowledgeScore.score}% {knowledgeScore.missing.length ? `• Saknas: ${knowledgeScore.missing.join(", ")}` : "• Bra!"}
-              </div>
               <div className="mt-2 text-xs text-gray-500">
                 {aiSaveState === "saving" && "Autosparar…"}
                 {aiSaveState === "saved" && "Autosparat"}
