@@ -286,6 +286,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     googleMaps: getFieldAny(["Google Maps", "Maps", "GoogleMaps"]),
   };
   const hasMenuInfo = /meny|menu/i.test(knowledgeText);
+  const restaurantIdentity = [
+    kbInfo.name ? `Namn: ${kbInfo.name}` : "",
+    kbInfo.address ? `Adress: ${kbInfo.address}` : "",
+    kbInfo.phone ? `Telefon: ${kbInfo.phone}` : "",
+    kbInfo.email ? `E-post: ${kbInfo.email}` : "",
+    kbInfo.website ? `Webbplats: ${kbInfo.website}` : "",
+  ].filter(Boolean).join("\n");
   const isHoursQuestionLite = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
   const needsWebForHours =
     isHoursQuestionLite &&
@@ -875,6 +882,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return { dayName, ...d };
   };
 
+  const tomorrowDate = addDays(realToday, 1);
+  const tomorrowHours = tomorrowDate ? getDayHours(tomorrowDate) : null;
+  const tomorrowClosed = !tomorrowDate ? null : (!tomorrowHours || tomorrowHours.closed || isClosedDate(tomorrowDate));
+  const tomorrowStatus = tomorrowDate
+    ? tomorrowClosed
+      ? `${tomorrowDate}: stängt`
+      : `${tomorrowDate}: öppet ${tomorrowHours?.open ?? "?"}–${tomorrowHours?.close ?? "?"}`
+    : "—";
+
   const nextOpenDate = (() => {
     const start = realToday;
     for (let i = 0; i < 200; i++) {
@@ -1089,17 +1105,21 @@ Avec ce prompt:
 KUNSKAPSBAS:
 ${knowledge ?? ""}
 
+RESTO-IDENTITET (måste respekteras):
+${restaurantIdentity || "Saknas"}
+
 FAKTA FRÅN DASHBOARD:
 ${dashboardFacts}
 
 WEBBINFORMATION (endast om Bokäta saknas):
 ${externalHints.trim() || "—"}
 
-STÄNGDA PERIODER:
+  STÄNGDA PERIODER:
 ${closedRangesText || "—"}
 
 DAGENS DATUM (system): ${realToday}
 VALT DATUM (context): ${context?.baseDate ?? "—"}
+IMORGON (för frågor om “imorgon”): ${tomorrowStatus}
 NÄSTA ÖPPNA DAG: ${nextOpenDate ?? "—"}
 
 KUNSKAPSKVALITET: ${qualityScore}%${qualityMissing.length ? ` (Saknas: ${qualityMissing.join(", ")})` : ""}
@@ -1107,6 +1127,13 @@ KUNSKAPSKVALITET: ${qualityScore}%${qualityMissing.length ? ` (Saknas: ${quality
 REGEL – KVALITETSBLOCK:
 Om KUNSKAPSKVALITET < 70%, begränsa svaret till: öppettider, adress, kontakt, enkel bokning.
 För allt annat: be restaurangen fylla i kunskapsbasen och hänvisa till e-post.
+
+REGEL – IMORGON:
+Om användaren frågar om “imorgon”, använd IMORGON-data ovan och svara konkret om öppet/stängt.
+
+REGEL – IDENTITET:
+Du representerar alltid restaurangen i RESTO-IDENTITET ovan. Säg aldrig att du inte representerar ett café.
+Om RESTO-IDENTITET saknas, be restaurangen fylla i namn/adress i kunskapsbasen.
 `.trim();
 
   const isHoursQuestion = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
