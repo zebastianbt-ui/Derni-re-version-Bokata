@@ -778,13 +778,15 @@ export default function BookingPage() {
                       </div>
                     </div>
                   </div>
+                  <div className="hidden lg:flex w-[30%] items-end justify-center">
+                    <img
+                      src={forkTransparent}
+                      alt=""
+                      aria-hidden="true"
+                      className="h-40 w-auto pointer-events-none select-none"
+                    />
+                  </div>
                 </div>
-                <img
-                  src={forkTransparent}
-                  alt=""
-                  aria-hidden="true"
-                  className="hidden lg:block absolute right-10 bottom-6 w-auto pointer-events-none select-none"
-                />
               </div>
             </form>
           </section>

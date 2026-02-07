@@ -286,6 +286,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
   const lang = detectLang();
   const t = (sv: string, fr: string, en: string) => (lang === "fr" ? fr : lang === "en" ? en : sv);
+  const hasSmiley = (text: string) => /(:\)|:-\)|:D|😊|🙂)/.test(text);
+  const formatReply = (text: string) => {
+    const cleaned = text.replace(/—/g, "-").trim();
+    if (!cleaned) return cleaned;
+    return hasSmiley(cleaned) ? cleaned : `${cleaned} :)`;
+  };
+  const sendReply = (text: string) => {
+    res.status(200).json({ reply: formatReply(text) });
+  };
   const normalize = (s: string) =>
     s
       .toLowerCase()
@@ -656,7 +665,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ? tomorrowClosed
       ? `${tomorrowDate}: stängt`
       : `${tomorrowDate}: öppet ${tomorrowHours?.open ?? "?"}–${tomorrowHours?.close ?? "?"}`
-    : "—";
+    : "Saknas";
 
   const nextOpenDate = (() => {
     const start = realToday;
@@ -721,7 +730,8 @@ Tu ne mélanges jamais les langues.
 * Réponses courtes, claires et utiles
 * Aucune exagération
 * Un humour léger si approprié
-* Emoji autorisés si cela reste naturel
+* Ajoute un smiley simple (ex: :)) dans chaque réponse
+* N’utilise jamais le caractère "—"
 * Aucune formulation vague
 
 Tutoiement ou vouvoiement **strictement selon la règle définie par le restaurateur**.
@@ -879,15 +889,15 @@ FAKTA FRÅN DASHBOARD:
 ${dashboardFacts}
 
 WEBBINFORMATION (endast om Bokäta saknas):
-${externalHints.trim() || "—"}
+${externalHints.trim() || "Saknas"}
 
   STÄNGDA PERIODER:
-${closedRangesText || "—"}
+${closedRangesText || "Saknas"}
 
 DAGENS DATUM (system): ${realToday}
-VALT DATUM (context): ${context?.baseDate ?? "—"}
+VALT DATUM (context): ${context?.baseDate ?? "Saknas"}
 IMORGON (för frågor om “imorgon”): ${tomorrowStatus}
-NÄSTA ÖPPNA DAG: ${nextOpenDate ?? "—"}
+NÄSTA ÖPPNA DAG: ${nextOpenDate ?? "Saknas"}
 
 KUNSKAPSKVALITET: ${qualityScore}%${qualityMissing.length ? ` (Saknas: ${qualityMissing.join(", ")})` : ""}
 
@@ -1003,25 +1013,25 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     /\b\d{1,3}\s*(gäster|guests|personer|pers)\b/i.test(txt);
 
   if (/(instagram|insta)/i.test(msgLower) && kbInfo.instagram) {
-    res.status(200).json({ reply: t(`Instagram: ${kbInfo.instagram}.`, `Instagram : ${kbInfo.instagram}.`, `Instagram: ${kbInfo.instagram}.`) });
+    sendReply(t(`Instagram: ${kbInfo.instagram}.`, `Instagram : ${kbInfo.instagram}.`, `Instagram: ${kbInfo.instagram}.`));
     return;
   }
   if (/facebook/i.test(msgLower) && kbInfo.facebook) {
-    res.status(200).json({ reply: t(`Facebook: ${kbInfo.facebook}.`, `Facebook : ${kbInfo.facebook}.`, `Facebook: ${kbInfo.facebook}.`) });
+    sendReply(t(`Facebook: ${kbInfo.facebook}.`, `Facebook : ${kbInfo.facebook}.`, `Facebook: ${kbInfo.facebook}.`));
     return;
   }
   if (/(hemsida|webbplats|website|webb|site)/i.test(msgLower) && kbInfo.website) {
-    res.status(200).json({ reply: t(`Vår hemsida: ${kbInfo.website}`, `Notre site : ${kbInfo.website}`, `Our website: ${kbInfo.website}`) });
+    sendReply(t(`Vår hemsida: ${kbInfo.website}`, `Notre site : ${kbInfo.website}`, `Our website: ${kbInfo.website}`));
     return;
   }
   if (/(google maps|karta|maps|vägbeskrivning|hur långt|hur länge|restid|avstånd|kör)/i.test(msgLower) && kbInfo.googleMaps) {
-    res.status(200).json({
-      reply: t(
+    sendReply(
+      t(
         `Här hittar du oss och kan se restid: ${kbInfo.googleMaps}`,
         `Voici notre adresse et le temps de trajet : ${kbInfo.googleMaps}`,
         `Here is our location and travel time: ${kbInfo.googleMaps}`
-      ),
-    });
+      )
+    );
     return;
   }
   if (
@@ -1029,13 +1039,13 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       msgLower
     )
   ) {
-    res.status(200).json({
-      reply: t(
-        "Ja! Vi gör vårt bästa för en varm, trivsam atmosfär och god mat. Du är varmt välkommen — vill du boka ett bord?",
-        "Oui ! On fait notre maximum pour une ambiance chaleureuse et une cuisine soignée. Vous êtes les bienvenus — souhaitez‑vous réserver ?",
-        "Yes! We aim for a warm, welcoming atmosphere and great food. You’re very welcome — would you like to book a table?"
-      ),
-    });
+    sendReply(
+      t(
+        "Ja! Vi gör vårt bästa för en varm, trivsam atmosfär och god mat. Du är varmt välkommen. Vill du boka ett bord?",
+        "Oui ! On fait notre maximum pour une ambiance chaleureuse et une cuisine soignée. Vous êtes les bienvenus. Souhaitez‑vous réserver ?",
+        "Yes! We aim for a warm, welcoming atmosphere and great food. You’re very welcome. Would you like to book a table?"
+      )
+    );
     return;
   }
 
@@ -1053,33 +1063,33 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     const rangesText = closedRanges
       .map((r) => (r.start === r.end ? r.start : `${r.start}–${r.end}`))
       .join(", ");
-    res.status(200).json({
-      reply: t(
+    sendReply(
+      t(
         `Vi har en stängd period: ${rangesText}.`,
         `Nous sommes fermés pendant cette période : ${rangesText}.`,
         `We’re closed during this period: ${rangesText}.`
-      ),
-    });
+      )
+    );
     return;
   }
   if (!isRestaurantTopic && !isFollowUp) {
-    res.status(200).json({
-      reply: t(
+    sendReply(
+      t(
         "Jag kan tyvärr bara svara på frågor om restaurangen.",
         "Je peux seulement répondre aux questions sur le restaurant.",
         "I can only answer questions about the restaurant."
-      ),
-    });
+      )
+    );
     return;
   }
   if (!isRestaurantTopic && isFollowUp && !lastAssistant) {
-    res.status(200).json({
-      reply: t(
+    sendReply(
+      t(
         "Jag kan tyvärr bara svara på frågor om restaurangen.",
         "Je peux seulement répondre aux questions sur le restaurant.",
         "I can only answer questions about the restaurant."
-      ),
-    });
+      )
+    );
     return;
   }
 
@@ -1089,22 +1099,22 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
         const rangesText = closedRanges
           .map((r) => (r.start === r.end ? r.start : `${r.start}–${r.end}`))
           .join(", ");
-        res.status(200).json({
-          reply: t(
+        sendReply(
+          t(
             `Vi har en stängd period: ${rangesText}.`,
             `Nous sommes fermés pendant cette période : ${rangesText}.`,
             `We’re closed during this period: ${rangesText}.`
-          ),
-        });
+          )
+        );
         return;
       }
-      res.status(200).json({
-        reply: t(
+      sendReply(
+        t(
           "Vi är stängda enligt våra öppettider den dagen.",
           "Nous sommes fermés ce jour‑là selon nos horaires.",
           "We’re closed that day according to our opening hours."
-        ),
-      });
+        )
+      );
       return;
     }
   }
@@ -1113,22 +1123,22 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
   for (const qa of kbFaqs) {
     const qn = normalize(qa.q);
     if (qn && (normMsg.includes(qn) || qn.includes(normMsg)) && qa.a) {
-      res.status(200).json({ reply: qa.a });
+      sendReply(qa.a);
       return;
     }
   }
 
   const addressMatch = /(adress|address|var ligger|hitta|vägbeskrivning)/i.test(msgLower);
   if (addressMatch && kbInfo.address) {
-    res.status(200).json({ reply: `Vi finns på ${kbInfo.address}.` });
+    sendReply(`Vi finns på ${kbInfo.address}.`);
     return;
   }
   if (/(telefon|ring|tel)/i.test(msgLower) && kbInfo.phone) {
-    res.status(200).json({ reply: `Du kan nå oss på ${kbInfo.phone}.` });
+    sendReply(`Du kan nå oss på ${kbInfo.phone}.`);
     return;
   }
   if (/(e-post|email|mail)/i.test(msgLower) && kbInfo.email) {
-    res.status(200).json({ reply: `Du kan maila oss på ${kbInfo.email}.` });
+    sendReply(`Du kan maila oss på ${kbInfo.email}.`);
     return;
   }
   if (/(meny|menu|à la carte|rätter|mat|vegetar|vegan|gluten|laktos|galett|crêpe|crepe)/i.test(msgLower)) {
@@ -1144,27 +1154,27 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
         const sentences = menuData.menuText.split(/(?<=[.!?])\s+/);
         const hits = sentences.filter((s) => keywords.some((k) => s.toLowerCase().includes(k))).slice(0, 3);
         if (hits.length) {
-          res.status(200).json({
-            reply: t(
+          sendReply(
+            t(
               `Enligt menyn på hemsidan: ${hits.join(" ")}`,
               `Selon le menu du site officiel : ${hits.join(" ")}`,
               `According to the official menu: ${hits.join(" ")}`
-            ),
-          });
+            )
+          );
           return;
         }
-        res.status(200).json({
-          reply: t(
+        sendReply(
+          t(
             `Jag hittar inget tydligt i menyn. Här är menyn: ${menuData.menuUrl}`,
             `Je ne trouve rien de clair dans le menu. Voici le menu : ${menuData.menuUrl}`,
             `I couldn’t find a clear match in the menu. Here is the menu: ${menuData.menuUrl}`
-          ),
-        });
+          )
+        );
         return;
       }
       if (menuData.menuUrl) {
-        res.status(200).json({
-          reply: t(
+        sendReply(
+          t(
             menuData.menuIsPdf
               ? `Menyn är en PDF: ${menuData.menuUrl}`
               : `Menyn (från hemsidan): ${menuData.menuUrl}`,
@@ -1174,72 +1184,72 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
             menuData.menuIsPdf
               ? `The menu is a PDF: ${menuData.menuUrl}`
               : `Menu (from the official site): ${menuData.menuUrl}`
-          ),
-        });
+          )
+        );
         return;
       }
     }
     if (kbInfo.website && /meny|menu/i.test(msgLower)) {
-      res.status(200).json({
-        reply: t(
+      sendReply(
+        t(
           `Menyn finns här: ${kbInfo.website}`,
           `Le menu est ici : ${kbInfo.website}`,
           `The menu is here: ${kbInfo.website}`
-        ),
-      });
+        )
+      );
       return;
     }
   }
   if (/(hemsida|webbplats|website|webb|site)/i.test(msgLower) && kbInfo.website) {
-    res.status(200).json({ reply: t(`Vår hemsida: ${kbInfo.website}`, `Notre site : ${kbInfo.website}`, `Our website: ${kbInfo.website}`) });
+    sendReply(t(`Vår hemsida: ${kbInfo.website}`, `Notre site : ${kbInfo.website}`, `Our website: ${kbInfo.website}`));
     return;
   }
   if (/(instagram|insta)/i.test(msgLower) && kbInfo.instagram) {
-    res.status(200).json({ reply: `Instagram: ${kbInfo.instagram}.` });
+    sendReply(`Instagram: ${kbInfo.instagram}.`);
     return;
   }
   if (/facebook/i.test(msgLower) && kbInfo.facebook) {
-    res.status(200).json({ reply: `Facebook: ${kbInfo.facebook}.` });
+    sendReply(`Facebook: ${kbInfo.facebook}.`);
     return;
   }
   if (/(google maps|karta|maps|vägbeskrivning|hur långt|hur länge|restid|avstånd|kör)/i.test(msgLower) && kbInfo.googleMaps) {
-    res.status(200).json({
-      reply: t(
+    sendReply(
+      t(
         `Här hittar du oss och kan se restid: ${kbInfo.googleMaps}`,
         `Voici notre adresse et le temps de trajet : ${kbInfo.googleMaps}`,
         `Here is our location and travel time: ${kbInfo.googleMaps}`
-      ),
-    });
+      )
+    );
     return;
   }
   if (/(betal|kort|kontant|swish)/i.test(msgLower) && kbInfo.payment) {
-    res.status(200).json({ reply: `Vi tar ${kbInfo.payment}.` });
+    sendReply(`Vi tar ${kbInfo.payment}.`);
     return;
   }
   if (/(allerg|gluten|laktos|nöt)/i.test(msgLower) && kbInfo.allergies) {
-    res.status(200).json({ reply: `Vi kan hjälpa till med: ${kbInfo.allergies}.` });
+    sendReply(`Vi kan hjälpa till med: ${kbInfo.allergies}.`);
     return;
   }
   if (/(barn|barnstol|barnmeny|barnvagn)/i.test(msgLower) && kbInfo.kids) {
-    res.status(200).json({ reply: `För barn gäller: ${kbInfo.kids}.` });
+    sendReply(`För barn gäller: ${kbInfo.kids}.`);
     return;
   }
   if (/(hund|djur|terrass)/i.test(msgLower) && kbInfo.pets) {
-    res.status(200).json({ reply: `Djurpolicy: ${kbInfo.pets}.` });
+    sendReply(`Djurpolicy: ${kbInfo.pets}.`);
     return;
   }
   if (/parkering/i.test(msgLower) && kbInfo.parking) {
-    res.status(200).json({ reply: `Parkering: ${kbInfo.parking}.` });
+    sendReply(`Parkering: ${kbInfo.parking}.`);
     return;
   }
   if (/(kollektiv|buss|tåg|spårvagn|tunnelbana|bus|m[ée]tro|tram|transport|transports|arr[êe]t|gare)/i.test(msgLower) && kbInfo.transport) {
-    res.status(200).json({
-      reply: t(
+    sendReply(
+      t(
         `Kollektivtrafik: ${kbInfo.transport}.`,
         `Transports en commun : ${kbInfo.transport}.`,
         `Public transport: ${kbInfo.transport}.`
-      ),
-    });
+      )
+    );
     return;
   }
 
@@ -1249,36 +1259,36 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     const periodForBase = getPeriodForDate(base);
     if (isPeriodAllClosed(periodForBase, context?.hours?.normal)) {
       const range = periodForBase ? ` (${periodForBase.from}–${periodForBase.to})` : "";
-      res.status(200).json({
-        reply: t(
+      sendReply(
+        t(
           `Vi har stängt under denna period${range}.`,
           `Nous sommes fermés sur cette période${range}.`,
           `We’re closed for this period${range}.`
-        ),
-      });
+        )
+      );
       return;
     }
     if (context && "hoursConfigured" in context && context.hoursConfigured === false) {
       if (siteUrl) {
         const webData = await getWebData(siteUrl);
         if (webData.hoursSummary) {
-          res.status(200).json({
-            reply: t(
+          sendReply(
+            t(
               `Enligt hemsidan: ${webData.hoursSummary}. Kontakta oss gärna för att bekräfta.`,
               `Selon le site officiel : ${webData.hoursSummary}. Merci de nous contacter pour confirmer.`,
               `According to the official site: ${webData.hoursSummary}. Please contact us to confirm.`
-            ),
-          });
+            )
+          );
           return;
         }
       }
-      res.status(200).json({
-        reply: t(
+      sendReply(
+        t(
           "Våra öppettider är inte publicerade just nu. Kontakta oss så hjälper vi dig.",
           "Nos horaires ne sont pas publiés pour le moment. Contactez‑nous et on vous aide.",
           "Our opening hours aren’t published right now. Please contact us and we’ll help."
-        ),
-      });
+        )
+      );
       return;
     }
     if (/(sommar|sommaröppettider|été|ete|summer|summer hours)/i.test(msgLower)) {
@@ -1296,13 +1306,13 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
         null;
       const summary = describePeriodHours(byMonth);
       if (summary) {
-        res.status(200).json({
-          reply: t(
+        sendReply(
+          t(
             `Sommaröppettider: ${summary}.`,
             `Horaires d'été : ${summary}.`,
             `Summer hours: ${summary}.`
-          ),
-        });
+          )
+        );
         return;
       }
     }
@@ -1327,18 +1337,16 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
         }
       }
       if (!openDays.length) {
-        res.status(200).json({
-          reply: t("Vi har stängt hela nästa vecka.", "Nous sommes fermés toute la semaine prochaine.", "We’re closed all next week."),
-        });
+        sendReply(t("Vi har stängt hela nästa vecka.", "Nous sommes fermés toute la semaine prochaine.", "We’re closed all next week."));
         return;
       }
-      res.status(200).json({
-        reply: t(
+      sendReply(
+        t(
           `Nästa vecka har vi öppet: ${openDays.join(", ")}.${closedDays.length ? ` Stängt: ${closedDays.join(", ")}.` : ""}`,
           `Semaine prochaine, nous sommes ouverts : ${openDays.join(", ")}.${closedDays.length ? ` Fermé : ${closedDays.join(", ")}.` : ""}`,
           `Next week we’re open: ${openDays.join(", ")}.${closedDays.length ? ` Closed: ${closedDays.join(", ")}.` : ""}`
-        ),
-      });
+        )
+      );
       return;
     }
 
@@ -1346,24 +1354,24 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     if (date) {
       const range = closedRangeForDate(date);
       if (range) {
-        res.status(200).json({
-          reply: t(
+        sendReply(
+          t(
             `Vi har en stängd period: ${range.start}–${range.end}.`,
             `Nous sommes fermés pendant cette période : ${range.start}–${range.end}.`,
             `We’re closed during this period: ${range.start}–${range.end}.`
-          ),
-        });
+          )
+        );
         return;
       }
       const hours = getDayHours(date);
       if (!hours || hours.closed || isClosedDate(date)) {
-        res.status(200).json({
-          reply: t(
+        sendReply(
+          t(
             `Vi har stängt ${hours?.dayName ? `på ${hours.dayName}` : "den dagen"}.`,
             `Nous sommes fermés ${hours?.dayName ? `ce ${hours.dayName}` : "ce jour‑là"}.`,
             `We’re closed ${hours?.dayName ? `on ${hours.dayName}` : "that day"}.`
-          ),
-        });
+          )
+        );
         return;
       }
       if (/idag|nu|just nu|today|right now|aujourd/i.test(msgLower) && context?.nowTime) {
@@ -1371,33 +1379,33 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
         const openMin = timeToMin(hours.open);
         const closeMin = timeToMin(hours.close);
         if (nowMin < openMin) {
-          res.status(200).json({
-            reply: t(
+          sendReply(
+            t(
               `Vi öppnar kl ${hours.open} idag.`,
               `Nous ouvrons à ${hours.open} aujourd’hui.`,
               `We open at ${hours.open} today.`
-            ),
-          });
+            )
+          );
           return;
         }
         if (nowMin > closeMin) {
-          res.status(200).json({
-            reply: t(
+          sendReply(
+            t(
               `Vi har stängt för idag. Vi stängde kl ${hours.close}.`,
               `Nous sommes fermés pour aujourd’hui. Nous avons fermé à ${hours.close}.`,
               `We’re closed for today. We closed at ${hours.close}.`
-            ),
-          });
+            )
+          );
           return;
         }
       }
-      res.status(200).json({
-        reply: t(
+      sendReply(
+        t(
           `Vi har öppet ${hours.open}–${hours.close}.`,
           `Nous sommes ouverts de ${hours.open} à ${hours.close}.`,
           `We’re open ${hours.open}–${hours.close}.`
-        ),
-      });
+        )
+      );
       return;
     }
   }
@@ -1442,8 +1450,8 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       : "";
 
     if (!guests) {
-      res.status(200).json({
-        reply: isTerrace
+      sendReply(
+        isTerrace
           ? t(
               "Gärna! Hur många gäster gäller det för uteserveringen?",
               "Avec plaisir ! Pour combien de personnes souhaitez‑vous la terrasse ?",
@@ -1453,8 +1461,8 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
               "Hur många gäster gäller det?",
               "Pour combien de personnes ?",
               "How many guests is it for?"
-            ),
-      });
+            )
+      );
       return;
     }
 
@@ -1462,54 +1470,54 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     const maxTotal = context.seating?.maxGuests ?? 60;
     const group = context.seating?.groupThreshold ?? maxPer;
     if (guests > maxTotal) {
-      res.status(200).json({
-        reply: t(
+      sendReply(
+        t(
           `Vi har tyvärr max ${maxTotal} gäster samtidigt. Vill du välja en mindre grupp?`,
           `Nous accueillons au maximum ${maxTotal} personnes en même temps. Voulez‑vous un groupe plus petit ?`,
           `We can host up to ${maxTotal} guests at the same time. Would you like a smaller group?`
-        ),
-      });
+        )
+      );
       return;
     }
     if (guests > maxPer || guests >= group) {
       if (isTerrace) {
-        res.status(200).json({
-          reply: t(
-            `Vi kan gärna ta emot önskemål om uteservering. För ${guests} gäster behöver vi manuell bekräftelse — skriv gärna "uteservering" i kommentaren så återkommer vi snarast.${contactBlurb ? ` ${contactBlurb}` : ""}`,
-            `Nous pouvons prendre en compte une demande de terrasse. Pour ${guests} personnes, une confirmation manuelle est nécessaire — indiquez "terrasse" dans le commentaire et nous reviendrons vers vous rapidement.${contactBlurb ? ` ${contactBlurb}` : ""}`,
-            `We can take outdoor seating requests. For ${guests} guests we need manual confirmation — please mention "outdoor seating" in the comment and we’ll get back to you shortly.${contactBlurb ? ` ${contactBlurb}` : ""}`
-          ),
-        });
+        sendReply(
+          t(
+            `Vi kan gärna ta emot önskemål om uteservering. För ${guests} gäster behöver vi manuell bekräftelse. Skriv gärna "uteservering" i kommentaren så återkommer vi snarast.${contactBlurb ? ` ${contactBlurb}` : ""}`,
+            `Nous pouvons prendre en compte une demande de terrasse. Pour ${guests} personnes, une confirmation manuelle est nécessaire. Indiquez "terrasse" dans le commentaire et nous reviendrons vers vous rapidement.${contactBlurb ? ` ${contactBlurb}` : ""}`,
+            `We can take outdoor seating requests. For ${guests} guests we need manual confirmation. Please mention "outdoor seating" in the comment and we’ll get back to you shortly.${contactBlurb ? ` ${contactBlurb}` : ""}`
+          )
+        );
         return;
       }
-      res.status(200).json({
-        reply: t(
+      sendReply(
+        t(
           `För ${guests} gäster behöver vi manuell bekräftelse. Vi återkommer snarast.${contactBlurb ? ` ${contactBlurb}` : ""}`,
           `Pour ${guests} personnes, une confirmation manuelle est nécessaire. Nous reviendrons vers vous rapidement.${contactBlurb ? ` ${contactBlurb}` : ""}`,
           `For ${guests} guests, we need manual confirmation. We’ll get back to you shortly.${contactBlurb ? ` ${contactBlurb}` : ""}`
-        ),
-      });
+        )
+      );
       return;
     }
 
     if (!date) {
-      res.status(200).json({
-        reply: t(
+      sendReply(
+        t(
           "Vilket datum önskar du boka?",
           "Quelle date souhaitez‑vous réserver ?",
           "What date would you like to book?"
-        ),
-      });
+        )
+      );
       return;
     }
     if (!time) {
-      res.status(200).json({
-        reply: t(
+      sendReply(
+        t(
           "Vilken tid önskar du?",
           "À quelle heure souhaitez‑vous réserver ?",
           "What time would you like?"
-        ),
-      });
+        )
+      );
       return;
     }
 
@@ -1517,24 +1525,24 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     const dayName = day != null ? weekdaySv[day] : null;
     const range = closedRangeForDate(date);
     if (range) {
-      res.status(200).json({
-        reply: t(
+      sendReply(
+        t(
           `Vi har en stängd period: ${range.start}–${range.end}.`,
           `Nous sommes fermés du ${range.start} au ${range.end}.`,
           `We’re closed from ${range.start}–${range.end}.`
-        ),
-      });
+        )
+      );
       return;
     }
     const hours = getDayHours(date);
     if (!hours || hours.closed || isClosedDate(date)) {
-      res.status(200).json({
-        reply: t(
+      sendReply(
+        t(
           `Tyvärr, vi har stängt ${dayName ? `på ${dayName}ar` : "den dagen"}.`,
           `Désolé, nous sommes fermés ${dayName ? `le ${dayName}` : "ce jour‑là"}.`,
           `Sorry, we’re closed ${dayName ? `on ${dayName}` : "that day"}.`
-        ),
-      });
+        )
+      );
       return;
     }
     const open = hours.open;
@@ -1544,13 +1552,13 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       const lastBookingBufferMin = 60;
       const latestStart = Math.max(timeToMin(open), timeToMin(close) - lastBookingBufferMin);
       if (t < timeToMin(open) || t > latestStart) {
-        res.status(200).json({
-          reply: t(
+        sendReply(
+          t(
             `Vi har öppet ${open}–${close}. Sista bokningsbara tiden är ${minToTime(latestStart)}.`,
             `Nous sommes ouverts de ${open} à ${close}. La dernière heure réservable est ${minToTime(latestStart)}.`,
             `We’re open ${open}–${close}. The last bookable time is ${minToTime(latestStart)}.`
-          ),
-        });
+          )
+        );
         return;
       }
     }
@@ -1560,23 +1568,23 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     const bookings = context.bookings ?? [];
     const tableId = findAvailableTable({ date, time, guests, bookings, tables, durationMin });
     if (!tableId) {
-      res.status(200).json({
-        reply: t(
+      sendReply(
+        t(
           "Tyvärr är det fullt den tiden. Vill du prova en annan tid?",
           "Désolé, c’est complet à cette heure‑là. Voulez‑vous essayer une autre heure ?",
           "Sorry, we’re fully booked at that time. Would you like to try another time?"
-        ),
-      });
+        )
+      );
       return;
     }
 
-    res.status(200).json({
-      reply: t(
+    sendReply(
+      t(
         `Ja, det finns plats. Vill du att jag bokar ${date} kl ${time} för ${guests} gäster?`,
         `Oui, il y a de la place. Voulez‑vous que je réserve le ${date} à ${time} pour ${guests} personnes ?`,
         `Yes, we have availability. Would you like me to book ${date} at ${time} for ${guests} guests?`
-      ),
-    });
+      )
+    );
     return;
   }
   }
@@ -1588,24 +1596,24 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       const dayName = day != null ? weekdaySv[day] : null;
       const range = closedRangeForDate(date);
       if (range) {
-        res.status(200).json({
-          reply: t(
+        sendReply(
+          t(
             `Vi har en stängd period: ${range.start}–${range.end}.`,
             `Nous sommes fermés du ${range.start} au ${range.end}.`,
             `We’re closed from ${range.start}–${range.end}.`
-          ),
-        });
+          )
+        );
         return;
       }
       const hours = getDayHours(date);
       if (!hours || hours.closed || isClosedDate(date)) {
-        res.status(200).json({
-          reply: t(
+        sendReply(
+          t(
             `Tyvärr, vi har stängt ${dayName ? `på ${dayName}ar` : "den dagen"}.`,
             `Désolé, nous sommes fermés ${dayName ? `le ${dayName}` : "ce jour‑là"}.`,
             `Sorry, we’re closed ${dayName ? `on ${dayName}` : "that day"}.`
-          ),
-        });
+          )
+        );
         return;
       }
     }
@@ -1668,11 +1676,11 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
             "Nous représentons le restaurant, mais le nom/adresse manquent dans la base de connaissances. Merci de les renseigner.",
             "We represent the restaurant, but the name/address is missing in the knowledge base. Please add it."
           );
-    res.status(200).json({ reply: fallback });
+    sendReply(fallback);
     return;
   }
 
-  res.status(200).json({ reply });
+  sendReply(reply);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "AI error";
     res.status(500).json({ error: msg });
