@@ -159,6 +159,120 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const qualityScore = Math.round((qualityChecks.filter((c) => c.ok).length / qualityChecks.length) * 100);
   const qualityMissing = qualityChecks.filter((c) => !c.ok).map((c) => c.key);
 
+
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const toUtcDate = (iso: string) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(Date.UTC(y, m - 1, d));
+  };
+  const fmtDate = (dt: Date) => `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
+  const addDays = (iso: string, n: number) => {
+    const dt = toUtcDate(iso);
+    if (!dt) return null;
+    dt.setUTCDate(dt.getUTCDate() + n);
+    return fmtDate(dt);
+  };
+  const spanDays = (from: string, to: string) => {
+    const a = toUtcDate(from);
+    const b = toUtcDate(to);
+    if (!a || !b) return Number.POSITIVE_INFINITY;
+    return Math.max(0, Math.floor((b.getTime() - a.getTime()) / 86400000));
+  };
+  const timeToMin = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+  const minToTime = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+  const round30 = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    if (m < 15) return `${pad2(h)}:00`;
+    if (m < 45) return `${pad2(h)}:30`;
+    return `${pad2((h + 1) % 24)}:00`;
+  };
+  const overlap = (aS: number, aE: number, bS: number, bE: number) => aS < bE && bS < aE;
+  const weekdaySv = ["söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag"];
+  const weekdayIndex: Record<string, number> = {
+    söndag: 0,
+    måndag: 1,
+    tisdag: 2,
+    onsdag: 3,
+    torsdag: 4,
+    fredag: 5,
+    lördag: 6,
+  };
+
+  const msgLower = message.toLowerCase();
+  const detectLang = () => {
+    if (/(aujourd|demain|ouvert|horaires|réservation|reservation|table|menu|adresse|merci|bus|m[ée]tro|tram|transport|transports|arr[êe]t|gare)/i.test(msgLower)) return "fr";
+    if (/(today|tomorrow|open|opening|hours|reservation|booking|menu|address|thanks)/i.test(msgLower)) return "en";
+    return "sv";
+  };
+  const lang = detectLang();
+  const t = (sv: string, fr: string, en: string) => (lang === "fr" ? fr : lang === "en" ? en : sv);
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const knowledgeText = (knowledge ?? "").trim();
+  const knowledgeLines = knowledgeText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const getField = (label: string) => {
+    const line = knowledgeLines.find((l) => l.toLowerCase().startsWith(label.toLowerCase() + ":"));
+    return line ? line.split(":").slice(1).join(":").trim() : "";
+  };
+  const getFieldAny = (labels: string[]) => {
+    for (const label of labels) {
+      const val = getField(label);
+      if (val) return val;
+    }
+    return "";
+  };
+  const kbInfo = {
+    name: getField("Namn"),
+    address: getField("Adress"),
+    phone: getField("Telefon"),
+    email: getField("E-post"),
+    website: getFieldAny(["Webbplats", "Hemsida", "Website", "Site"]),
+    payment: getField("Betalning"),
+    allergies: getField("Allergier"),
+    kids: getField("Barn"),
+    pets: getField("Djurpolicy"),
+    parking: getFieldAny(["Parkering", "Parking"]),
+    transport: getField("Kollektivtrafik"),
+    instagram: getFieldAny(["Instagram", "Insta"]),
+    facebook: getField("Facebook"),
+    googleMaps: getFieldAny(["Google Maps", "Maps", "GoogleMaps"]),
+  };
+  const hasMenuInfo = /meny|menu/i.test(knowledgeText);
+  const isHoursQuestionLite = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
+  const needsWebForHours =
+    isHoursQuestionLite &&
+    (context?.hoursConfigured === false ||
+      !context?.hours ||
+      (!context?.hours?.normal && !context?.hours?.periods?.length));
+  const needsWebForMenu = /(meny|menu|à la carte|rätter|mat|vegetar|vegan|gluten|laktos|galett|crêpe|crepe)/i.test(msgLower) && !hasMenuInfo;
+  const siteUrl = kbInfo.website;
+  let externalHints = "";
+  if (siteUrl && (needsWebForHours || needsWebForMenu)) {
+    if (needsWebForHours) {
+      const webData = await getWebData(siteUrl);
+      if (webData.hoursSummary) {
+        externalHints += `Webbhours (officiell hemsida, ej verifierad): ${webData.hoursSummary}\n`;
+      }
+    }
+    if (needsWebForMenu) {
+      const menuData = await getMenuContent(siteUrl);
+      if (menuData.menuText) {
+        externalHints += `Menu (officiell hemsida, ej verifierad): ${menuData.menuText.slice(0, 4000)}\n`;
+      } else if (menuData.menuUrl) {
+        externalHints += `Menu URL (officiell hemsida): ${menuData.menuUrl}\n`;
+      }
+    }
+  }
+
   const systemPrompt = `
 # 🔒 BOKÄTA – PROMPT SYSTÈME (MODE ZÉRO ERREUR)
 
@@ -372,119 +486,6 @@ REGEL – KVALITETSBLOCK:
 Om KUNSKAPSKVALITET < 70%, begränsa svaret till: öppettider, adress, kontakt, enkel bokning.
 För allt annat: be restaurangen fylla i kunskapsbasen och hänvisa till e-post.
 `.trim();
-
-  const pad2 = (n: number) => String(n).padStart(2, "0");
-  const toUtcDate = (iso: string) => {
-    const [y, m, d] = iso.split("-").map(Number);
-    if (!y || !m || !d) return null;
-    return new Date(Date.UTC(y, m - 1, d));
-  };
-  const fmtDate = (dt: Date) => `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
-  const addDays = (iso: string, n: number) => {
-    const dt = toUtcDate(iso);
-    if (!dt) return null;
-    dt.setUTCDate(dt.getUTCDate() + n);
-    return fmtDate(dt);
-  };
-  const spanDays = (from: string, to: string) => {
-    const a = toUtcDate(from);
-    const b = toUtcDate(to);
-    if (!a || !b) return Number.POSITIVE_INFINITY;
-    return Math.max(0, Math.floor((b.getTime() - a.getTime()) / 86400000));
-  };
-  const timeToMin = (t: string) => {
-    const [h, m] = t.split(":").map(Number);
-    return h * 60 + m;
-  };
-  const minToTime = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
-  const round30 = (t: string) => {
-    const [h, m] = t.split(":").map(Number);
-    if (m < 15) return `${pad2(h)}:00`;
-    if (m < 45) return `${pad2(h)}:30`;
-    return `${pad2((h + 1) % 24)}:00`;
-  };
-  const overlap = (aS: number, aE: number, bS: number, bE: number) => aS < bE && bS < aE;
-  const weekdaySv = ["söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag"];
-  const weekdayIndex: Record<string, number> = {
-    söndag: 0,
-    måndag: 1,
-    tisdag: 2,
-    onsdag: 3,
-    torsdag: 4,
-    fredag: 5,
-    lördag: 6,
-  };
-
-  const msgLower = message.toLowerCase();
-  const detectLang = () => {
-    if (/(aujourd|demain|ouvert|horaires|réservation|reservation|table|menu|adresse|merci|bus|m[ée]tro|tram|transport|transports|arr[êe]t|gare)/i.test(msgLower)) return "fr";
-    if (/(today|tomorrow|open|opening|hours|reservation|booking|menu|address|thanks)/i.test(msgLower)) return "en";
-    return "sv";
-  };
-  const lang = detectLang();
-  const t = (sv: string, fr: string, en: string) => (lang === "fr" ? fr : lang === "en" ? en : sv);
-  const normalize = (s: string) =>
-    s
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s]/gu, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-  const knowledgeText = (knowledge ?? "").trim();
-  const knowledgeLines = knowledgeText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const getField = (label: string) => {
-    const line = knowledgeLines.find((l) => l.toLowerCase().startsWith(label.toLowerCase() + ":"));
-    return line ? line.split(":").slice(1).join(":").trim() : "";
-  };
-  const getFieldAny = (labels: string[]) => {
-    for (const label of labels) {
-      const val = getField(label);
-      if (val) return val;
-    }
-    return "";
-  };
-  const kbInfo = {
-    name: getField("Namn"),
-    address: getField("Adress"),
-    phone: getField("Telefon"),
-    email: getField("E-post"),
-    website: getFieldAny(["Webbplats", "Hemsida", "Website", "Site"]),
-    payment: getField("Betalning"),
-    allergies: getField("Allergier"),
-    kids: getField("Barn"),
-    pets: getField("Djurpolicy"),
-    parking: getFieldAny(["Parkering", "Parking"]),
-    transport: getField("Kollektivtrafik"),
-    instagram: getFieldAny(["Instagram", "Insta"]),
-    facebook: getField("Facebook"),
-    googleMaps: getFieldAny(["Google Maps", "Maps", "GoogleMaps"]),
-  };
-  const hasMenuInfo = /meny|menu/i.test(knowledgeText);
-  const isHoursQuestionLite = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
-  const needsWebForHours =
-    isHoursQuestionLite &&
-    (context?.hoursConfigured === false ||
-      !context?.hours ||
-      (!context?.hours?.normal && !context?.hours?.periods?.length));
-  const needsWebForMenu = /(meny|menu|à la carte|rätter|mat|vegetar|vegan|gluten|laktos|galett|crêpe|crepe)/i.test(msgLower) && !hasMenuInfo;
-  const siteUrl = kbInfo.website;
-  let externalHints = "";
-  if (siteUrl && (needsWebForHours || needsWebForMenu)) {
-    if (needsWebForHours) {
-      const webData = await getWebData(siteUrl);
-      if (webData.hoursSummary) {
-        externalHints += `Webbhours (officiell hemsida, ej verifierad): ${webData.hoursSummary}\n`;
-      }
-    }
-    if (needsWebForMenu) {
-      const menuData = await getMenuContent(siteUrl);
-      if (menuData.menuText) {
-        externalHints += `Menu (officiell hemsida, ej verifierad): ${menuData.menuText.slice(0, 4000)}\n`;
-      } else if (menuData.menuUrl) {
-        externalHints += `Menu URL (officiell hemsida): ${menuData.menuUrl}\n`;
-      }
-    }
-  }
 
   const sanitizeUrl = (input: string) => {
     try {
