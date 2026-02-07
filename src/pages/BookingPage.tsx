@@ -662,7 +662,7 @@ export default function BookingPage() {
                       <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-violet-200 bg-white/80 px-4 py-3">
                         <div className="text-xs font-semibold uppercase tracking-wider text-violet-700">Bokäta</div>
                         <div className="flex flex-col items-end">
-                          <div ref={turnstileRef} className="min-h-[65px]" />
+                        <div ref={turnstileRef} className="min-h-[65px] origin-top-right transform scale-90 md:scale-100" />
                           {turnstileError ? (
                             <div className="mt-2 text-xs text-rose-600">{turnstileError}</div>
                           ) : null}
@@ -786,7 +786,7 @@ export default function BookingPage() {
                           type="button"
                           onClick={askAi}
                           disabled={qaLoading || !qaQuestion.trim()}
-                          className="rounded-xl bg-gradient-to-r from-violet-700 via-purple-600 to-fuchsia-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                          className="rounded-2xl bg-gradient-to-r from-violet-700 via-purple-600 to-fuchsia-600 text-white px-6 py-3 text-base md:text-lg font-semibold uppercase tracking-wide disabled:opacity-60"
                         >
                           {qaLoading ? "Svarar..." : "Fråga AI"}
                         </button>

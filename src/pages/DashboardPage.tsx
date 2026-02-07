@@ -2124,65 +2124,67 @@ export default function ReservationDashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <div className="lg:col-span-3">
-              <div
-                ref={canvasRef}
-                className="relative w-full rounded-2xl border border-pink-200 bg-gradient-to-br from-pink-50 to-purple-50 overflow-hidden"
-                style={{ height: 520 }}
-              >
-                {floorplan.zones.map((z) => (
-                  <div
-                    key={z.id}
-                    onPointerDown={(e) => {
-                      if (restaurantRole !== "owner") return;
-                      const rect = canvasRef.current?.getBoundingClientRect();
-                      if (!rect) return;
-                      setSelectedItem({ type: "zone", id: z.id });
-                      setDragging({
-                        type: "zone",
-                        id: z.id,
-                        offsetX: e.clientX - rect.left - z.x,
-                        offsetY: e.clientY - rect.top - z.y,
-                      });
-                    }}
-                    className={`absolute rounded-xl border-2 border-dashed ${
-                      selectedItem?.type === "zone" && selectedItem.id === z.id ? "border-pink-400" : "border-pink-200"
-                    } bg-white/60`}
-                    style={{ left: z.x, top: z.y, width: z.w, height: z.h }}
-                  >
-                    <div className="text-xs font-semibold text-pink-700 px-2 py-1">{z.name}</div>
-                  </div>
-                ))}
-                {floorplan.tables.map((t) => (
-                  (() => {
-                    const size = tableSizeForSeats(t.seats || 0, t.orientation ?? "h");
-                    return (
-                  <div
-                    key={t.id}
-                    onPointerDown={(e) => {
-                      if (restaurantRole !== "owner") return;
-                      const rect = canvasRef.current?.getBoundingClientRect();
-                      if (!rect) return;
-                      setSelectedItem({ type: "table", id: t.id });
-                      setDragging({
-                        type: "table",
-                        id: t.id,
-                        offsetX: e.clientX - rect.left - t.x,
-                        offsetY: e.clientY - rect.top - t.y,
-                      });
-                    }}
-                    className={`absolute rounded-xl border ${
-                      selectedItem?.type === "table" && selectedItem.id === t.id ? "border-pink-500" : "border-pink-300"
-                    } bg-white shadow-sm flex items-center justify-center`}
-                    style={{ left: t.x, top: t.y, width: size.w, height: size.h }}
-                  >
-                    <div className="text-center">
-                      <div className="text-xs font-semibold text-gray-700">{t.label || "Bord"}</div>
-                      <div className="text-[11px] text-gray-500">{t.seats} platser</div>
+              <div className="w-full overflow-x-auto">
+                <div
+                  ref={canvasRef}
+                  className="relative rounded-2xl border border-pink-200 bg-gradient-to-br from-pink-50 to-purple-50 overflow-hidden"
+                  style={{ width: floorplan.width, height: floorplan.height }}
+                >
+                  {floorplan.zones.map((z) => (
+                    <div
+                      key={z.id}
+                      onPointerDown={(e) => {
+                        if (restaurantRole !== "owner") return;
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (!rect) return;
+                        setSelectedItem({ type: "zone", id: z.id });
+                        setDragging({
+                          type: "zone",
+                          id: z.id,
+                          offsetX: e.clientX - rect.left - z.x,
+                          offsetY: e.clientY - rect.top - z.y,
+                        });
+                      }}
+                      className={`absolute rounded-xl border-2 border-dashed ${
+                        selectedItem?.type === "zone" && selectedItem.id === z.id ? "border-pink-400" : "border-pink-200"
+                      } bg-white/60`}
+                      style={{ left: z.x, top: z.y, width: z.w, height: z.h }}
+                    >
+                      <div className="text-xs font-semibold text-pink-700 px-2 py-1">{z.name}</div>
                     </div>
-                  </div>
-                    );
-                  })()
-                ))}
+                  ))}
+                  {floorplan.tables.map((t) => (
+                    (() => {
+                      const size = tableSizeForSeats(t.seats || 0, t.orientation ?? "h");
+                      return (
+                    <div
+                      key={t.id}
+                      onPointerDown={(e) => {
+                        if (restaurantRole !== "owner") return;
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (!rect) return;
+                        setSelectedItem({ type: "table", id: t.id });
+                        setDragging({
+                          type: "table",
+                          id: t.id,
+                          offsetX: e.clientX - rect.left - t.x,
+                          offsetY: e.clientY - rect.top - t.y,
+                        });
+                      }}
+                      className={`absolute rounded-xl border ${
+                        selectedItem?.type === "table" && selectedItem.id === t.id ? "border-pink-500" : "border-pink-300"
+                      } bg-white shadow-sm flex items-center justify-center`}
+                      style={{ left: t.x, top: t.y, width: size.w, height: size.h }}
+                    >
+                      <div className="text-center">
+                        <div className="text-xs font-semibold text-gray-700">{t.label || "Bord"}</div>
+                        <div className="text-[11px] text-gray-500">{t.seats} platser</div>
+                      </div>
+                    </div>
+                      );
+                    })()
+                  ))}
+                </div>
               </div>
             </div>
 

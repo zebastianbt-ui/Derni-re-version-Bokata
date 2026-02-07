@@ -1342,9 +1342,11 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       if (summerPeriods.length) {
         const lines = summerPeriods
           .map((p, idx) => {
-            const label = p?.name?.trim() ? p.name.trim() : `Period ${idx + 1}`;
+            const rawLabel = p?.name?.trim() ? p.name.trim() : "";
+            const label = rawLabel && !/^period\s*\d+/i.test(rawLabel) ? rawLabel : "";
             const summary = describePeriodHours(p as any);
-            return summary ? `${label}: ${summary}` : "";
+            if (!summary) return "";
+            return label ? `${label}: ${summary}` : summary;
           })
           .filter(Boolean);
         if (lines.length) {
