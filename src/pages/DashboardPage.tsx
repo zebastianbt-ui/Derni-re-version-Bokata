@@ -67,6 +67,7 @@ type FloorplanTable = {
   h: number;
   seats: number;
   label?: string;
+  orientation?: "h" | "v";
 };
 
 type FloorplanZone = {
@@ -234,12 +235,20 @@ const overlap = (aS: number, aE: number, bS: number, bE: number) => aS < bE && b
 const uid = () => Math.random().toString(36).slice(2, 10);
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
-const tableSizeForSeats = (seats: number) => {
-  if (seats <= 2) return { w: 80, h: 60 };
-  if (seats <= 4) return { w: 90, h: 60 };
-  if (seats <= 6) return { w: 110, h: 70 };
-  if (seats <= 8) return { w: 130, h: 80 };
-  return { w: 150, h: 90 };
+const tableSizeForSeats = (seats: number, orientation: "h" | "v" = "h") => {
+  const base =
+    seats <= 2 ? { w: 80, h: 60 } :
+    seats <= 4 ? { w: 90, h: 60 } :
+    seats <= 6 ? { w: 110, h: 70 } :
+    seats <= 8 ? { w: 130, h: 80 } :
+    { w: 150, h: 90 };
+  return orientation === "v" ? { w: base.h, h: base.w } : base;
+};
+
+const normalizeTable = (t: FloorplanTable): FloorplanTable => {
+  const orientation = t.orientation ?? "h";
+  const size = tableSizeForSeats(t.seats || 0, orientation);
+  return { ...t, ...size, orientation };
 };
 
 const toIsoDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -491,10 +500,10 @@ export default function ReservationDashboard() {
     width: 900,
     height: 520,
     tables: [
-      { id: uid(), x: 80, y: 80, ...tableSizeForSeats(2), seats: 2, label: "T1" },
-      { id: uid(), x: 200, y: 80, ...tableSizeForSeats(2), seats: 2, label: "T2" },
-      { id: uid(), x: 320, y: 80, ...tableSizeForSeats(4), seats: 4, label: "T3" },
-      { id: uid(), x: 80, y: 180, ...tableSizeForSeats(6), seats: 6, label: "T4" },
+      { id: uid(), x: 80, y: 80, ...tableSizeForSeats(2), seats: 2, label: "T1", orientation: "h" },
+      { id: uid(), x: 200, y: 80, ...tableSizeForSeats(2), seats: 2, label: "T2", orientation: "h" },
+      { id: uid(), x: 320, y: 80, ...tableSizeForSeats(4), seats: 4, label: "T3", orientation: "h" },
+      { id: uid(), x: 80, y: 180, ...tableSizeForSeats(6), seats: 6, label: "T4", orientation: "h" },
     ],
     zones: [
       { id: uid(), x: 520, y: 70, w: 280, h: 160, name: "Terrass" },
@@ -543,7 +552,7 @@ export default function ReservationDashboard() {
       if (layout?.tables && layout?.zones) {
         setFloorplan({
           ...layout,
-          tables: layout.tables.map((t) => ({ ...t, ...tableSizeForSeats(t.seats || 0) })),
+          tables: layout.tables.map((t) => normalizeTable(t)),
         });
       }
     };
@@ -1974,7 +1983,15 @@ export default function ReservationDashboard() {
                     ...prev,
                     tables: [
                       ...prev.tables,
-                      { id: uid(), x: 80, y: 80, ...tableSizeForSeats(4), seats: 4, label: `T${prev.tables.length + 1}` },
+                      {
+                        id: uid(),
+                        x: 80,
+                        y: 80,
+                        ...tableSizeForSeats(4),
+                        seats: 4,
+                        label: `T${prev.tables.length + 1}`,
+                        orientation: "h",
+                      },
                     ],
                   }))
                 }
@@ -2030,6 +2047,9 @@ export default function ReservationDashboard() {
                   </div>
                 ))}
                 {floorplan.tables.map((t) => (
+                  (() => {
+                    const size = tableSizeForSeats(t.seats || 0, t.orientation ?? "h");
+                    return (
                   <div
                     key={t.id}
                     onPointerDown={(e) => {
@@ -2047,13 +2067,15 @@ export default function ReservationDashboard() {
                     className={`absolute rounded-xl border ${
                       selectedItem?.type === "table" && selectedItem.id === t.id ? "border-pink-500" : "border-pink-300"
                     } bg-white shadow-sm flex items-center justify-center`}
-                    style={{ left: t.x, top: t.y, width: t.w, height: t.h }}
+                    style={{ left: t.x, top: t.y, width: size.w, height: size.h }}
                   >
                     <div className="text-center">
                       <div className="text-xs font-semibold text-gray-700">{t.label || "Bord"}</div>
                       <div className="text-[11px] text-gray-500">{t.seats} platser</div>
                     </div>
                   </div>
+                    );
+                  })()
                 ))}
               </div>
             </div>
@@ -2097,13 +2119,67 @@ export default function ReservationDashboard() {
                                     ? {
                                         ...x,
                                         seats: Number(e.target.value) || 0,
-                                        ...tableSizeForSeats(Number(e.target.value) || 0),
+                                        ...tableSizeForSeats(Number(e.target.value) || 0, x.orientation ?? "h"),
                                       }
                                     : x
                                 ),
                               }))
                             }
                           />
+                        </Field>
+                        <Field label="Orientering">
+                          <div className="mt-1 flex gap-2">
+                            <button
+                              type="button"
+                              className={`px-3 py-2 rounded-lg border text-sm ${
+                                (t.orientation ?? "h") === "h"
+                                  ? "border-pink-400 bg-pink-50 text-pink-700"
+                                  : "border-gray-300 text-gray-600"
+                              }`}
+                              disabled={restaurantRole !== "owner"}
+                              onClick={() =>
+                                setFloorplan((prev) => ({
+                                  ...prev,
+                                  tables: prev.tables.map((x) =>
+                                    x.id === t.id
+                                      ? {
+                                          ...x,
+                                          orientation: "h",
+                                          ...tableSizeForSeats(x.seats || 0, "h"),
+                                        }
+                                      : x
+                                  ),
+                                }))
+                              }
+                            >
+                              Horisontell
+                            </button>
+                            <button
+                              type="button"
+                              className={`px-3 py-2 rounded-lg border text-sm ${
+                                (t.orientation ?? "h") === "v"
+                                  ? "border-pink-400 bg-pink-50 text-pink-700"
+                                  : "border-gray-300 text-gray-600"
+                              }`}
+                              disabled={restaurantRole !== "owner"}
+                              onClick={() =>
+                                setFloorplan((prev) => ({
+                                  ...prev,
+                                  tables: prev.tables.map((x) =>
+                                    x.id === t.id
+                                      ? {
+                                          ...x,
+                                          orientation: "v",
+                                          ...tableSizeForSeats(x.seats || 0, "v"),
+                                        }
+                                      : x
+                                  ),
+                                }))
+                              }
+                            >
+                              Vertikal
+                            </button>
+                          </div>
                         </Field>
                         <button
                           className="w-full rounded-lg border border-rose-200 bg-rose-50 text-rose-700 px-3 py-2 disabled:opacity-60"
