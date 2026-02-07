@@ -541,7 +541,7 @@ export default function BookingPage() {
             hoursConfigured: !!publicSettings?.hours,
             requireManualConfirmation: !!publicSettings?.require_manual_confirmation,
             seating: effectiveSettings.seating,
-            hours: publicSettings?.hours ? normalizedHours : undefined,
+            hours: publicSettings?.hours ?? undefined,
             restaurant: restaurantWebsite ? { website: restaurantWebsite } : undefined,
           },
         }),
@@ -584,7 +584,7 @@ export default function BookingPage() {
         </div>
       </header>
 
-      <main className={`max-w-6xl mx-auto px-4 pt-8 ${created ? "pb-8" : "pb-24 md:pb-12"}`}>
+      <main className={`max-w-6xl mx-auto px-4 pt-8 ${created ? "pb-8" : "pb-12 md:pb-12"}`}>
         {!created ? (
           <section id="booking">
             <form ref={formRef} onSubmit={submit} className="space-y-10">
@@ -886,7 +886,7 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-0 -mt-24 md:mt-0 pt-4 pb-8 text-center">
+      <footer className="mt-0 pt-4 pb-8 text-center">
         <div className="mx-auto max-w-5xl px-4">
           <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:justify-between">
             <div className="md:flex-1 md:text-center">
