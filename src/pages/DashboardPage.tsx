@@ -1355,7 +1355,7 @@ export default function ReservationDashboard() {
       },
       body: JSON.stringify({
         message: text,
-        knowledge: config.ai?.knowledge ?? "",
+        knowledge: buildPublicKnowledge(config.ai?.knowledge ?? "", config.ai.webSearch),
         history: aiHistory,
         context: {
           baseDate: dateSel,

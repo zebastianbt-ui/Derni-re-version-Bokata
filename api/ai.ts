@@ -147,6 +147,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const range = period.from && period.to ? ` (${period.from}–${period.to})` : "";
     return `${lines.join(", ")}${range}`;
   };
+  const periodsSummary = (() => {
+    const periods = context?.hours?.periods ?? [];
+    if (!periods.length) return "";
+    const lines = periods
+      .map((p, idx) => {
+        const label = p?.name ? p.name : `Period ${idx + 1}`;
+        const summary = describePeriodHours(p as any);
+        return summary ? `${label}: ${summary}` : "";
+      })
+      .filter(Boolean);
+    return lines.join("\n");
+  })();
 
   const pad2Local = (n: number) => String(n).padStart(2, "0");
   const realToday = (() => {
@@ -188,6 +200,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const dashboardFacts = [
     hoursSummary ? `Öppettider (från dashboard): ${hoursSummary}` : "",
+    periodsSummary ? `Säsongsperioder:\n${periodsSummary}` : "",
     context?.seating?.maxBookingDurationMin ? `Bordsbokningstid: ${context.seating.maxBookingDurationMin} min` : "",
     context?.seating?.maxGuests ? `Max gäster i restaurangen: ${context.seating.maxGuests}` : "",
     context?.seating?.maxGuestsPerReservation ? `Max gäster per bokning: ${context.seating.maxGuestsPerReservation}` : "",
@@ -985,6 +998,29 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     /(boka|bokning|reservation|reservera|bord|table)/i.test(txt) ||
     /\b\d{1,2}[:\.h]\d{2}\b/.test(txt) ||
     /\b\d{1,3}\s*(gäster|guests|personer|pers)\b/i.test(txt);
+
+  if (/(instagram|insta)/i.test(msgLower) && kbInfo.instagram) {
+    res.status(200).json({ reply: t(`Instagram: ${kbInfo.instagram}.`, `Instagram : ${kbInfo.instagram}.`, `Instagram: ${kbInfo.instagram}.`) });
+    return;
+  }
+  if (/facebook/i.test(msgLower) && kbInfo.facebook) {
+    res.status(200).json({ reply: t(`Facebook: ${kbInfo.facebook}.`, `Facebook : ${kbInfo.facebook}.`, `Facebook: ${kbInfo.facebook}.`) });
+    return;
+  }
+  if (/(hemsida|webbplats|website|webb|site)/i.test(msgLower) && kbInfo.website) {
+    res.status(200).json({ reply: t(`Vår hemsida: ${kbInfo.website}`, `Notre site : ${kbInfo.website}`, `Our website: ${kbInfo.website}`) });
+    return;
+  }
+  if (/(google maps|karta|maps|vägbeskrivning|hur långt|hur länge|restid|avstånd|kör)/i.test(msgLower) && kbInfo.googleMaps) {
+    res.status(200).json({
+      reply: t(
+        `Här hittar du oss och kan se restid: ${kbInfo.googleMaps}`,
+        `Voici notre adresse et le temps de trajet : ${kbInfo.googleMaps}`,
+        `Here is our location and travel time: ${kbInfo.googleMaps}`
+      ),
+    });
+    return;
+  }
 
   if (!FORCE_OPENAI) {
   const isRestaurantTopic =
