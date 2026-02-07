@@ -301,6 +301,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .replace(/[^\p{L}\p{N}\s]/gu, " ")
       .replace(/\s+/g, " ")
       .trim();
+  const asUrl = (url: string) => {
+    if (!url) return url;
+    if (/^https?:\/\//i.test(url)) return url;
+    return `https://${url.replace(/^\/+/, "")}`;
+  };
+  const hasUrl = (text: string) => /https?:\/\/\S+/i.test(text);
+  const appendWebsiteIfMissing = (text: string) => {
+    if (!kbInfo.website) return text;
+    if (hasUrl(text)) return text;
+    if (/(hemsida|webbplats|website|site)/i.test(text)) return `${text} ${asUrl(kbInfo.website)}`;
+    return text;
+  };
 
   const knowledgeText = (knowledge ?? "").trim();
   const knowledgeLines = knowledgeText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -320,7 +332,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     address: getField("Adress"),
     phone: getField("Telefon"),
     email: getField("E-post"),
-    website: getFieldAny(["Webbplats", "Hemsida", "Website", "Site"]) || context?.restaurant?.website || "",
+    website: asUrl(getFieldAny(["Webbplats", "Hemsida", "Website", "Site"]) || context?.restaurant?.website || ""),
     payment: getField("Betalning"),
     allergies: getField("Allergier"),
     kids: getField("Barn"),
@@ -1123,7 +1135,7 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
   for (const qa of kbFaqs) {
     const qn = normalize(qa.q);
     if (qn && (normMsg.includes(qn) || qn.includes(normMsg)) && qa.a) {
-      sendReply(qa.a);
+      sendReply(appendWebsiteIfMissing(qa.a));
       return;
     }
   }
@@ -1253,6 +1265,20 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     return;
   }
 
+  const overlapsMonths = (from?: string, to?: string, months: number[] = []) => {
+    if (!from || !to) return false;
+    const start = new Date(from + "T00:00:00Z");
+    const end = new Date(to + "T00:00:00Z");
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+    const cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    const endMonth = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
+    while (cur.getTime() <= endMonth.getTime()) {
+      const m = cur.getUTCMonth() + 1;
+      if (months.includes(m)) return true;
+      cur.setUTCMonth(cur.getUTCMonth() + 1);
+    }
+    return false;
+  };
   const isHoursQuestion = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
   if (isHoursQuestion) {
     const base = context?.baseDate ?? fmtDate(new Date());
@@ -1293,27 +1319,28 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     }
     if (/(sommar|sommaröppettider|été|ete|summer|summer hours)/i.test(msgLower)) {
       const periods = context?.hours?.periods ?? [];
-      const byName = periods.find((p) => (p?.name ? /(sommar|été|ete|summer)/i.test(p.name) : false)) ?? null;
-      const byMonth =
-        byName ??
-        periods.find((p) => {
-          const fromMonth = Number(p?.from?.slice(5, 7));
-          const toMonth = Number(p?.to?.slice(5, 7));
-          if (!fromMonth || !toMonth) return false;
-          if (fromMonth <= toMonth) return fromMonth <= 8 && toMonth >= 6;
-          return false;
-        }) ??
-        null;
-      const summary = describePeriodHours(byMonth);
-      if (summary) {
-        sendReply(
-          t(
-            `Sommaröppettider: ${summary}.`,
-            `Horaires d'été : ${summary}.`,
-            `Summer hours: ${summary}.`
-          )
-        );
-        return;
+      const summerPeriods = periods.filter((p) => {
+        if (p?.name && /(sommar|été|ete|summer)/i.test(p.name)) return true;
+        return overlapsMonths(p?.from, p?.to, [6, 7, 8]);
+      });
+      if (summerPeriods.length) {
+        const lines = summerPeriods
+          .map((p, idx) => {
+            const label = p?.name?.trim() ? p.name.trim() : `Period ${idx + 1}`;
+            const summary = describePeriodHours(p as any);
+            return summary ? `${label}: ${summary}` : "";
+          })
+          .filter(Boolean);
+        if (lines.length) {
+          sendReply(
+            t(
+              `Sommaröppettider: ${lines.join(" | ")}`,
+              `Horaires d'été : ${lines.join(" | ")}`,
+              `Summer hours: ${lines.join(" | ")}`
+            )
+          );
+          return;
+        }
       }
     }
     if (/nästa vecka|semaine prochaine|next week/i.test(msgLower)) {

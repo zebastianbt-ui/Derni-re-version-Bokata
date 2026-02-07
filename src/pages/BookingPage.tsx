@@ -526,7 +526,7 @@ export default function BookingPage() {
             hoursConfigured: !!publicSettings?.hours,
             requireManualConfirmation: !!publicSettings?.require_manual_confirmation,
             seating: effectiveSettings.seating,
-            hours: normalizedHours,
+            hours: publicSettings?.hours ? normalizedHours : undefined,
           },
         }),
       });
@@ -568,7 +568,7 @@ export default function BookingPage() {
         </div>
       </header>
 
-      <main className={`max-w-6xl mx-auto px-4 pt-8 ${created ? "pb-8" : "pb-24 md:pb-12"}`}>
+      <main className={`max-w-6xl mx-auto px-4 pt-8 ${created ? "pb-8" : "pb-24 md:pb-4"}`}>
         {!created ? (
           <section id="booking">
             <form ref={formRef} onSubmit={submit} className="space-y-10">
@@ -745,7 +745,7 @@ export default function BookingPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-pink-100 bg-white px-6 py-3 text-center text-sm text-gray-700 max-w-5xl mx-auto">
+              <div className="rounded-2xl border border-pink-100 bg-white px-6 py-4 text-center text-base md:text-lg text-gray-700 max-w-5xl mx-auto">
                 <span className="font-semibold text-gray-900">Snabböversikt</span>{" "}
                 {new Date(date).toLocaleDateString()} • {guests} gäster
                 {name ? ` • ${name}` : ""}
@@ -783,7 +783,7 @@ export default function BookingPage() {
                       src={forkTransparent}
                       alt=""
                       aria-hidden="true"
-                      className="h-40 w-auto pointer-events-none select-none"
+                      className="h-32 w-auto pointer-events-none select-none"
                     />
                   </div>
                 </div>
@@ -871,7 +871,7 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-0 pt-4 pb-8 text-center">
+      <footer className="mt-0 pt-0 pb-8 text-center">
         <div className="mx-auto max-w-5xl px-4">
           <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:justify-between">
             <div className="md:flex-1 md:text-center">
