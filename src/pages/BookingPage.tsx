@@ -651,24 +651,25 @@ export default function BookingPage() {
                         );
                       })}
                     </div>
-                    <button
-                      type="submit"
-                      disabled={!date || !time || !guests || !name || !email || submitting || !avail.canFit || (turnstileSiteKey ? !turnstileToken : false)}
-                      className="mt-4 w-full px-5 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-700 via-purple-600 to-fuchsia-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
-                    >
-                      {submitting ? "Skickar…" : "BOKA"}
-                    </button>
-                    {turnstileSiteKey ? (
-                      <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-violet-200 bg-white/80 px-4 py-3 overflow-hidden">
-                        <div className="text-xs font-semibold uppercase tracking-wider text-violet-700">Bokäta</div>
-                        <div className="flex flex-col items-end">
-                          <div ref={turnstileRef} className="min-h-[65px] max-w-[220px] sm:max-w-none overflow-hidden origin-top-right transform scale-[0.75] sm:scale-90 md:scale-100" />
-                          {turnstileError ? (
-                            <div className="mt-2 text-xs text-rose-600">{turnstileError}</div>
-                          ) : null}
+                    <div className="mt-4 flex flex-col md:flex-row md:items-center md:gap-4">
+                      <button
+                        type="submit"
+                        disabled={!date || !time || !guests || !name || !email || submitting || !avail.canFit || (turnstileSiteKey ? !turnstileToken : false)}
+                        className="w-full md:w-auto md:flex-1 px-5 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-700 via-purple-600 to-fuchsia-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
+                      >
+                        {submitting ? "Skickar…" : "BOKA"}
+                      </button>
+                      {turnstileSiteKey ? (
+                        <div className="mt-3 md:mt-0 flex items-center justify-end rounded-2xl border border-violet-200 bg-white/80 px-3 py-2 overflow-hidden md:flex-1">
+                          <div className="flex flex-col items-end">
+                            <div ref={turnstileRef} className="min-h-[65px] max-w-[220px] sm:max-w-none overflow-hidden origin-top-right transform scale-[0.75] sm:scale-90 md:scale-100" />
+                            {turnstileError ? (
+                              <div className="mt-2 text-xs text-rose-600">{turnstileError}</div>
+                            ) : null}
+                          </div>
                         </div>
-                      </div>
-                    ) : null}
+                      ) : null}
+                    </div>
                     {submitError ? (
                       <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 text-center">
                         {submitError}

@@ -1382,8 +1382,8 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
           })
           .filter(Boolean);
         if (lines.length) {
-          const closedNotice = closedRanges.length
-            ? ` Stängt under: ${closedRanges.map((r) => `${r.start}–${r.end}`).join(", ")}.`
+          const closedNotice = currentClosed
+            ? ` Stängt under: ${currentClosed.start}–${currentClosed.end}.`
             : "";
           sendReply(
             t(
