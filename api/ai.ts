@@ -286,11 +286,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
   const lang = detectLang();
   const t = (sv: string, fr: string, en: string) => (lang === "fr" ? fr : lang === "en" ? en : sv);
-  const hasSmiley = (text: string) => /(:\)|:-\)|:D|😊|🙂)/.test(text);
+  const hasSmiley = (text: string) => /😊|🙂|😀|😁|😃|😄|😅|😍|😇|🥰/.test(text);
   const formatReply = (text: string) => {
     const cleaned = text.replace(/—/g, "-").trim();
     if (!cleaned) return cleaned;
-    return hasSmiley(cleaned) ? cleaned : `${cleaned} :)`;
+    return hasSmiley(cleaned) ? cleaned : `${cleaned} 😊`;
   };
   const normalize = (s: string) =>
     s
@@ -746,7 +746,7 @@ Tu ne mélanges jamais les langues.
 * Réponses courtes, claires et utiles
 * Aucune exagération
 * Un humour léger si approprié
-* Ajoute un smiley simple (ex: :)) dans chaque réponse
+* Ajoute un emoji (ex: 😊) dans chaque réponse
 * N’utilise jamais le caractère "—"
 * Aucune formulation vague
 

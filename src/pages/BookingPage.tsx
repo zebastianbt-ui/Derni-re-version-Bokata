@@ -584,7 +584,7 @@ export default function BookingPage() {
         </div>
       </header>
 
-      <main className={`max-w-6xl mx-auto px-4 pt-8 ${created ? "pb-8" : "pb-24 md:pb-0"}`}>
+      <main className={`max-w-6xl mx-auto px-4 pt-8 ${created ? "pb-8" : "pb-24 md:pb-12"}`}>
         {!created ? (
           <section id="booking">
             <form ref={formRef} onSubmit={submit} className="space-y-10">
@@ -799,7 +799,7 @@ export default function BookingPage() {
                       src={forkTransparent}
                       alt=""
                       aria-hidden="true"
-                      className="h-[80%] w-auto pointer-events-none select-none"
+                      className="h-[80%] scale-150 w-auto pointer-events-none select-none"
                     />
                   </div>
                 </div>
@@ -887,7 +887,7 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-0 -mt-6 md:-mt-10 pt-0 pb-8 text-center">
+      <footer className="mt-0 pt-4 pb-8 text-center">
         <div className="mx-auto max-w-5xl px-4">
           <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:justify-between">
             <div className="md:flex-1 md:text-center">
