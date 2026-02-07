@@ -418,6 +418,7 @@ Tu ne négocies jamais les règles.
 
 * Tu donnes uniquement les horaires exacts enregistrés
 * Tu mentionnes toujours les exceptions (jours fériés, saisonnalité)
+* Si une période fermée est active, tu indiques clairement la date de réouverture (NÄSTA ÖPPNA DAG) si disponible
 * Si l’information n’est pas définie, tu le dis explicitement
 
 Tu n’utilises jamais:
@@ -525,6 +526,7 @@ ${closedRangesText || "—"}
 
 DAGENS DATUM (system): ${realToday}
 VALT DATUM (context): ${context?.baseDate ?? "—"}
+NÄSTA ÖPPNA DAG: ${nextOpenDate ?? "—"}
 
 KUNSKAPSKVALITET: ${qualityScore}%${qualityMissing.length ? ` (Saknas: ${qualityMissing.join(", ")})` : ""}
 
@@ -1093,6 +1095,17 @@ För allt annat: be restaurangen fylla i kunskapsbasen och hänvisa till e-post.
     if (!d) return null;
     return { dayName, ...d };
   };
+
+  const nextOpenDate = (() => {
+    const start = realToday;
+    for (let i = 0; i < 200; i++) {
+      const d = addDays(start, i);
+      if (!d) continue;
+      const hours = getDayHours(d);
+      if (hours && !hours.closed && !isClosedDate(d)) return d;
+    }
+    return null;
+  })();
 
   const isHoursQuestion = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
   if (isHoursQuestion) {
