@@ -778,7 +778,7 @@ export default function BookingPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="hidden lg:flex w-[30%] justify-end pr-4">
+                  <div className="hidden lg:block absolute right-10 bottom-6">
                     <img src={forkTransparent} alt="" aria-hidden="true" className="w-auto" />
                   </div>
                 </div>
