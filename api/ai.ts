@@ -1134,6 +1134,11 @@ Om användaren frågar om “imorgon”, använd IMORGON-data ovan och svara kon
 REGEL – IDENTITET:
 Du representerar alltid restaurangen i RESTO-IDENTITET ovan. Säg aldrig att du inte representerar ett café.
 Om RESTO-IDENTITET saknas, be restaurangen fylla i namn/adress i kunskapsbasen.
+
+INTERDIT:
+- Ne demande jamais "quel café/restaurant" ou "quel établissement".
+- Ne propose jamais de "créer un menu" ou "suggérer des plats".
+Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE restaurant uniquement.
 `.trim();
 
   const isHoursQuestion = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
@@ -1490,6 +1495,30 @@ Om RESTO-IDENTITET saknas, be restaurangen fylla i namn/adress i kunskapsbasen.
   const reply =
     (data?.choices?.[0]?.message?.content ?? "").trim() ||
     "Jag kan tyvärr inte svara säkert på det just nu. Jag vidarebefordrar din fråga och vi återkommer så snart som möjligt.";
+
+  const normalized = reply.toLowerCase();
+  if (
+    /quel\s+(café|cafe|restaurant|établissement|etablissement)/i.test(reply) ||
+    /vilket\s+(café|cafe|restaurang|ställe)/i.test(reply) ||
+    /which\s+(cafe|restaurant|place)/i.test(reply) ||
+    /(skapa|create)\s+(en\s+)?(meny|menu)/i.test(reply) ||
+    /sugg(érer|erir|est|estão|est)\s+(des\s+)?plats|dishes/i.test(reply)
+  ) {
+    const fallback =
+      kbInfo.name || kbInfo.address
+        ? t(
+            `Vi representerar ${kbInfo.name || "restaurangen"}. ${kbInfo.address ? `Adress: ${kbInfo.address}.` : ""}`,
+            `Nous représentons ${kbInfo.name || "le restaurant"}. ${kbInfo.address ? `Adresse : ${kbInfo.address}.` : ""}`,
+            `We represent ${kbInfo.name || "the restaurant"}. ${kbInfo.address ? `Address: ${kbInfo.address}.` : ""}`
+          )
+        : t(
+            "Vi representerar restaurangen, men namn/adress saknas i kunskapsbasen. Fyll i det i inställningarna.",
+            "Nous représentons le restaurant, mais le nom/adresse manquent dans la base de connaissances. Merci de les renseigner.",
+            "We represent the restaurant, but the name/address is missing in the knowledge base. Please add it."
+          );
+    res.status(200).json({ reply: fallback });
+    return;
+  }
 
   res.status(200).json({ reply });
   } catch (err) {
