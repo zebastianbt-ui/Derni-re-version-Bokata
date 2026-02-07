@@ -234,6 +234,14 @@ const overlap = (aS: number, aE: number, bS: number, bE: number) => aS < bE && b
 const uid = () => Math.random().toString(36).slice(2, 10);
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
+const tableSizeForSeats = (seats: number) => {
+  if (seats <= 2) return { w: 80, h: 60 };
+  if (seats <= 4) return { w: 90, h: 60 };
+  if (seats <= 6) return { w: 110, h: 70 };
+  if (seats <= 8) return { w: 130, h: 80 };
+  return { w: 150, h: 90 };
+};
+
 const toIsoDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const defaultPeriodRange = () => {
   const y = new Date().getFullYear();
@@ -483,10 +491,10 @@ export default function ReservationDashboard() {
     width: 900,
     height: 520,
     tables: [
-      { id: uid(), x: 80, y: 80, w: 80, h: 60, seats: 2, label: "T1" },
-      { id: uid(), x: 200, y: 80, w: 80, h: 60, seats: 2, label: "T2" },
-      { id: uid(), x: 320, y: 80, w: 100, h: 70, seats: 4, label: "T3" },
-      { id: uid(), x: 80, y: 180, w: 120, h: 80, seats: 6, label: "T4" },
+      { id: uid(), x: 80, y: 80, ...tableSizeForSeats(2), seats: 2, label: "T1" },
+      { id: uid(), x: 200, y: 80, ...tableSizeForSeats(2), seats: 2, label: "T2" },
+      { id: uid(), x: 320, y: 80, ...tableSizeForSeats(4), seats: 4, label: "T3" },
+      { id: uid(), x: 80, y: 180, ...tableSizeForSeats(6), seats: 6, label: "T4" },
     ],
     zones: [
       { id: uid(), x: 520, y: 70, w: 280, h: 160, name: "Terrass" },
@@ -532,7 +540,12 @@ export default function ReservationDashboard() {
         .maybeSingle();
       if (error) return;
       const layout = (data as { layout?: Floorplan })?.layout;
-      if (layout?.tables && layout?.zones) setFloorplan(layout);
+      if (layout?.tables && layout?.zones) {
+        setFloorplan({
+          ...layout,
+          tables: layout.tables.map((t) => ({ ...t, ...tableSizeForSeats(t.seats || 0) })),
+        });
+      }
     };
     loadPlan();
   }, [restaurantId]);
@@ -1961,7 +1974,7 @@ export default function ReservationDashboard() {
                     ...prev,
                     tables: [
                       ...prev.tables,
-                      { id: uid(), x: 80, y: 80, w: 90, h: 60, seats: 4, label: `T${prev.tables.length + 1}` },
+                      { id: uid(), x: 80, y: 80, ...tableSizeForSeats(4), seats: 4, label: `T${prev.tables.length + 1}` },
                     ],
                   }))
                 }
@@ -2080,46 +2093,18 @@ export default function ReservationDashboard() {
                               setFloorplan((prev) => ({
                                 ...prev,
                                 tables: prev.tables.map((x) =>
-                                  x.id === t.id ? { ...x, seats: Number(e.target.value) || 0 } : x
+                                  x.id === t.id
+                                    ? {
+                                        ...x,
+                                        seats: Number(e.target.value) || 0,
+                                        ...tableSizeForSeats(Number(e.target.value) || 0),
+                                      }
+                                    : x
                                 ),
                               }))
                             }
                           />
                         </Field>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Field label="Bredd">
-                            <input
-                              type="number"
-                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-                              value={t.w}
-                              disabled={restaurantRole !== "owner"}
-                              onChange={(e) =>
-                                setFloorplan((prev) => ({
-                                  ...prev,
-                                  tables: prev.tables.map((x) =>
-                                    x.id === t.id ? { ...x, w: Number(e.target.value) || 40 } : x
-                                  ),
-                                }))
-                              }
-                            />
-                          </Field>
-                          <Field label="Höjd">
-                            <input
-                              type="number"
-                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-                              value={t.h}
-                              disabled={restaurantRole !== "owner"}
-                              onChange={(e) =>
-                                setFloorplan((prev) => ({
-                                  ...prev,
-                                  tables: prev.tables.map((x) =>
-                                    x.id === t.id ? { ...x, h: Number(e.target.value) || 40 } : x
-                                  ),
-                                }))
-                              }
-                            />
-                          </Field>
-                        </div>
                         <button
                           className="w-full rounded-lg border border-rose-200 bg-rose-50 text-rose-700 px-3 py-2 disabled:opacity-60"
                           disabled={restaurantRole !== "owner"}
@@ -2451,26 +2436,15 @@ export default function ReservationDashboard() {
                   Klistra in på din webbplats eller Facebook för att leda gäster till Bokätas bokningssida.
                 </div>
               </Field>
-              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                <Field label="E-post för bokningar">
+              <div className="mt-4">
+                <Field label="E-post för bokningar & aviseringar">
                   <input
                     className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                    value={config.info.email}
+                    value={config.info.email || config.notifications.to}
                     onChange={(e) =>
                       setConfig({
                         ...config,
                         info: { ...config.info, email: e.target.value },
-                      })
-                    }
-                  />
-                </Field>
-                <Field label="Mottagare">
-                  <input
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                    value={config.notifications.to}
-                    onChange={(e) =>
-                      setConfig({
-                        ...config,
                         notifications: { ...config.notifications, to: e.target.value },
                       })
                     }

@@ -422,6 +422,144 @@ ${dashboardFacts}
     facebook: getField("Facebook"),
     googleMaps: getFieldAny(["Google Maps", "Maps", "GoogleMaps"]),
   };
+  const hasMenuInfo = /meny|menu/i.test(knowledgeText);
+
+  const sanitizeUrl = (input: string) => {
+    try {
+      const url = new URL(input);
+      if (!["http:", "https:"].includes(url.protocol)) return null;
+      const host = url.hostname.toLowerCase();
+      if (
+        host === "localhost" ||
+        host === "127.0.0.1" ||
+        host === "0.0.0.0" ||
+        host.startsWith("127.") ||
+        host.startsWith("10.") ||
+        host.startsWith("192.168.") ||
+        /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
+        host.startsWith("::1") ||
+        host.startsWith("fc") ||
+        host.startsWith("fd")
+      ) {
+        return null;
+      }
+      return url;
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchWithTimeout = async (url: string, timeoutMs: number) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, {
+        method: "GET",
+        redirect: "follow",
+        headers: {
+          "User-Agent": "BokataBot/1.0 (+https://www.bokata.se)",
+          "Accept": "text/html,application/xhtml+xml",
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const htmlToText = (html: string) =>
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const extractMenuLink = (html: string, baseUrl: string) => {
+    const base = sanitizeUrl(baseUrl);
+    if (!base) return null;
+    const hrefs: string[] = [];
+    const re = /href\s*=\s*["']([^"']+)["']/gi;
+    let m: RegExpExecArray | null = null;
+    while ((m = re.exec(html))) {
+      const href = m[1];
+      if (!href || href.startsWith("#")) continue;
+      hrefs.push(href);
+    }
+    for (const href of hrefs) {
+      const lower = href.toLowerCase();
+      if (!/menu|meny/.test(lower)) continue;
+      try {
+        const full = new URL(href, base.toString());
+        const baseHost = base.hostname.toLowerCase();
+        const fullHost = full.hostname.toLowerCase();
+        if (fullHost === baseHost || fullHost.endsWith(`.${baseHost}`)) {
+          return full.toString();
+        }
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  };
+
+  const normalizeTime = (raw: string) => {
+    const clean = raw.replace(".", ":");
+    const parts = clean.split(":");
+    if (parts.length === 1) {
+      const h = Number(parts[0]);
+      if (h >= 0 && h <= 23) return `${pad2(h)}:00`;
+      return null;
+    }
+    const h = Number(parts[0]);
+    const m = Number(parts[1]);
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) return `${pad2(h)}:${pad2(m)}`;
+    return null;
+  };
+
+  const extractHoursSummary = (text: string) => {
+    const dayRegex =
+      /\b(måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|monday|tuesday|wednesday|thursday|friday|saturday|sunday|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\b\s*[:\-–]?\s*(\d{1,2}(?:[:\.]\d{2})?)\s*(?:-|–|to|till|à)\s*(\d{1,2}(?:[:\.]\d{2})?)/gi;
+    const out: string[] = [];
+    let match: RegExpExecArray | null = null;
+    while ((match = dayRegex.exec(text))) {
+      const day = match[1];
+      const start = normalizeTime(match[2]);
+      const end = normalizeTime(match[3]);
+      if (!start || !end) continue;
+      out.push(`${day} ${start}–${end}`);
+      if (out.length >= 7) break;
+    }
+    return out.length ? out.join(", ") : "";
+  };
+
+  const getWebData = (() => {
+    let cached: Promise<{ menuUrl: string | null; hoursSummary: string | null }> | null = null;
+    return async (siteUrl: string) => {
+      if (cached) return cached;
+      cached = (async () => {
+        const safe = sanitizeUrl(siteUrl);
+        if (!safe) return { menuUrl: null, hoursSummary: null };
+        try {
+          const resp = await fetchWithTimeout(safe.toString(), 5000);
+          if (!resp.ok) return { menuUrl: null, hoursSummary: null };
+          const html = (await resp.text()).slice(0, 200_000);
+          const text = htmlToText(html);
+          return {
+            menuUrl: extractMenuLink(html, safe.toString()),
+            hoursSummary: extractHoursSummary(text),
+          };
+        } catch {
+          return { menuUrl: null, hoursSummary: null };
+        }
+      })();
+      return cached;
+    };
+  })();
   const kbFaqs = (() => {
     const out: { q: string; a: string }[] = [];
     let q: string | null = null;
@@ -496,6 +634,8 @@ ${dashboardFacts}
     return closedRanges.find((r) => iso >= r.start && iso <= r.end) ?? null;
   };
 
+  const siteUrl = kbInfo.website;
+
   if (isWhyFollowUp && closedRanges.length) {
     const rangesText = closedRanges
       .map((r) => (r.start === r.end ? r.start : `${r.start}–${r.end}`))
@@ -560,8 +700,30 @@ ${dashboardFacts}
     res.status(200).json({ reply: `Du kan maila oss på ${kbInfo.email}.` });
     return;
   }
-  if (/(meny|menu|à la carte|rätter|mat)/i.test(msgLower) && kbInfo.website) {
-    res.status(200).json({ reply: t(`Menyn finns här: ${kbInfo.website}`, `Le menu est ici : ${kbInfo.website}`, `The menu is here: ${kbInfo.website}`) });
+  if (/(meny|menu|à la carte|rätter|mat)/i.test(msgLower)) {
+    if (!hasMenuInfo && siteUrl) {
+      const webData = await getWebData(siteUrl);
+      if (webData.menuUrl) {
+        res.status(200).json({
+          reply: t(
+            `Menyn (från hemsidan): ${webData.menuUrl}`,
+            `Menu (depuis le site officiel) : ${webData.menuUrl}`,
+            `Menu (from the official site): ${webData.menuUrl}`
+          ),
+        });
+        return;
+      }
+    }
+    if (kbInfo.website) {
+      res.status(200).json({
+        reply: t(
+          `Menyn finns här: ${kbInfo.website}`,
+          `Le menu est ici : ${kbInfo.website}`,
+          `The menu is here: ${kbInfo.website}`
+        ),
+      });
+      return;
+    }
     return;
   }
   if (/(hemsida|webbplats|website|webb|site)/i.test(msgLower) && kbInfo.website) {
@@ -726,6 +888,19 @@ ${dashboardFacts}
   if (isHoursQuestion) {
     const base = context?.baseDate ?? fmtDate(new Date());
     if (context && "hoursConfigured" in context && context.hoursConfigured === false) {
+      if (siteUrl) {
+        const webData = await getWebData(siteUrl);
+        if (webData.hoursSummary) {
+          res.status(200).json({
+            reply: t(
+              `Enligt hemsidan: ${webData.hoursSummary}. Kontakta oss gärna för att bekräfta.`,
+              `Selon le site officiel : ${webData.hoursSummary}. Merci de nous contacter pour confirmer.`,
+              `According to the official site: ${webData.hoursSummary}. Please contact us to confirm.`
+            ),
+          });
+          return;
+        }
+      }
       res.status(200).json({
         reply: t(
           "Våra öppettider är inte publicerade just nu. Kontakta oss så hjälper vi dig.",
