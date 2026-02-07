@@ -1350,9 +1350,15 @@ export default function ReservationDashboard() {
         },
       }),
     });
-    const data = await r.json();
+    const raw = await r.text();
+    let data: { reply?: string; error?: string } = {};
+    try {
+      data = raw ? (JSON.parse(raw) as { reply?: string; error?: string }) : {};
+    } catch {
+      data = {};
+    }
     if (!r.ok) {
-      throw new Error(data?.error || "AI error");
+      throw new Error(data?.error || raw || "AI error");
     }
     return data.reply || "Inget svar.";
   };

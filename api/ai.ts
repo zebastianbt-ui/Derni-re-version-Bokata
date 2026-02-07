@@ -8,6 +8,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  try {
   const getClientIp = () => {
     const xfwd = req.headers["x-forwarded-for"];
     const ip = Array.isArray(xfwd) ? xfwd[0] : xfwd;
@@ -1402,4 +1403,8 @@ För allt annat: be restaurangen fylla i kunskapsbasen och hänvisa till e-post.
     "Jag kan tyvärr inte svara säkert på det just nu. Jag vidarebefordrar din fråga och vi återkommer så snart som möjligt.";
 
   res.status(200).json({ reply });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "AI error";
+    res.status(500).json({ error: msg });
+  }
 }
