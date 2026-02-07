@@ -27,14 +27,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     knowledge?: string;
     history?: { role: "user" | "assistant"; content: string }[];
     turnstileToken?: string;
-    context?: {
-      baseDate?: string;
-      nowTime?: string;
-      hoursConfigured?: boolean;
-      requireManualConfirmation?: boolean;
-      seating?: {
-        maxGuests?: number;
-        maxGuestsPerReservation?: number;
+      context?: {
+        baseDate?: string;
+        nowTime?: string;
+        hoursConfigured?: boolean;
+        requireManualConfirmation?: boolean;
+        restaurant?: {
+          name?: string;
+          address?: string;
+          email?: string;
+        };
+        seating?: {
+          maxGuests?: number;
+          maxGuestsPerReservation?: number;
         groupThreshold?: number;
         maxBookingDurationMin?: number;
       };
@@ -286,12 +291,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     googleMaps: getFieldAny(["Google Maps", "Maps", "GoogleMaps"]),
   };
   const hasMenuInfo = /meny|menu/i.test(knowledgeText);
+  const identity = {
+    name: context?.restaurant?.name || kbInfo.name || "",
+    address: context?.restaurant?.address || kbInfo.address || "",
+    email: context?.restaurant?.email || kbInfo.email || "",
+    phone: kbInfo.phone || "",
+    website: kbInfo.website || "",
+  };
   const restaurantIdentity = [
-    kbInfo.name ? `Namn: ${kbInfo.name}` : "",
-    kbInfo.address ? `Adress: ${kbInfo.address}` : "",
-    kbInfo.phone ? `Telefon: ${kbInfo.phone}` : "",
-    kbInfo.email ? `E-post: ${kbInfo.email}` : "",
-    kbInfo.website ? `Webbplats: ${kbInfo.website}` : "",
+    identity.name ? `Namn: ${identity.name}` : "",
+    identity.address ? `Adress: ${identity.address}` : "",
+    identity.phone ? `Telefon: ${identity.phone}` : "",
+    identity.email ? `E-post: ${identity.email}` : "",
+    identity.website ? `Webbplats: ${identity.website}` : "",
   ].filter(Boolean).join("\n");
   const isHoursQuestionLite = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
   const needsWebForHours =
@@ -1134,6 +1146,7 @@ Om användaren frågar om “imorgon”, använd IMORGON-data ovan och svara kon
 REGEL – IDENTITET:
 Du representerar alltid restaurangen i RESTO-IDENTITET ovan. Säg aldrig att du inte representerar ett café.
 Om RESTO-IDENTITET saknas, be restaurangen fylla i namn/adress i kunskapsbasen.
+Använd alltid RESTO-IDENTITET när någon frågar "vilken plats" eller "vilket café".
 
 INTERDIT:
 - Ne demande jamais "quel café/restaurant" ou "quel établissement".
@@ -1499,17 +1512,20 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
   const normalized = reply.toLowerCase();
   if (
     /quel\s+(café|cafe|restaurant|établissement|etablissement)/i.test(reply) ||
+    /vilken\s+(plats|verksamhet|butik|restaurang|café|ställe)/i.test(reply) ||
     /vilket\s+(café|cafe|restaurang|ställe)/i.test(reply) ||
     /which\s+(cafe|restaurant|place)/i.test(reply) ||
+    /can you specify/i.test(reply) ||
+    /kan du specificera/i.test(reply) ||
     /(skapa|create)\s+(en\s+)?(meny|menu)/i.test(reply) ||
     /sugg(érer|erir|est|estão|est)\s+(des\s+)?plats|dishes/i.test(reply)
   ) {
     const fallback =
-      kbInfo.name || kbInfo.address
+      identity.name || identity.address
         ? t(
-            `Vi representerar ${kbInfo.name || "restaurangen"}. ${kbInfo.address ? `Adress: ${kbInfo.address}.` : ""}`,
-            `Nous représentons ${kbInfo.name || "le restaurant"}. ${kbInfo.address ? `Adresse : ${kbInfo.address}.` : ""}`,
-            `We represent ${kbInfo.name || "the restaurant"}. ${kbInfo.address ? `Address: ${kbInfo.address}.` : ""}`
+            `Vi representerar ${identity.name || "restaurangen"}. ${identity.address ? `Adress: ${identity.address}.` : ""}`,
+            `Nous représentons ${identity.name || "le restaurant"}. ${identity.address ? `Adresse : ${identity.address}.` : ""}`,
+            `We represent ${identity.name || "the restaurant"}. ${identity.address ? `Address: ${identity.address}.` : ""}`
           )
         : t(
             "Vi representerar restaurangen, men namn/adress saknas i kunskapsbasen. Fyll i det i inställningarna.",

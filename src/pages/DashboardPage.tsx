@@ -1328,6 +1328,11 @@ export default function ReservationDashboard() {
         context: {
           baseDate: dateSel,
           nowTime: `${pad2(new Date().getHours())}:${pad2(new Date().getMinutes())}`,
+          restaurant: {
+            name: onboarding.restaurantName || restaurantName || "",
+            address: onboarding.address || "",
+            email: onboarding.email || config.info.email || config.notifications.to || "",
+          },
           seating: {
             maxGuests: config.seating.maxGuests,
             maxGuestsPerReservation: config.escalation.maxGuestsPerReservation,
