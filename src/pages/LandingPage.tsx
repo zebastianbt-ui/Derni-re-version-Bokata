@@ -256,10 +256,74 @@ export default function Page() {
                 id="integritet"
                 q="Integritetspolicy"
                 a={
-                  <div className="space-y-3 text-gray-700">
-                    <p><span className="font-semibold text-gray-900">Kort version:</span> Vi använder bara uppgifter som behövs för att leverera bokningar och svara gäster. Kontakt: bokata.ab@gmail.com.</p>
-                    <p><span className="font-semibold text-gray-900">Lagring:</span> uppgifter raderas eller anonymiseras inom 12 månader efter senaste aktivitet.</p>
-                    <p><span className="font-semibold text-gray-900">Rättigheter:</span> begär åtkomst, rättelse eller radering via bokata.ab@gmail.com.</p>
+                  <div className="space-y-4 text-gray-700">
+                    <div>
+                      <p className="font-semibold text-gray-900">Integritetspolicy – Bokäta</p>
+                      <p className="mt-1"><span className="font-semibold text-gray-900">Kort version:</span> Vi använder endast de uppgifter som krävs för att hantera bordsbokningar och besvara gästers frågor. Vi säljer aldrig data vidare.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Personuppgiftsansvarig</p>
+                      <p>Bokäta</p>
+                      <p>Kontakt: bokata.ab@gmail.com</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Vilka uppgifter vi behandlar</p>
+                      <p>Vi kan behandla följande uppgifter:</p>
+                      <ul className="list-disc pl-5 space-y-1">
+                        <li>Namn</li>
+                        <li>E‑postadress</li>
+                        <li>Antal gäster</li>
+                        <li>Meddelanden eller kommentarer som lämnas vid bokning</li>
+                        <li>Frågor som ställs till AI‑assistenten</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Syfte med behandlingen</p>
+                      <p>Uppgifterna används för att:</p>
+                      <ul className="list-disc pl-5 space-y-1">
+                        <li>Hantera och administrera bokningar</li>
+                        <li>Möjliggöra kommunikation mellan restaurang och gäst</li>
+                        <li>Låta AI‑assistenten svara på vanliga frågor</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Rättslig grund</p>
+                      <p>Behandlingen sker baserat på:</p>
+                      <ul className="list-disc pl-5 space-y-1">
+                        <li>Avtal (för att leverera bokningstjänsten)</li>
+                        <li>Berättigat intresse (för att förbättra och driva tjänsten)</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Lagring av uppgifter</p>
+                      <p>Personuppgifter raderas eller anonymiseras inom 12 månader efter senaste aktivitet, om inget annat krävs enligt lag.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Delning av uppgifter</p>
+                      <p>Vi delar inte personuppgifter med tredje part, förutom nödvändiga tekniska tjänsteleverantörer (t.ex. hosting och e‑post) som behandlar data i enlighet med GDPR.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Var lagras uppgifterna</p>
+                      <p>Uppgifter lagras inom EU eller hos betrodda leverantörer som uppfyller GDPR‑krav.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Cookies</p>
+                      <p>Bokäta använder inga cookies för marknadsföring eller spårning av användare.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Dina rättigheter</p>
+                      <p>Du har rätt att:</p>
+                      <ul className="list-disc pl-5 space-y-1">
+                        <li>Begära tillgång till dina uppgifter</li>
+                        <li>Begära rättelse eller radering</li>
+                        <li>Invända mot behandling</li>
+                      </ul>
+                      <p>Kontakta oss på bokata.ab@gmail.com.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">Ändringar</p>
+                      <p>Denna policy kan uppdateras vid behov. Senaste versionen finns alltid tillgänglig i tjänsten.</p>
+                    </div>
                   </div>
                 }
               />

@@ -659,10 +659,10 @@ export default function BookingPage() {
                       {submitting ? "Skickar…" : "BOKA"}
                     </button>
                     {turnstileSiteKey ? (
-                      <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-violet-200 bg-white/80 px-4 py-3">
+                      <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-violet-200 bg-white/80 px-4 py-3 overflow-hidden">
                         <div className="text-xs font-semibold uppercase tracking-wider text-violet-700">Bokäta</div>
                         <div className="flex flex-col items-end">
-                        <div ref={turnstileRef} className="min-h-[65px] origin-top-right transform scale-90 md:scale-100" />
+                          <div ref={turnstileRef} className="min-h-[65px] max-w-[220px] sm:max-w-none overflow-hidden origin-top-right transform scale-[0.75] sm:scale-90 md:scale-100" />
                           {turnstileError ? (
                             <div className="mt-2 text-xs text-rose-600">{turnstileError}</div>
                           ) : null}
@@ -686,6 +686,7 @@ export default function BookingPage() {
                           return (
                             <button
                               key={t}
+                              type="button"
                               onClick={() => setTime(t)}
                               className={`text-sm font-semibold rounded-md px-1.5 py-1 border transition ${
                                 a.canFit
@@ -857,9 +858,7 @@ export default function BookingPage() {
                 </a>
               </div>
 
-              <div className="mt-6 text-xs text-gray-500">
-                Tips: om Dashboard är öppet i en annan flik syns bokningen redan där.
-              </div>
+              {null}
             </div>
           </section>
         )}
@@ -887,7 +886,7 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-0 pt-4 pb-8 text-center">
+      <footer className="mt-0 -mt-4 md:mt-0 pt-4 pb-8 text-center">
         <div className="mx-auto max-w-5xl px-4">
           <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:justify-between">
             <div className="md:flex-1 md:text-center">
