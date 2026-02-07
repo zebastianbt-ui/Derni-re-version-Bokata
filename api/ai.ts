@@ -127,11 +127,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return `${lines.filter(Boolean).join(", ")}${range}`;
   })();
 
+  const pad2Local = (n: number) => String(n).padStart(2, "0");
+  const realToday = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${pad2Local(now.getMonth() + 1)}-${pad2Local(now.getDate())}`;
+  })();
+
+  const closedRangesText = (() => {
+    const special = context?.hours?.special ?? [];
+    const dates = special
+      .filter((s) => s?.closed && s.date)
+      .map((s) => s.date)
+      .sort();
+    if (!dates.length) return "";
+    const addDay = (iso: string) => {
+      const [y, m, d] = iso.split("-").map(Number);
+      if (!y || !m || !d) return null;
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      dt.setUTCDate(dt.getUTCDate() + 1);
+      return `${dt.getUTCFullYear()}-${pad2Local(dt.getUTCMonth() + 1)}-${pad2Local(dt.getUTCDate())}`;
+    };
+    const ranges: { start: string; end: string }[] = [];
+    let start = dates[0];
+    let prev = dates[0];
+    for (let i = 1; i < dates.length; i++) {
+      const cur = dates[i];
+      const nextExpected = addDay(prev);
+      if (nextExpected && cur === nextExpected) {
+        prev = cur;
+      } else {
+        ranges.push({ start, end: prev });
+        start = cur;
+        prev = cur;
+      }
+    }
+    ranges.push({ start, end: prev });
+    return ranges.map((r) => (r.start === r.end ? r.start : `${r.start}–${r.end}`)).join(", ");
+  })();
+
   const dashboardFacts = [
     hoursSummary ? `Öppettider (från dashboard): ${hoursSummary}` : "",
     context?.seating?.maxBookingDurationMin ? `Bordsbokningstid: ${context.seating.maxBookingDurationMin} min` : "",
     context?.seating?.maxGuests ? `Max gäster i restaurangen: ${context.seating.maxGuests}` : "",
     context?.seating?.maxGuestsPerReservation ? `Max gäster per bokning: ${context.seating.maxGuestsPerReservation}` : "",
+    closedRangesText ? `Stängda perioder: ${closedRangesText}` : "",
   ].filter(Boolean).join("\n");
 
   const qualityChecks = (() => {
@@ -395,6 +434,7 @@ Tu n’utilises jamais:
 * Tu n’ajoutes jamais d’ingrédients
 * Tu ne proposes des adaptations que si elles sont explicitement autorisées
 * Tu utilises les recommandations définies par le restaurateur
+* Si l’utilisateur demande le menu, tu fournis le lien officiel du menu si disponible
 
 Tu ne fais aucune suggestion créative.
 
@@ -479,6 +519,12 @@ ${dashboardFacts}
 
 WEBBINFORMATION (endast om Bokäta saknas):
 ${externalHints.trim() || "—"}
+
+STÄNGDA PERIODER:
+${closedRangesText || "—"}
+
+DAGENS DATUM (system): ${realToday}
+VALT DATUM (context): ${context?.baseDate ?? "—"}
 
 KUNSKAPSKVALITET: ${qualityScore}%${qualityMissing.length ? ` (Saknas: ${qualityMissing.join(", ")})` : ""}
 

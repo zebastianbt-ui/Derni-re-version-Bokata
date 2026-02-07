@@ -3371,7 +3371,7 @@ export default function ReservationDashboard() {
                   <div className="mt-3 p-3 rounded-lg border border-pink-200 bg-gray-50 text-sm text-gray-800 whitespace-pre-wrap">
                     <div className="text-xs text-gray-500">Contexte : {dateSel} • 12:00</div>
                     <div className="mb-1 font-semibold text-pink-700">Svar från {config.ai.name}</div>
-                    {aiPreview}
+                    <div>{linkify(aiPreview)}</div>
                   </div>
                 )}
               </div>
@@ -3438,6 +3438,20 @@ function Stat({
       {sub ? <p className="text-xs text-gray-500 mt-1">{sub}</p> : null}
     </div>
   );
+}
+
+function linkify(text: string) {
+  const parts = text.split(/(https?:\/\/[^\s)]+)\b/);
+  return parts.map((part, idx) => {
+    if (/^https?:\/\//i.test(part)) {
+      return (
+        <a key={`${part}-${idx}`} href={part} target="_blank" rel="noreferrer" className="text-pink-700 underline">
+          {part}
+        </a>
+      );
+    }
+    return <React.Fragment key={`${part}-${idx}`}>{part}</React.Fragment>;
+  });
 }
 
 function Modal({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
