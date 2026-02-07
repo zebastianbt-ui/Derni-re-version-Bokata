@@ -361,9 +361,6 @@ export default function ReservationDashboard() {
   const [restaurantName, setRestaurantName] = useState("");
   const [restaurantRole, setRestaurantRole] = useState<string | null>(null);
   const [bookingLinkStatus, setBookingLinkStatus] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteMsg, setInviteMsg] = useState<string | null>(null);
-  const [members, setMembers] = useState<{ name: string; email: string; role: string }[]>([]);
   const [settingsReady, setSettingsReady] = useState(false);
   const [aiSaveState, setAiSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [aiSaveMessage, setAiSaveMessage] = useState<string>("");
@@ -624,19 +621,6 @@ export default function ReservationDashboard() {
         setAccessDenied(`${baseMsg}${emailMsg}${memberErrMsg}${subErrMsg}`.trim());
         await supabase.auth.signOut();
         return;
-      }
-
-      const { data: pendingInvites } = await supabase
-        .from("invites")
-        .select("id,restaurant_id")
-        .eq("email", userEmail)
-        .is("accepted_at", null);
-
-      if (pendingInvites?.length) {
-        for (const inv of pendingInvites) {
-          await supabase.from("memberships").insert({ restaurant_id: inv.restaurant_id, user_id: userId, role: "member" });
-          await supabase.from("invites").update({ accepted_at: new Date().toISOString() }).eq("id", inv.id);
-        }
       }
 
       let restaurant: { restaurantId: string | null; role?: string | null; name?: string | null } | null = null;
@@ -1668,40 +1652,6 @@ export default function ReservationDashboard() {
     await supabase.auth.signOut();
   };
 
-  const refreshMembers = async (rid: string) => {
-    const { data } = await supabase
-      .from("memberships")
-      .select("role,profiles(full_name,email)")
-      .eq("restaurant_id", rid);
-    if (data) {
-      setMembers(
-        data.map((m) => {
-          const p = (m as { profiles?: { full_name?: string; email?: string } }).profiles;
-          return { role: m.role ?? "member", name: p?.full_name ?? "", email: p?.email ?? "" };
-        })
-      );
-    }
-  };
-
-  const handleInvite = async () => {
-    if (!restaurantId) return;
-    const email = inviteEmail.trim();
-    if (!email) return;
-    const { error } = await supabase.from("invites").insert({
-      restaurant_id: restaurantId,
-      email,
-      invited_by: session?.user?.id ?? null,
-    });
-    setInviteMsg(error ? `Fel: ${error.message}` : "Inbjudan skickad.");
-    if (!error) setInviteEmail("");
-    if (!error) refreshMembers(restaurantId);
-  };
-
-  useEffect(() => {
-    if (!restaurantId) return;
-    refreshMembers(restaurantId);
-  }, [restaurantId]);
-
   if (!session) {
     return (
       <div className="min-h-screen bg-pink-50 p-6 flex items-center justify-center">
@@ -2501,7 +2451,7 @@ export default function ReservationDashboard() {
                   Klistra in på din webbplats eller Facebook för att leda gäster till Bokätas bokningssida.
                 </div>
               </Field>
-              <div className="mt-4">
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                 <Field label="E-post för bokningar">
                   <input
                     className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
@@ -2510,6 +2460,17 @@ export default function ReservationDashboard() {
                       setConfig({
                         ...config,
                         info: { ...config.info, email: e.target.value },
+                      })
+                    }
+                  />
+                </Field>
+                <Field label="Mottagare">
+                  <input
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    value={config.notifications.to}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
                         notifications: { ...config.notifications, to: e.target.value },
                       })
                     }
@@ -3328,58 +3289,6 @@ export default function ReservationDashboard() {
                   </div>
                 ) : null}
               </div>
-            </Section>
-
-            <Section title="Team & åtkomst">
-              <div className="text-sm text-gray-600 mb-3">Restaurang: {restaurantName || "—"}</div>
-
-              <Field label="Bjud in via e‑post">
-                <div className="mt-1 flex gap-2">
-                  <input
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="kollega@restaurant.se"
-                  />
-                  <button
-                    type="button"
-                    className="px-6 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600"
-                    onClick={handleInvite}
-                  >
-                    Bjud in
-                  </button>
-                </div>
-              </Field>
-              {inviteMsg ? <div className="mt-2 text-sm text-gray-700">{inviteMsg}</div> : null}
-
-              <div className="mt-4 text-sm">
-                <div className="font-semibold text-gray-700 mb-2">Medlemmar</div>
-                <div className="space-y-2">
-                  {members.length ? (
-                    members.map((m, i) => (
-                      <div key={`${m.email}-${i}`} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-                        <div>
-                          <div className="text-gray-800">{m.name || "—"}</div>
-                          <div className="text-xs text-gray-500">{m.email || "—"}</div>
-                        </div>
-                        <div className="text-xs text-gray-500">{m.role}</div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-xs text-gray-500">Inga medlemmar ännu.</div>
-                  )}
-                </div>
-              </div>
-            </Section>
-
-            <Section title="Aviseringar">
-              <Field label="Mottagare">
-                <input
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                  value={config.notifications.to}
-                  onChange={(e) => setConfig({ ...config, notifications: { ...config.notifications, to: e.target.value } })}
-                />
-              </Field>
             </Section>
 
             <div className="flex justify-end gap-2">
