@@ -507,6 +507,13 @@ ${dashboardFacts}
     return null;
   };
 
+  const isPdfUrl = (url: string) => /\.pdf(\?|#|$)/i.test(url);
+
+  const extractMenuText = (html: string) => {
+    const raw = htmlToText(html);
+    return raw.slice(0, 20_000);
+  };
+
   const normalizeTime = (raw: string) => {
     const clean = raw.replace(".", ":");
     const parts = clean.split(":");
@@ -555,6 +562,35 @@ ${dashboardFacts}
           };
         } catch {
           return { menuUrl: null, hoursSummary: null };
+        }
+      })();
+      return cached;
+    };
+  })();
+
+  const getMenuContent = (() => {
+    let cached: Promise<{ menuUrl: string | null; menuText: string | null; menuIsPdf: boolean }> | null = null;
+    return async (siteUrl: string) => {
+      if (cached) return cached;
+      cached = (async () => {
+        const base = sanitizeUrl(siteUrl);
+        if (!base) return { menuUrl: null, menuText: null, menuIsPdf: false };
+        const webData = await getWebData(siteUrl);
+        if (!webData.menuUrl) return { menuUrl: null, menuText: null, menuIsPdf: false };
+        const menuUrl = webData.menuUrl;
+        if (isPdfUrl(menuUrl)) {
+          return { menuUrl, menuText: null, menuIsPdf: true };
+        }
+        const menuSafe = sanitizeUrl(menuUrl);
+        if (!menuSafe) return { menuUrl, menuText: null, menuIsPdf: false };
+        try {
+          const resp = await fetchWithTimeout(menuSafe.toString(), 5000);
+          if (!resp.ok) return { menuUrl, menuText: null, menuIsPdf: false };
+          const html = (await resp.text()).slice(0, 200_000);
+          const menuText = extractMenuText(html);
+          return { menuUrl, menuText, menuIsPdf: false };
+        } catch {
+          return { menuUrl, menuText: null, menuIsPdf: false };
         }
       })();
       return cached;
@@ -700,21 +736,55 @@ ${dashboardFacts}
     res.status(200).json({ reply: `Du kan maila oss på ${kbInfo.email}.` });
     return;
   }
-  if (/(meny|menu|à la carte|rätter|mat)/i.test(msgLower)) {
+  if (/(meny|menu|à la carte|rätter|mat|vegetar|vegan|gluten|laktos|galett|crêpe|crepe)/i.test(msgLower)) {
     if (!hasMenuInfo && siteUrl) {
-      const webData = await getWebData(siteUrl);
-      if (webData.menuUrl) {
+      const menuData = await getMenuContent(siteUrl);
+      if (menuData.menuText) {
+        const tokens = msgLower
+          .replace(/[^\p{L}\p{N}\s]/gu, " ")
+          .split(/\s+/)
+          .filter((w) => w.length > 2);
+        const stop = new Set(["menu", "meny", "har", "ni", "finns", "avec", "vous", "des", "est", "are", "have", "do", "the", "and"]);
+        const keywords = tokens.filter((w) => !stop.has(w)).slice(0, 8);
+        const sentences = menuData.menuText.split(/(?<=[.!?])\s+/);
+        const hits = sentences.filter((s) => keywords.some((k) => s.toLowerCase().includes(k))).slice(0, 3);
+        if (hits.length) {
+          res.status(200).json({
+            reply: t(
+              `Enligt menyn på hemsidan: ${hits.join(" ")}`,
+              `Selon le menu du site officiel : ${hits.join(" ")}`,
+              `According to the official menu: ${hits.join(" ")}`
+            ),
+          });
+          return;
+        }
         res.status(200).json({
           reply: t(
-            `Menyn (från hemsidan): ${webData.menuUrl}`,
-            `Menu (depuis le site officiel) : ${webData.menuUrl}`,
-            `Menu (from the official site): ${webData.menuUrl}`
+            `Jag hittar inget tydligt i menyn. Här är menyn: ${menuData.menuUrl}`,
+            `Je ne trouve rien de clair dans le menu. Voici le menu : ${menuData.menuUrl}`,
+            `I couldn’t find a clear match in the menu. Here is the menu: ${menuData.menuUrl}`
+          ),
+        });
+        return;
+      }
+      if (menuData.menuUrl) {
+        res.status(200).json({
+          reply: t(
+            menuData.menuIsPdf
+              ? `Menyn är en PDF: ${menuData.menuUrl}`
+              : `Menyn (från hemsidan): ${menuData.menuUrl}`,
+            menuData.menuIsPdf
+              ? `Le menu est en PDF : ${menuData.menuUrl}`
+              : `Menu (depuis le site officiel) : ${menuData.menuUrl}`,
+            menuData.menuIsPdf
+              ? `The menu is a PDF: ${menuData.menuUrl}`
+              : `Menu (from the official site): ${menuData.menuUrl}`
           ),
         });
         return;
       }
     }
-    if (kbInfo.website) {
+    if (kbInfo.website && /meny|menu/i.test(msgLower)) {
       res.status(200).json({
         reply: t(
           `Menyn finns här: ${kbInfo.website}`,
@@ -724,7 +794,6 @@ ${dashboardFacts}
       });
       return;
     }
-    return;
   }
   if (/(hemsida|webbplats|website|webb|site)/i.test(msgLower) && kbInfo.website) {
     res.status(200).json({ reply: t(`Vår hemsida: ${kbInfo.website}`, `Notre site : ${kbInfo.website}`, `Our website: ${kbInfo.website}`) });
@@ -789,11 +858,12 @@ ${dashboardFacts}
   };
 
   const parseDate = (txt: string, baseDate?: string) => {
-    const base = baseDate ?? fmtDate(new Date());
-    if (/i\s*dag|idag/.test(txt)) return base;
-    if (/i\s*morgon|imorgon/.test(txt)) return addDays(base, 1);
-    if (/aujourd['’]hui|aujourdhui/.test(txt)) return base;
-    if (/demain/.test(txt)) return addDays(base, 1);
+    const realBase = fmtDate(new Date());
+    const base = baseDate ?? realBase;
+    if (/i\s*dag|idag/.test(txt)) return realBase;
+    if (/i\s*morgon|imorgon/.test(txt)) return addDays(realBase, 1);
+    if (/aujourd['’]hui|aujourdhui/.test(txt)) return realBase;
+    if (/demain/.test(txt)) return addDays(realBase, 1);
     const iso = txt.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
     if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
     const dmy = txt.match(/\b(\d{1,2})[\/\.](\d{1,2})\b/);
@@ -859,6 +929,12 @@ ${dashboardFacts}
     return matches.sort((a, b) => spanDays(a.from, a.to) - spanDays(b.from, b.to))[0];
   };
 
+  const isPeriodAllClosed = (period?: { days: Record<string, { closed: boolean }> } | null, normal?: Record<string, { closed: boolean }>) => {
+    const days = period?.days ?? normal;
+    if (!days) return false;
+    return Object.values(days).every((d) => d?.closed);
+  };
+
   const isClosedDate = (iso?: string | null) => {
     if (!iso) return false;
     const special = context?.hours?.special?.find((s) => s.date === iso);
@@ -887,6 +963,18 @@ ${dashboardFacts}
   const isHoursQuestion = /(öppet|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
   if (isHoursQuestion) {
     const base = context?.baseDate ?? fmtDate(new Date());
+    const periodForBase = getPeriodForDate(base);
+    if (isPeriodAllClosed(periodForBase, context?.hours?.normal)) {
+      const range = periodForBase ? ` (${periodForBase.from}–${periodForBase.to})` : "";
+      res.status(200).json({
+        reply: t(
+          `Vi har stängt under denna period${range}.`,
+          `Nous sommes fermés sur cette période${range}.`,
+          `We’re closed for this period${range}.`
+        ),
+      });
+      return;
+    }
     if (context && "hoursConfigured" in context && context.hoursConfigured === false) {
       if (siteUrl) {
         const webData = await getWebData(siteUrl);
