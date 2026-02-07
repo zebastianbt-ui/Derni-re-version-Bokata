@@ -36,6 +36,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           name?: string;
           address?: string;
           email?: string;
+          website?: string;
         };
         seating?: {
           maxGuests?: number;
@@ -296,14 +297,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     address: context?.restaurant?.address || kbInfo.address || "",
     email: context?.restaurant?.email || kbInfo.email || "",
     phone: kbInfo.phone || "",
-    website: kbInfo.website || "",
+    website: context?.restaurant?.website || kbInfo.website || "",
+  };
+  const identityForPrompt = {
+    name: identity.name || "Inconnu",
+    address: identity.address || "Inconnu",
+    email: identity.email || "Inconnu",
+    website: identity.website || "Inconnu",
   };
   const restaurantIdentity = [
-    identity.name ? `Namn: ${identity.name}` : "",
-    identity.address ? `Adress: ${identity.address}` : "",
+    `Namn: ${identityForPrompt.name}`,
+    `Adress: ${identityForPrompt.address}`,
     identity.phone ? `Telefon: ${identity.phone}` : "",
-    identity.email ? `E-post: ${identity.email}` : "",
-    identity.website ? `Webbplats: ${identity.website}` : "",
+    `E-post: ${identityForPrompt.email}`,
+    `Webbplats: ${identityForPrompt.website}`,
   ].filter(Boolean).join("\n");
   const isHoursQuestionLite = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
   const needsWebForHours =
@@ -332,6 +339,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   let systemPrompt = "";
+  const guardrailPrompt = `Rappel: tu parles toujours au nom de ${identityForPrompt.name}. Ne demande jamais quel établissement. Si une info est "Inconnu", dis-le clairement et invite à compléter la base Bokäta.`;
 
   const sanitizeUrl = (input: string) => {
     try {
@@ -1145,7 +1153,7 @@ Om användaren frågar om “imorgon”, använd IMORGON-data ovan och svara kon
 
 REGEL – IDENTITET:
 Du representerar alltid restaurangen i RESTO-IDENTITET ovan. Säg aldrig att du inte representerar ett café.
-Om RESTO-IDENTITET saknas, be restaurangen fylla i namn/adress i kunskapsbasen.
+Om något fält är "Inconnu", säg att informationen saknas och be restaurangen fylla i det i kunskapsbasen.
 Använd alltid RESTO-IDENTITET när någon frågar "vilken plats" eller "vilket café".
 
 INTERDIT:
@@ -1489,6 +1497,7 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       temperature: 0.2,
       messages: [
         { role: "system", content: systemPrompt },
+        { role: "system", content: guardrailPrompt },
         ...(history ?? []),
         { role: "user", content: message },
       ],

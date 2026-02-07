@@ -1332,6 +1332,7 @@ export default function ReservationDashboard() {
             name: onboarding.restaurantName || restaurantName || "",
             address: onboarding.address || "",
             email: onboarding.email || config.info.email || config.notifications.to || "",
+            website: config.ai.webSearch.siteUrl || "",
           },
           seating: {
             maxGuests: config.seating.maxGuests,
