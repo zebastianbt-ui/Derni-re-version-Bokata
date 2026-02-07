@@ -241,7 +241,7 @@ function linkify(text: string) {
 export default function BookingPage() {
   const SECTION_PAD_Y = "py-6 md:py-8";
   const SECTION_PAD_X = "px-6 md:px-10";
-  const SECTION_PAD_Y_BOTTOM = "pt-6 pb-3 md:pt-8 md:pb-4";
+  const SECTION_PAD_Y_BOTTOM = "pt-6 pb-6 md:pt-8 md:pb-8";
   const [restaurantSlug, setRestaurantSlug] = useState("demo");
   const [restaurantName, setRestaurantName] = useState<string | null>(null);
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
@@ -274,6 +274,7 @@ export default function BookingPage() {
   const [turnstileError, setTurnstileError] = useState<string | null>(null);
   const turnstileRef = useRef<HTMLDivElement | null>(null);
   const turnstileWidgetId = useRef<string | number | null>(null);
+  const turnstileLang = "sv";
 
   useEffect(() => {
     if (!turnstileSiteKey || typeof window === "undefined") return;
@@ -288,7 +289,7 @@ export default function BookingPage() {
           return;
         }
         const script = document.createElement("script");
-        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+        script.src = `https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&language=${turnstileLang}`;
         script.async = true;
         script.defer = true;
         script.onload = () => resolve();
@@ -301,6 +302,7 @@ export default function BookingPage() {
       if (turnstileWidgetId.current != null) return;
       turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
         sitekey: turnstileSiteKey,
+        language: turnstileLang,
         callback: (token) => {
           setTurnstileToken(token);
           setTurnstileError(null);
