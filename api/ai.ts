@@ -37,6 +37,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           address?: string;
           email?: string;
           website?: string;
+          facebook?: string;
+          instagram?: string;
+          googleMaps?: string;
         };
         seating?: {
           maxGuests?: number;
@@ -308,16 +311,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     address: getField("Adress"),
     phone: getField("Telefon"),
     email: getField("E-post"),
-    website: getFieldAny(["Webbplats", "Hemsida", "Website", "Site"]),
+    website: getFieldAny(["Webbplats", "Hemsida", "Website", "Site"]) || context?.restaurant?.website || "",
     payment: getField("Betalning"),
     allergies: getField("Allergier"),
     kids: getField("Barn"),
     pets: getField("Djurpolicy"),
     parking: getFieldAny(["Parkering", "Parking"]),
     transport: getField("Kollektivtrafik"),
-    instagram: getFieldAny(["Instagram", "Insta"]),
-    facebook: getField("Facebook"),
-    googleMaps: getFieldAny(["Google Maps", "Maps", "GoogleMaps"]),
+    instagram: getFieldAny(["Instagram", "Insta"]) || context?.restaurant?.instagram || "",
+    facebook: getField("Facebook") || context?.restaurant?.facebook || "",
+    googleMaps: getFieldAny(["Google Maps", "Maps", "GoogleMaps"]) || context?.restaurant?.googleMaps || "",
   };
   const hasMenuInfo = /meny|menu/i.test(knowledgeText);
   const identity = {
@@ -714,11 +717,11 @@ Tu ne mélanges jamais les langues.
 
 ## 3. Ton et style
 
-* Ton professionnel, calme, neutre
-* Réponses courtes et factuelles
+* Ton chaleureux, accueillant et sympa
+* Réponses courtes, claires et utiles
 * Aucune exagération
-*  humour sympa
-*  emoji autorisés
+* Un humour léger si approprié
+* Emoji autorisés si cela reste naturel
 * Aucune formulation vague
 
 Tutoiement ou vouvoiement **strictement selon la règle définie par le restaurateur**.
@@ -1419,6 +1422,10 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     const time = parseTime(msgLower);
     const guests = parseGuests(msgLower);
     const isTerrace = /(uteservering|ute|terrass|terrasse|patio)/i.test(msgLower);
+    const contactEmail = context?.restaurant?.email || kbInfo.email || "";
+    const contactBlurb = contactEmail
+      ? t(`Kontakta oss gärna på ${contactEmail}.`, `Merci de nous contacter à ${contactEmail}.`, `Please contact us at ${contactEmail}.`)
+      : "";
 
     if (!guests) {
       res.status(200).json({
@@ -1454,18 +1461,18 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       if (isTerrace) {
         res.status(200).json({
           reply: t(
-            `Vi kan gärna ta emot önskemål om uteservering. För ${guests} gäster behöver vi manuell bekräftelse — skriv gärna "uteservering" i kommentaren så återkommer vi snarast.`,
-            `Nous pouvons prendre en compte une demande de terrasse. Pour ${guests} personnes, une confirmation manuelle est nécessaire — indiquez "terrasse" dans le commentaire et nous reviendrons vers vous rapidement.`,
-            `We can take outdoor seating requests. For ${guests} guests we need manual confirmation — please mention "outdoor seating" in the comment and we’ll get back to you shortly.`
+            `Vi kan gärna ta emot önskemål om uteservering. För ${guests} gäster behöver vi manuell bekräftelse — skriv gärna "uteservering" i kommentaren så återkommer vi snarast.${contactBlurb ? ` ${contactBlurb}` : ""}`,
+            `Nous pouvons prendre en compte une demande de terrasse. Pour ${guests} personnes, une confirmation manuelle est nécessaire — indiquez "terrasse" dans le commentaire et nous reviendrons vers vous rapidement.${contactBlurb ? ` ${contactBlurb}` : ""}`,
+            `We can take outdoor seating requests. For ${guests} guests we need manual confirmation — please mention "outdoor seating" in the comment and we’ll get back to you shortly.${contactBlurb ? ` ${contactBlurb}` : ""}`
           ),
         });
         return;
       }
       res.status(200).json({
         reply: t(
-          `För ${guests} gäster behöver vi manuell bekräftelse. Vi återkommer snarast.`,
-          `Pour ${guests} personnes, une confirmation manuelle est nécessaire. Nous reviendrons vers vous rapidement.`,
-          `For ${guests} guests, we need manual confirmation. We’ll get back to you shortly.`
+          `För ${guests} gäster behöver vi manuell bekräftelse. Vi återkommer snarast.${contactBlurb ? ` ${contactBlurb}` : ""}`,
+          `Pour ${guests} personnes, une confirmation manuelle est nécessaire. Nous reviendrons vers vous rapidement.${contactBlurb ? ` ${contactBlurb}` : ""}`,
+          `For ${guests} guests, we need manual confirmation. We’ll get back to you shortly.${contactBlurb ? ` ${contactBlurb}` : ""}`
         ),
       });
       return;

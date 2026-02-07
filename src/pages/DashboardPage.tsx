@@ -1181,6 +1181,7 @@ export default function ReservationDashboard() {
       "Betalning: ...",
       "Allergier: ...",
       "Barn: barnstol, barnmeny",
+      "Gruppbokning: För fler än X gäster, kontakta oss på ...",
       "Djurpolicy: ...",
       "Parkering: ...",
       "Kollektivtrafik: ...",
@@ -1217,6 +1218,17 @@ export default function ReservationDashboard() {
       data.kidsNote ? data.kidsNote : "",
     ].filter(Boolean);
     const kidsLine = kidsParts.length ? `Barn: ${kidsParts.join(", ")}` : "";
+    const contactEmail = config.info.email || config.notifications.to || "";
+    const maxPer = config.escalation.maxGuestsPerReservation;
+    const group = config.seating.groupThreshold;
+    const groupLine =
+      contactEmail && (maxPer > 0 || group > 0)
+        ? group > 0 && (maxPer <= 0 || group <= maxPer)
+          ? `Gruppbokning: Från ${group} gäster, kontakta oss på ${contactEmail}.`
+          : maxPer > 0
+          ? `Gruppbokning: För fler än ${maxPer} gäster, kontakta oss på ${contactEmail}.`
+          : ""
+        : "";
     const lines = [
       "INFOS:",
       data.restaurantName ? `Namn: ${data.restaurantName}` : "",
@@ -1230,6 +1242,7 @@ export default function ReservationDashboard() {
       data.payment ? `Betalning: ${data.payment}` : "",
       data.allergies ? `Allergier: ${data.allergies}` : "",
       kidsLine,
+      groupLine,
       data.pets ? `Djurpolicy: ${data.pets}` : "",
       data.parking ? `Parkering: ${data.parking}` : "",
       data.transport ? `Kollektivtrafik: ${data.transport}` : "",
@@ -1241,9 +1254,14 @@ export default function ReservationDashboard() {
 
   const buildPublicKnowledge = (base: string, webSearch: Settings["ai"]["webSearch"]) => {
     const lines = (base || "").split(/\r?\n/).map((l) => l.trim());
-    const hasLabel = (label: string) => lines.some((l) => l.toLowerCase().startsWith(label.toLowerCase() + ":"));
+    const getLabelValue = (label: string) => {
+      const line = lines.find((l) => l.toLowerCase().startsWith(label.toLowerCase() + ":"));
+      if (!line) return "";
+      return line.split(":").slice(1).join(":").trim();
+    };
+    const hasValue = (label: string) => Boolean(getLabelValue(label));
     const append = (label: string, value?: string) => {
-      if (!value || hasLabel(label)) return;
+      if (!value || hasValue(label)) return;
       lines.push(`${label}: ${value}`);
     };
     if (webSearch?.enabled) {
@@ -1251,6 +1269,18 @@ export default function ReservationDashboard() {
       append("Google Maps", webSearch.googleMapsUrl || "");
       append("Facebook", webSearch.facebookUrl || "");
       append("Instagram", webSearch.instagramUrl || "");
+    }
+    const contactEmail = config.info.email || config.notifications.to || "";
+    const maxPer = config.escalation.maxGuestsPerReservation;
+    const group = config.seating.groupThreshold;
+    if (contactEmail && (maxPer > 0 || group > 0)) {
+      const groupLine =
+        group > 0 && (maxPer <= 0 || group <= maxPer)
+          ? `Från ${group} gäster, kontakta oss på ${contactEmail}.`
+          : maxPer > 0
+          ? `För fler än ${maxPer} gäster, kontakta oss på ${contactEmail}.`
+          : "";
+      append("Gruppbokning", groupLine);
     }
     return lines.filter(Boolean).join("\n").trim();
   };
@@ -1268,6 +1298,10 @@ export default function ReservationDashboard() {
     config.ai.webSearch.googleMapsUrl,
     config.ai.webSearch.facebookUrl,
     config.ai.webSearch.instagramUrl,
+    config.escalation.maxGuestsPerReservation,
+    config.seating.groupThreshold,
+    config.info.email,
+    config.notifications.to,
   ]);
 
   useEffect(() => {
@@ -1365,6 +1399,9 @@ export default function ReservationDashboard() {
             address: onboarding.address || "",
             email: onboarding.email || config.info.email || config.notifications.to || "",
             website: config.ai.webSearch.siteUrl || "",
+            facebook: config.ai.webSearch.facebookUrl || "",
+            instagram: config.ai.webSearch.instagramUrl || "",
+            googleMaps: config.ai.webSearch.googleMapsUrl || "",
           },
           seating: {
             maxGuests: config.seating.maxGuests,
