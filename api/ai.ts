@@ -155,9 +155,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!periods.length) return "";
     const lines = periods
       .map((p, idx) => {
-        const label = p?.name ? p.name : `Period ${idx + 1}`;
+        const rawLabel = p?.name ? p.name : "";
+        const label = rawLabel && !/^period\s*\d+/i.test(rawLabel) ? rawLabel : "";
         const summary = describePeriodHours(p as any);
-        return summary ? `${label}: ${summary}` : "";
+        if (!summary) return "";
+        return label ? `${label}: ${summary}` : summary;
       })
       .filter(Boolean);
     return lines.join("\n");
