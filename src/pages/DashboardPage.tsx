@@ -25,6 +25,7 @@ type Booking = {
   source?: "web" | "phone" | "walkin";
   note?: boolean;
   notes?: string;
+  createdAt?: string;
   color?: string;
 };
 
@@ -831,7 +832,8 @@ export default function ReservationDashboard() {
   const [bookings, setBookings] = useState<Booking[]>(() => assignTablesForDateWithTables(dateSel, seed, tableCaps));
   const [editBookingDraft, setEditBookingDraft] = useState<Booking | null>(null);
   const [bookingsReady, setBookingsReady] = useState(false);
-  const [newBookingNotice, setNewBookingNotice] = useState<string | null>(null);
+  const [newBookingCount, setNewBookingCount] = useState(0);
+  const [newBookingDetail, setNewBookingDetail] = useState<string | null>(null);
   const lastBookingIdsRef = useRef<Set<string>>(new Set());
   const bookingNoticeTimer = useRef<number | null>(null);
 
@@ -871,6 +873,7 @@ export default function ReservationDashboard() {
         durationMin: r.duration_min ?? config.seating.maxBookingDurationMin,
         status: (r.status as BookingStatus) ?? "confirmed",
         source: (r.source as Booking["source"]) ?? "walkin",
+        createdAt: r.created_at ?? undefined,
         color: "bg-pink-100",
       }));
 
@@ -878,11 +881,18 @@ export default function ReservationDashboard() {
       if (lastBookingIdsRef.current.size) {
         const newOnes = mapped.filter((b) => !lastBookingIdsRef.current.has(b.id));
         if (newOnes.length && !opts?.silent) {
-          setNewBookingNotice(`${newOnes.length} ny bokning mottagen.`);
-          if (bookingNoticeTimer.current) window.clearTimeout(bookingNoticeTimer.current);
-          bookingNoticeTimer.current = window.setTimeout(() => {
-            setNewBookingNotice(null);
-          }, 5000);
+          setNewBookingCount((prev) => prev + newOnes.length);
+          const latest = newOnes
+            .slice()
+            .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""))
+            .at(-1);
+          if (latest) {
+            setNewBookingDetail(`Ny bokning: ${latest.date} · ${latest.guests} gäster`);
+            if (bookingNoticeTimer.current) window.clearTimeout(bookingNoticeTimer.current);
+            bookingNoticeTimer.current = window.setTimeout(() => {
+              setNewBookingDetail(null);
+            }, 5000);
+          }
         }
       }
       lastBookingIdsRef.current = incomingIds;
@@ -1986,14 +1996,24 @@ export default function ReservationDashboard() {
         </div>
       </header>
 
-      {newBookingNotice ? (
+      {newBookingCount > 0 ? (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          <span>{newBookingNotice}</span>
+          <span>
+            {newBookingDetail ??
+              (newBookingCount === 1
+                ? "1 ny bokning mottagen."
+                : `${newBookingCount} nya bokningar mottagna.`)}
+          </span>
           <button
-            className="text-xs font-semibold text-emerald-700 hover:text-emerald-900"
-            onClick={() => setNewBookingNotice(null)}
+            className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-full text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100"
+            onClick={() => {
+              setNewBookingCount(0);
+              setNewBookingDetail(null);
+            }}
+            aria-label="Stäng"
+            type="button"
           >
-            Stäng
+            ×
           </button>
         </div>
       ) : null}
@@ -3005,9 +3025,9 @@ export default function ReservationDashboard() {
                         {DAYS_ORDER.map((day) => {
                           const d = period.days[day];
                           return (
-                            <div key={day} className="grid grid-cols-12 items-center gap-2 px-3 py-2">
-                              <div className="col-span-3 capitalize">{day}</div>
-                              <label className="col-span-2 inline-flex items-center gap-2 text-sm">
+                            <div key={day} className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2 px-3 py-2">
+                              <div className="sm:col-span-3 capitalize">{day}</div>
+                              <label className="sm:col-span-2 inline-flex items-center gap-2 text-sm whitespace-nowrap">
                                 <input
                                   type="checkbox"
                                   checked={d.closed}
@@ -3033,7 +3053,7 @@ export default function ReservationDashboard() {
                                 />
                                 Stängt
                               </label>
-                              <div className="col-span-3">
+                              <div className="sm:col-span-3">
                                 <input
                                   type="time"
                                   className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60"
@@ -3060,7 +3080,7 @@ export default function ReservationDashboard() {
                                   disabled={d.closed}
                                 />
                               </div>
-                              <div className="col-span-3">
+                              <div className="sm:col-span-3">
                                 <input
                                   type="time"
                                   className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60"
@@ -3119,12 +3139,12 @@ export default function ReservationDashboard() {
                       ({ date: h.date, closed: true, open: "11:00", close: "17:00" } as const);
 
                     return (
-                      <div key={h.date} className="grid grid-cols-12 items-center gap-2">
-                        <div className="col-span-4">
+                    <div key={h.date} className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2">
+                        <div className="sm:col-span-4">
                           {h.name}
                           <div className="text-xs text-gray-500">{h.date}</div>
                         </div>
-                        <label className="col-span-2 inline-flex items-center gap-2 text-sm">
+                        <label className="sm:col-span-2 inline-flex items-center gap-2 text-sm whitespace-nowrap">
                           <input
                             type="checkbox"
                             checked={sp.closed}
@@ -3132,7 +3152,7 @@ export default function ReservationDashboard() {
                           />
                           Stängt
                         </label>
-                        <div className="col-span-3">
+                        <div className="sm:col-span-3">
                           <input
                             type="time"
                             className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60"
@@ -3141,7 +3161,7 @@ export default function ReservationDashboard() {
                             disabled={sp.closed}
                           />
                         </div>
-                        <div className="col-span-3">
+                        <div className="sm:col-span-3">
                           <input
                             type="time"
                             className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60"
