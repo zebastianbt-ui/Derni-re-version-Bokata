@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../supabaseClient";
@@ -85,6 +85,8 @@ type Floorplan = {
   tables: FloorplanTable[];
   zones: FloorplanZone[];
 };
+
+type TableCap = { id: number; cap: number; label?: string };
 
 const makeDefaultDays = () => ({
   söndag: { closed: false, open: "11:00", close: "17:00" },
@@ -301,7 +303,33 @@ const mealFor = (t: string): Meal => {
 };
 
 function assignTablesForDate(date: string, input: Booking[]): Booking[] {
-  const tables = ENGINE.tables.map((cap, i) => ({ id: i + 1, cap }));
+  return assignTablesForDateWithTables(date, input, ENGINE.tables.map((cap, i) => ({ id: i + 1, cap })));
+}
+
+function parseTableNumber(label?: string | null) {
+  if (!label) return null;
+  const match = label.match(/\d+/);
+  return match ? Number(match[0]) : null;
+}
+
+function buildTableCaps(plan?: Floorplan | null): TableCap[] {
+  if (!plan?.tables?.length) return ENGINE.tables.map((cap, i) => ({ id: i + 1, cap }));
+  const byId = new Map<number, TableCap>();
+  plan.tables.forEach((t, idx) => {
+    const id = parseTableNumber(t.label) ?? idx + 1;
+    if (!byId.has(id)) {
+      byId.set(id, {
+        id,
+        cap: Math.max(1, t.seats || 0),
+        label: t.label?.trim() || `Bord ${id}`,
+      });
+    }
+  });
+  return Array.from(byId.values()).sort((a, b) => a.id - b.id);
+}
+
+function assignTablesForDateWithTables(date: string, input: Booking[], tables: TableCap[]): Booking[] {
+  const tableList = tables.length ? tables : ENGINE.tables.map((cap, i) => ({ id: i + 1, cap }));
   const day = input
     .filter((b) => b.date === date)
     .map((b) => ({ ...b }))
@@ -317,7 +345,22 @@ function assignTablesForDate(date: string, input: Booking[]): Booking[] {
 
     let chosen: number | null = null;
 
-    for (const t of tables.filter((t) => t.cap >= b.guests).sort((a, b) => a.cap - b.cap)) {
+    if (b.tableId) {
+      const pref = tableList.find((t) => t.id === b.tableId);
+      if (pref && pref.cap >= b.guests) {
+        const conflict = out.some((x) => {
+          if (x.tableId !== pref.id) return false;
+          const xs = timeToMin(round30(x.time));
+          const xd = x.durationMin ?? (mealFor(x.time) in ENGINE.durations ? ENGINE.durations[mealFor(x.time) as keyof typeof ENGINE.durations] : 90);
+          const xe = xs + xd;
+          return overlap(s, e, xs, xe);
+        });
+        if (!conflict) chosen = pref.id;
+      }
+    }
+
+    for (const t of tableList.filter((t) => t.cap >= b.guests).sort((a, b) => a.cap - b.cap)) {
+      if (chosen != null) break;
       const conflict = out.some((x) => {
         if (x.tableId !== t.id) return false;
         const xs = timeToMin(round30(x.time));
@@ -337,15 +380,17 @@ function assignTablesForDate(date: string, input: Booking[]): Booking[] {
   return [...input.filter((b) => b.date !== date), ...out];
 }
 
-function findAvailableTable(args: { date: string; time: string; guests: number; bookings: Booking[]; durationMin: number }): number | null {
+function findAvailableTable(args: { date: string; time: string; guests: number; bookings: Booking[]; durationMin: number; tables: TableCap[] }): number | null {
   const when = round30(args.time);
   const dur = args.durationMin;
   const s = timeToMin(when);
   const e = s + dur;
 
-  for (let i = 0; i < ENGINE.tables.length; i++) {
-    const id = i + 1;
-    const cap = ENGINE.tables[i];
+  const tableList = args.tables.length ? args.tables : ENGINE.tables.map((cap, i) => ({ id: i + 1, cap }));
+
+  for (const t of tableList) {
+    const id = t.id;
+    const cap = t.cap;
     if (cap < args.guests) continue;
 
     const conflict = args.bookings.some((b) => {
@@ -361,6 +406,20 @@ function findAvailableTable(args: { date: string; time: string; guests: number; 
   }
 
   return null;
+}
+
+function isTableAvailable(args: { date: string; time: string; tableId: number; bookings: Booking[]; durationMin: number }) {
+  const when = round30(args.time);
+  const s = timeToMin(when);
+  const e = s + args.durationMin;
+  return !args.bookings.some((b) => {
+    if (b.date !== args.date) return false;
+    if (b.tableId !== args.tableId) return false;
+    const bs = timeToMin(round30(b.time));
+    const bd = b.durationMin ?? (mealFor(b.time) in ENGINE.durations ? ENGINE.durations[mealFor(b.time) as keyof typeof ENGINE.durations] : 90);
+    const be = bs + bd;
+    return overlap(s, e, bs, be);
+  });
 }
 
 export default function ReservationDashboard() {
@@ -514,6 +573,11 @@ export default function ReservationDashboard() {
     null
   );
   const floorplanSaveTimer = useRef<number | null>(null);
+  const tableCaps = useMemo(() => buildTableCaps(floorplan), [floorplan]);
+  const tableOptions = useMemo(
+    () => tableCaps.map((t) => ({ id: t.id, label: t.label ?? `Bord ${t.id}`, cap: t.cap })),
+    [tableCaps]
+  );
 
   useEffect(() => {
     let active = true;
@@ -764,27 +828,30 @@ export default function ReservationDashboard() {
     return base.map((b) => ({ ...b, durationMin }));
   }, [defaultSettings.seating.maxBookingDurationMin]);
 
-  const [bookings, setBookings] = useState<Booking[]>(() => assignTablesForDate(dateSel, seed));
+  const [bookings, setBookings] = useState<Booking[]>(() => assignTablesForDateWithTables(dateSel, seed, tableCaps));
   const [editBookingDraft, setEditBookingDraft] = useState<Booking | null>(null);
   const [bookingsReady, setBookingsReady] = useState(false);
+  const [newBookingNotice, setNewBookingNotice] = useState<string | null>(null);
+  const lastBookingIdsRef = useRef<Set<string>>(new Set());
+  const bookingNoticeTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    setBookings((prev) => assignTablesForDate(dateSel, prev));
+    setBookings((prev) => assignTablesForDateWithTables(dateSel, prev, tableCaps));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateSel]);
+  }, [dateSel, tableCaps]);
 
   useEffect(() => {
     setBookings((prev) => {
       const updated = prev.map((b) => ({ ...b, durationMin: config.seating.maxBookingDurationMin }));
       const dates = Array.from(new Set<string>(updated.map((b) => b.date)));
       let out = updated;
-      for (const d of dates) out = assignTablesForDate(d, out);
+      for (const d of dates) out = assignTablesForDateWithTables(d, out, tableCaps);
       return out;
     });
-  }, [config.seating.maxBookingDurationMin]);
+  }, [config.seating.maxBookingDurationMin, tableCaps]);
 
-  useEffect(() => {
-    const loadBookings = async () => {
+  const fetchBookings = useCallback(
+    async (opts?: { silent?: boolean }) => {
       if (!restaurantId || !settingsReady) return;
       const { data, error } = await supabase
         .from("bookings")
@@ -806,11 +873,37 @@ export default function ReservationDashboard() {
         source: (r.source as Booking["source"]) ?? "walkin",
         color: "bg-pink-100",
       }));
-      setBookings(assignTablesForDate(dateSel, mapped));
+
+      const incomingIds = new Set(mapped.map((b) => b.id));
+      if (lastBookingIdsRef.current.size) {
+        const newOnes = mapped.filter((b) => !lastBookingIdsRef.current.has(b.id));
+        if (newOnes.length && !opts?.silent) {
+          setNewBookingNotice(`${newOnes.length} ny bokning mottagen.`);
+          if (bookingNoticeTimer.current) window.clearTimeout(bookingNoticeTimer.current);
+          bookingNoticeTimer.current = window.setTimeout(() => {
+            setNewBookingNotice(null);
+          }, 5000);
+        }
+      }
+      lastBookingIdsRef.current = incomingIds;
+
+      setBookings(assignTablesForDateWithTables(dateSel, mapped, tableCaps));
       setBookingsReady(true);
-    };
-    loadBookings();
-  }, [restaurantId, settingsReady]);
+    },
+    [restaurantId, settingsReady, config.seating.maxBookingDurationMin, dateSel, tableCaps]
+  );
+
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
+
+  useEffect(() => {
+    if (!restaurantId || !settingsReady) return;
+    const id = window.setInterval(() => {
+      fetchBookings();
+    }, 30000);
+    return () => window.clearInterval(id);
+  }, [restaurantId, settingsReady, fetchBookings]);
 
   useEffect(() => {
     if (!session?.user?.id || !settingsReady || !restaurantId) return;
@@ -1176,7 +1269,7 @@ export default function ReservationDashboard() {
       "INFOS:",
       "Namn: ...",
       "Adress: ...",
-      "Avstånd: ... (ex: 12 km från Tomelilla)",
+      "Avstånd: ... (ex: 12 km från Göteborg)",
       "Telefon: ...",
       "E-post: ...",
       "Webbplats: ...",
@@ -1418,7 +1511,7 @@ export default function ReservationDashboard() {
             special: config.hours.special,
             periods: config.hours.periods,
           },
-          tables: ENGINE.tables,
+          tables: tableCaps.map((t) => t.cap),
           bookings: dayBookings.map((b) => ({
             date: b.date,
             time: b.time,
@@ -1519,6 +1612,7 @@ export default function ReservationDashboard() {
       guests,
       bookings,
       durationMin: config.seating.maxBookingDurationMin,
+      tables: tableCaps,
     });
     const can = tableId != null;
     return can
@@ -1532,6 +1626,7 @@ export default function ReservationDashboard() {
   const [formName, setFormName] = useState<string>("");
   const [formGuests, setFormGuests] = useState<number>(2);
   const [formNotes, setFormNotes] = useState<string>("");
+  const [formTableId, setFormTableId] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1541,11 +1636,12 @@ export default function ReservationDashboard() {
       setFormName("");
       setFormGuests(2);
       setFormNotes("");
+      setFormTableId(null);
       setFormError(null);
     }
   }, [createOpen, dateSel]);
 
-  function createReservation(d: { date: string; time: string; name: string; guests: number; notes?: string }) {
+  function createReservation(d: { date: string; time: string; name: string; guests: number; notes?: string; tableId?: number | null }) {
     if (!d.name.trim()) return { ok: false, error: "Namn krävs." };
     if (!d.date) return { ok: false, error: "Datum krävs." };
     if (!d.time) return { ok: false, error: "Tid krävs." };
@@ -1554,8 +1650,18 @@ export default function ReservationDashboard() {
 
     const when = round30(d.time);
     const durationMin = config.seating.maxBookingDurationMin;
-    const tableId = findAvailableTable({ date: d.date, time: when, guests: d.guests, bookings, durationMin });
-    if (tableId == null) return { ok: false, error: "Ingen ledig passande bord i detta tidsintervall." };
+    let tableId = d.tableId ?? null;
+    if (tableId != null) {
+      const table = tableCaps.find((t) => t.id === tableId);
+      if (!table) return { ok: false, error: "Valt bord finns inte." };
+      if (table.cap < d.guests) return { ok: false, error: `Valt bord har bara ${table.cap} platser.` };
+      if (!isTableAvailable({ date: d.date, time: when, tableId, bookings, durationMin })) {
+        return { ok: false, error: "Valt bord är redan upptaget vid den tiden." };
+      }
+    } else {
+      tableId = findAvailableTable({ date: d.date, time: when, guests: d.guests, bookings, durationMin, tables: tableCaps });
+      if (tableId == null) return { ok: false, error: "Ingen ledig passande bord i detta tidsintervall." };
+    }
 
     const colors = ["bg-green-200", "bg-blue-200", "bg-yellow-200", "bg-pink-200", "bg-purple-200"];
 
@@ -1593,18 +1699,25 @@ export default function ReservationDashboard() {
           .single();
         if (data?.id) {
           setBookings((prev) =>
-            assignTablesForDate(d.date, prev.map((x) => (x.id === b.id ? { ...x, id: data.id } : x)))
+            assignTablesForDateWithTables(d.date, prev.map((x) => (x.id === b.id ? { ...x, id: data.id } : x)), tableCaps)
           );
         }
       })().catch(() => {});
     }
 
-    setBookings((prev) => assignTablesForDate(d.date, [...prev, b]));
+    setBookings((prev) => assignTablesForDateWithTables(d.date, [...prev, b], tableCaps));
     return { ok: true };
   }
 
   const handleCreate = () => {
-    const res = createReservation({ date: formDate, time: formTime, name: formName, guests: formGuests, notes: formNotes });
+    const res = createReservation({
+      date: formDate,
+      time: formTime,
+      name: formName,
+      guests: formGuests,
+      notes: formNotes,
+      tableId: formTableId,
+    });
     if (!res.ok) {
       setFormError(res.error || "Kunde inte spara.");
       return;
@@ -1872,6 +1985,18 @@ export default function ReservationDashboard() {
           </div>
         </div>
       </header>
+
+      {newBookingNotice ? (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <span>{newBookingNotice}</span>
+          <button
+            className="text-xs font-semibold text-emerald-700 hover:text-emerald-900"
+            onClick={() => setNewBookingNotice(null)}
+          >
+            Stäng
+          </button>
+        </div>
+      ) : null}
 
       <div className="mb-6 flex flex-wrap gap-2">
         <button
@@ -2493,7 +2618,7 @@ export default function ReservationDashboard() {
                     );
                     const dates = Array.from(new Set<string>(updated.map((b) => b.date)));
                     let out = updated;
-                    for (const d of dates) out = assignTablesForDate(d, out);
+                    for (const d of dates) out = assignTablesForDateWithTables(d, out, tableCaps);
                     return out;
                   });
                   if (restaurantId && settingsReady) {
@@ -2567,6 +2692,24 @@ export default function ReservationDashboard() {
                 value={formGuests}
                 onChange={(e) => setFormGuests(Math.max(1, Number(e.target.value) || 1))}
               />
+            </Field>
+
+            <Field label="Bord (valfritt)">
+              <select
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                value={formTableId == null ? "" : String(formTableId)}
+                onChange={(e) => {
+                  const next = e.target.value ? Number(e.target.value) : null;
+                  setFormTableId(Number.isNaN(next as number) ? null : (next as number | null));
+                }}
+              >
+                <option value="">Auto (välj bord automatiskt)</option>
+                {tableOptions.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label} · {t.cap} platser
+                  </option>
+                ))}
+              </select>
             </Field>
 
             <Field label="Anteckning">
@@ -3153,7 +3296,7 @@ export default function ReservationDashboard() {
                   />
                   <input
                     className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                    placeholder="Avstånd (ex: 12 km från Tomelilla)"
+                    placeholder="Avstånd (ex: 12 km från Göteborg)"
                     value={onboarding.distance}
                     onChange={(e) => {
                       setOnboarding({ ...onboarding, distance: e.target.value });
