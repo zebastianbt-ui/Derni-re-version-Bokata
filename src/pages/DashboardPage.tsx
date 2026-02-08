@@ -10,6 +10,8 @@ import forkTransparent from "../assets/fork-transparent.png";
 // mais en code propre et exécutable pour que tu puisses le *voir en preview*.
 
 type Meal = "Alla" | "Frukost" | "Lunch" | "Middag";
+type MealKey = "Frukost" | "Lunch" | "Middag";
+type MealRangeMap = Record<MealKey, [string, string]>;
 
 type BookingStatus = "pending" | "confirmed" | "cancelled";
 
@@ -117,6 +119,7 @@ type Settings = {
     maxGuests: number;
     maxTables: number;
     maxBookingDurationMin: 60 | 90 | 120;
+    mealRanges: MealRangeMap;
   };
   policies: {
     vegan: boolean;
@@ -155,12 +158,12 @@ type Settings = {
   };
 };
 
-const MEAL_RANGES: Record<Meal, [string, string]> = {
-  Alla: ["00:00", "23:59"],
+const DEFAULT_MEAL_RANGES: MealRangeMap = {
   Frukost: ["08:00", "10:59"],
   Lunch: ["11:00", "14:30"],
   Middag: ["17:00", "21:30"],
 };
+const ALL_DAY_RANGE: [string, string] = ["00:00", "23:59"];
 
 const ENGINE = {
   slotStepMin: 30,
@@ -294,17 +297,38 @@ const normalizeHours = (hours?: Settings["hours"] | null) => {
   return { normal, special, periods };
 };
 
-const mealFor = (t: string): Meal => {
+const isValidTime = (t: string) => {
+  const [h, m] = t.split(":").map(Number);
+  return Number.isFinite(h) && Number.isFinite(m) && h >= 0 && h <= 23 && m >= 0 && m <= 59;
+};
+
+const normalizeMealRanges = (raw?: Partial<MealRangeMap> | null): MealRangeMap => {
+  const out: MealRangeMap = { ...DEFAULT_MEAL_RANGES };
+  (["Frukost", "Lunch", "Middag"] as MealKey[]).forEach((key) => {
+    const val = raw?.[key];
+    if (Array.isArray(val) && val.length === 2 && isValidTime(val[0]) && isValidTime(val[1])) {
+      out[key] = [val[0], val[1]];
+    }
+  });
+  return out;
+};
+
+const mealForWithRanges = (t: string, ranges: MealRangeMap): Meal => {
   const x = timeToMin(t);
-  for (const m of ["Frukost", "Lunch", "Middag"] as Meal[]) {
-    const [a, b] = MEAL_RANGES[m];
+  for (const m of ["Frukost", "Lunch", "Middag"] as MealKey[]) {
+    const [a, b] = ranges[m];
     if (x >= timeToMin(a) && x <= timeToMin(b)) return m;
   }
   return "Alla";
 };
 
-function assignTablesForDate(date: string, input: Booking[]): Booking[] {
-  return assignTablesForDateWithTables(date, input, ENGINE.tables.map((cap, i) => ({ id: i + 1, cap })));
+const mealRangeFor = (meal: Meal, ranges: MealRangeMap): [string, string] => {
+  if (meal === "Alla") return ALL_DAY_RANGE;
+  return ranges[meal];
+};
+
+function assignTablesForDate(date: string, input: Booking[], mealRanges: MealRangeMap = DEFAULT_MEAL_RANGES): Booking[] {
+  return assignTablesForDateWithTables(date, input, ENGINE.tables.map((cap, i) => ({ id: i + 1, cap })), mealRanges);
 }
 
 function parseTableNumber(label?: string | null) {
@@ -329,7 +353,12 @@ function buildTableCaps(plan?: Floorplan | null): TableCap[] {
   return Array.from(byId.values()).sort((a, b) => a.id - b.id);
 }
 
-function assignTablesForDateWithTables(date: string, input: Booking[], tables: TableCap[]): Booking[] {
+function assignTablesForDateWithTables(
+  date: string,
+  input: Booking[],
+  tables: TableCap[],
+  mealRanges: MealRangeMap = DEFAULT_MEAL_RANGES
+): Booking[] {
   const tableList = tables.length ? tables : ENGINE.tables.map((cap, i) => ({ id: i + 1, cap }));
   const day = input
     .filter((b) => b.date === date)
@@ -339,7 +368,7 @@ function assignTablesForDateWithTables(date: string, input: Booking[], tables: T
   const out: Booking[] = [];
 
   for (const b of day) {
-    const meal = mealFor(b.time);
+    const meal = mealForWithRanges(b.time, mealRanges);
     const dur = b.durationMin ?? (meal in ENGINE.durations ? ENGINE.durations[meal as keyof typeof ENGINE.durations] : 90);
     const s = timeToMin(round30(b.time));
     const e = s + dur;
@@ -350,12 +379,16 @@ function assignTablesForDateWithTables(date: string, input: Booking[], tables: T
       const pref = tableList.find((t) => t.id === b.tableId);
       if (pref && pref.cap >= b.guests) {
         const conflict = out.some((x) => {
-          if (x.tableId !== pref.id) return false;
-          const xs = timeToMin(round30(x.time));
-          const xd = x.durationMin ?? (mealFor(x.time) in ENGINE.durations ? ENGINE.durations[mealFor(x.time) as keyof typeof ENGINE.durations] : 90);
-          const xe = xs + xd;
-          return overlap(s, e, xs, xe);
-        });
+        if (x.tableId !== pref.id) return false;
+        const xs = timeToMin(round30(x.time));
+        const xd =
+          x.durationMin ??
+          (mealForWithRanges(x.time, mealRanges) in ENGINE.durations
+            ? ENGINE.durations[mealForWithRanges(x.time, mealRanges) as keyof typeof ENGINE.durations]
+            : 90);
+        const xe = xs + xd;
+        return overlap(s, e, xs, xe);
+      });
         if (!conflict) chosen = pref.id;
       }
     }
@@ -365,7 +398,11 @@ function assignTablesForDateWithTables(date: string, input: Booking[], tables: T
       const conflict = out.some((x) => {
         if (x.tableId !== t.id) return false;
         const xs = timeToMin(round30(x.time));
-        const xd = x.durationMin ?? (mealFor(x.time) in ENGINE.durations ? ENGINE.durations[mealFor(x.time) as keyof typeof ENGINE.durations] : 90);
+        const xd =
+          x.durationMin ??
+          (mealForWithRanges(x.time, mealRanges) in ENGINE.durations
+            ? ENGINE.durations[mealForWithRanges(x.time, mealRanges) as keyof typeof ENGINE.durations]
+            : 90);
         const xe = xs + xd;
         return overlap(s, e, xs, xe);
       });
@@ -381,7 +418,16 @@ function assignTablesForDateWithTables(date: string, input: Booking[], tables: T
   return [...input.filter((b) => b.date !== date), ...out];
 }
 
-function findAvailableTable(args: { date: string; time: string; guests: number; bookings: Booking[]; durationMin: number; tables: TableCap[] }): number | null {
+function findAvailableTable(args: {
+  date: string;
+  time: string;
+  guests: number;
+  bookings: Booking[];
+  durationMin: number;
+  tables: TableCap[];
+  mealRanges?: MealRangeMap;
+}): number | null {
+  const mealRanges = args.mealRanges ?? DEFAULT_MEAL_RANGES;
   const when = round30(args.time);
   const dur = args.durationMin;
   const s = timeToMin(when);
@@ -398,7 +444,11 @@ function findAvailableTable(args: { date: string; time: string; guests: number; 
       if (b.date !== args.date) return false;
       if (b.tableId !== id) return false;
       const bs = timeToMin(round30(b.time));
-      const bd = b.durationMin ?? (mealFor(b.time) in ENGINE.durations ? ENGINE.durations[mealFor(b.time) as keyof typeof ENGINE.durations] : 90);
+      const bd =
+        b.durationMin ??
+        (mealForWithRanges(b.time, mealRanges) in ENGINE.durations
+          ? ENGINE.durations[mealForWithRanges(b.time, mealRanges) as keyof typeof ENGINE.durations]
+          : 90);
       const be = bs + bd;
       return overlap(s, e, bs, be);
     });
@@ -409,7 +459,15 @@ function findAvailableTable(args: { date: string; time: string; guests: number; 
   return null;
 }
 
-function isTableAvailable(args: { date: string; time: string; tableId: number; bookings: Booking[]; durationMin: number }) {
+function isTableAvailable(args: {
+  date: string;
+  time: string;
+  tableId: number;
+  bookings: Booking[];
+  durationMin: number;
+  mealRanges?: MealRangeMap;
+}) {
+  const mealRanges = args.mealRanges ?? DEFAULT_MEAL_RANGES;
   const when = round30(args.time);
   const s = timeToMin(when);
   const e = s + args.durationMin;
@@ -417,7 +475,11 @@ function isTableAvailable(args: { date: string; time: string; tableId: number; b
     if (b.date !== args.date) return false;
     if (b.tableId !== args.tableId) return false;
     const bs = timeToMin(round30(b.time));
-    const bd = b.durationMin ?? (mealFor(b.time) in ENGINE.durations ? ENGINE.durations[mealFor(b.time) as keyof typeof ENGINE.durations] : 90);
+    const bd =
+      b.durationMin ??
+      (mealForWithRanges(b.time, mealRanges) in ENGINE.durations
+        ? ENGINE.durations[mealForWithRanges(b.time, mealRanges) as keyof typeof ENGINE.durations]
+        : 90);
     const be = bs + bd;
     return overlap(s, e, bs, be);
   });
@@ -496,6 +558,7 @@ export default function ReservationDashboard() {
         maxGuests: 0,
         maxTables: 0,
         maxBookingDurationMin: 90,
+        mealRanges: DEFAULT_MEAL_RANGES,
       },
       policies: {
         vegan: true,
@@ -554,6 +617,7 @@ export default function ReservationDashboard() {
   );
 
   const [config, setConfig] = useState<Settings>(defaultSettings);
+  const mealRanges = useMemo(() => normalizeMealRanges(config.seating.mealRanges), [config.seating.mealRanges]);
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [floorplan, setFloorplan] = useState<Floorplan>({
@@ -783,6 +847,7 @@ export default function ReservationDashboard() {
             groupThreshold: bookingSettings.seating?.groupThreshold ?? prev.seating.groupThreshold,
             maxTables: bookingSettings.seating?.maxTables ?? prev.seating.maxTables,
             highChairs: bookingSettings.seating?.highChairs ?? prev.seating.highChairs,
+            mealRanges: normalizeMealRanges(bookingSettings.seating?.mealRanges ?? prev.seating.mealRanges),
           },
           escalation: {
             ...prev.escalation,
@@ -829,7 +894,9 @@ export default function ReservationDashboard() {
     return base.map((b) => ({ ...b, durationMin }));
   }, [defaultSettings.seating.maxBookingDurationMin]);
 
-  const [bookings, setBookings] = useState<Booking[]>(() => assignTablesForDateWithTables(dateSel, seed, tableCaps));
+  const [bookings, setBookings] = useState<Booking[]>(() =>
+    assignTablesForDateWithTables(dateSel, seed, tableCaps, mealRanges)
+  );
   const [editBookingDraft, setEditBookingDraft] = useState<Booking | null>(null);
   const [bookingsReady, setBookingsReady] = useState(false);
   const [newBookingCount, setNewBookingCount] = useState(0);
@@ -847,19 +914,18 @@ export default function ReservationDashboard() {
   };
 
   useEffect(() => {
-    setBookings((prev) => assignTablesForDateWithTables(dateSel, prev, tableCaps));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateSel, tableCaps]);
+    setBookings((prev) => assignTablesForDateWithTables(dateSel, prev, tableCaps, mealRanges));
+  }, [dateSel, tableCaps, mealRanges]);
 
   useEffect(() => {
     setBookings((prev) => {
       const updated = prev.map((b) => ({ ...b, durationMin: config.seating.maxBookingDurationMin }));
       const dates = Array.from(new Set<string>(updated.map((b) => b.date)));
       let out = updated;
-      for (const d of dates) out = assignTablesForDateWithTables(d, out, tableCaps);
+      for (const d of dates) out = assignTablesForDateWithTables(d, out, tableCaps, mealRanges);
       return out;
     });
-  }, [config.seating.maxBookingDurationMin, tableCaps]);
+  }, [config.seating.maxBookingDurationMin, tableCaps, mealRanges]);
 
   const fetchBookings = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -914,10 +980,10 @@ export default function ReservationDashboard() {
       }
       lastBookingIdsRef.current = incomingIds;
 
-      setBookings(assignTablesForDateWithTables(dateSel, mapped, tableCaps));
+      setBookings(assignTablesForDateWithTables(dateSel, mapped, tableCaps, mealRanges));
       setBookingsReady(true);
     },
-    [restaurantId, settingsReady, config.seating.maxBookingDurationMin, dateSel, tableCaps]
+    [restaurantId, settingsReady, config.seating.maxBookingDurationMin, dateSel, tableCaps, mealRanges]
   );
 
   useEffect(() => {
@@ -1001,6 +1067,7 @@ export default function ReservationDashboard() {
               maxBookingDurationMin: config.seating.maxBookingDurationMin,
               maxTables: config.seating.maxTables,
               highChairs: config.seating.highChairs,
+              mealRanges: config.seating.mealRanges,
             },
             notify_email: config.info.email || config.notifications.to || null,
             notify_enabled: config.notifications.notifyOnNewBooking,
@@ -1059,12 +1126,12 @@ export default function ReservationDashboard() {
   }, [profileName, profileEmail, session?.user?.id]);
 
   const ALL_TIMES = useMemo(() => {
-    const mins = [MEAL_RANGES.Frukost[0], MEAL_RANGES.Lunch[0], MEAL_RANGES.Middag[0]].map(timeToMin);
-    const maxs = [MEAL_RANGES.Frukost[1], MEAL_RANGES.Lunch[1], MEAL_RANGES.Middag[1]].map(timeToMin);
+    const mins = [mealRanges.Frukost[0], mealRanges.Lunch[0], mealRanges.Middag[0]].map(timeToMin);
+    const maxs = [mealRanges.Frukost[1], mealRanges.Lunch[1], mealRanges.Middag[1]].map(timeToMin);
     const out: string[] = [];
     for (let s = Math.min(...mins), e = Math.max(...maxs); s <= e; s += ENGINE.slotStepMin) out.push(minToTime(s));
     return out;
-  }, []);
+  }, [mealRanges]);
 
   const dayBookings = useMemo(() => bookings.filter((b) => b.date === dateSel), [bookings, dateSel]);
 
@@ -1121,7 +1188,7 @@ export default function ReservationDashboard() {
   }, [bookings, today]);
 
   const filtered = useMemo(() => {
-    const [a, b] = MEAL_RANGES[activeMeal];
+    const [a, b] = mealRangeFor(activeMeal, mealRanges);
     const s = timeToMin(a),
       e = timeToMin(b);
     return dayBookings
@@ -1130,7 +1197,7 @@ export default function ReservationDashboard() {
         return t >= s && t <= e;
       })
       .sort((x, y) => timeToMin(x.time) - timeToMin(y.time));
-  }, [activeMeal, dayBookings]);
+  }, [activeMeal, dayBookings, mealRanges]);
 
   const groupedByTime = useMemo(() => {
     const g: Record<string, Booking[]> = {};
@@ -1175,12 +1242,30 @@ export default function ReservationDashboard() {
   const guestsByMeal = useMemo(() => {
     const m: Record<Meal, number> = { Alla: 0, Frukost: 0, Lunch: 0, Middag: 0 };
     dayBookings.forEach((b) => {
-      const mf = mealFor(b.time);
+      const mf = mealForWithRanges(b.time, mealRanges);
       m[mf] += b.guests;
       m.Alla += b.guests;
     });
     return m;
-  }, [dayBookings]);
+  }, [dayBookings, mealRanges]);
+
+  const updateMealRange = (meal: MealKey, idx: 0 | 1, value: string) => {
+    setConfig((prev) => {
+      const ranges = normalizeMealRanges(prev.seating.mealRanges);
+      const nextRange: [string, string] = [...ranges[meal]] as [string, string];
+      nextRange[idx] = value;
+      return {
+        ...prev,
+        seating: {
+          ...prev.seating,
+          mealRanges: {
+            ...ranges,
+            [meal]: nextRange,
+          },
+        },
+      };
+    });
+  };
 
   // --- AI preview (MVP, deterministic)
   const [aiMsg, setAiMsg] = useState("");
@@ -1640,6 +1725,7 @@ export default function ReservationDashboard() {
       bookings,
       durationMin: config.seating.maxBookingDurationMin,
       tables: tableCaps,
+      mealRanges,
     });
     const can = tableId != null;
     return can
@@ -1682,11 +1768,11 @@ export default function ReservationDashboard() {
       const table = tableCaps.find((t) => t.id === tableId);
       if (!table) return { ok: false, error: "Valt bord finns inte." };
       if (table.cap < d.guests) return { ok: false, error: `Valt bord har bara ${table.cap} platser.` };
-      if (!isTableAvailable({ date: d.date, time: when, tableId, bookings, durationMin })) {
+      if (!isTableAvailable({ date: d.date, time: when, tableId, bookings, durationMin, mealRanges })) {
         return { ok: false, error: "Valt bord är redan upptaget vid den tiden." };
       }
     } else {
-      tableId = findAvailableTable({ date: d.date, time: when, guests: d.guests, bookings, durationMin, tables: tableCaps });
+      tableId = findAvailableTable({ date: d.date, time: when, guests: d.guests, bookings, durationMin, tables: tableCaps, mealRanges });
       if (tableId == null) return { ok: false, error: "Ingen ledig passande bord i detta tidsintervall." };
     }
 
@@ -1726,13 +1812,18 @@ export default function ReservationDashboard() {
           .single();
         if (data?.id) {
           setBookings((prev) =>
-            assignTablesForDateWithTables(d.date, prev.map((x) => (x.id === b.id ? { ...x, id: data.id } : x)), tableCaps)
+            assignTablesForDateWithTables(
+              d.date,
+              prev.map((x) => (x.id === b.id ? { ...x, id: data.id } : x)),
+              tableCaps,
+              mealRanges
+            )
           );
         }
       })().catch(() => {});
     }
 
-    setBookings((prev) => assignTablesForDateWithTables(d.date, [...prev, b], tableCaps));
+    setBookings((prev) => assignTablesForDateWithTables(d.date, [...prev, b], tableCaps, mealRanges));
     return { ok: true };
   }
 
@@ -2223,6 +2314,25 @@ export default function ReservationDashboard() {
               </span>
             </div>
 
+            {activeMeal !== "Alla" && (
+              <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                <span className="font-semibold text-gray-600">Tider för {activeMeal}:</span>
+                <input
+                  type="time"
+                  className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700"
+                  value={mealRanges[activeMeal as MealKey][0]}
+                  onChange={(e) => updateMealRange(activeMeal as MealKey, 0, e.target.value)}
+                />
+                <span className="text-gray-400">–</span>
+                <input
+                  type="time"
+                  className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700"
+                  value={mealRanges[activeMeal as MealKey][1]}
+                  onChange={(e) => updateMealRange(activeMeal as MealKey, 1, e.target.value)}
+                />
+              </div>
+            )}
+
             {Object.keys(groupedByTime).length === 0 ? (
               <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded border border-dashed border-gray-300">
                 Inga bokningar i denna tidsperiod.
@@ -2685,7 +2795,7 @@ export default function ReservationDashboard() {
                     );
                     const dates = Array.from(new Set<string>(updated.map((b) => b.date)));
                     let out = updated;
-                    for (const d of dates) out = assignTablesForDateWithTables(d, out, tableCaps);
+                    for (const d of dates) out = assignTablesForDateWithTables(d, out, tableCaps, mealRanges);
                     return out;
                   });
                   if (restaurantId && settingsReady) {

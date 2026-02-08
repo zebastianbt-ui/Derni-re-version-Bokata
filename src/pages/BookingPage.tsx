@@ -712,44 +712,44 @@ export default function BookingPage() {
                         <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4 space-y-3">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <label className="block">
-                              <span className="text-xs font-semibold text-gray-600 pl-1">Namn</span>
+                              <span className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Namn</span>
                               <input
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 placeholder="För- och efternamn"
-                                className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2 text-center text-sm text-gray-900 placeholder:text-gray-400"
+                                className="mt-1.5 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2.5 text-sm font-semibold text-gray-900 placeholder:text-gray-400"
                               />
                             </label>
                             <label className="block">
-                              <span className="text-xs font-semibold text-gray-600 pl-1">Antal gäster</span>
+                              <span className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Antal gäster</span>
                               <input
                                 type="number"
                                 min={1}
                                 max={16}
                                 value={guests}
                                 onChange={(e) => setGuests(Number(e.target.value))}
-                                className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 text-center px-4 py-2 text-sm text-gray-900"
+                                className="mt-1.5 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2.5 text-sm font-semibold text-gray-900"
                               />
                             </label>
                           </div>
                           <label className="block">
-                            <span className="text-xs font-semibold text-gray-600 pl-1">E‑post</span>
+                            <span className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">E‑post</span>
                             <input
                               type="email"
                               value={email}
                               onChange={(e) => setEmail(e.target.value)}
                               placeholder="namn@example.com"
-                              className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2 text-center text-sm text-gray-900 placeholder:text-gray-400"
+                              className="mt-1.5 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2.5 text-sm font-semibold text-gray-900 placeholder:text-gray-400"
                             />
                           </label>
                           <label className="block">
-                            <span className="text-xs font-semibold text-gray-600 pl-1">Kommentar</span>
+                            <span className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Kommentar</span>
                             <textarea
                               rows={3}
                               value={notes}
                               onChange={(e) => setNotes(e.target.value)}
                               placeholder="Allergier, barnvagn…"
-                              className="mt-2 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2 text-center text-sm text-gray-900 placeholder:text-gray-400"
+                              className="mt-1.5 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2.5 text-sm font-semibold text-gray-900 placeholder:text-gray-400"
                             />
                           </label>
                         </div>
@@ -884,7 +884,7 @@ export default function BookingPage() {
         </div>
       )}
 
-      <footer className="mt-0 pt-4 pb-8 text-center">
+      <footer className="mt-0 pt-4 pb-24 md:pb-8 text-center">
         <div className="mx-auto max-w-5xl px-4">
           <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:justify-between">
             <div className="md:flex-1 md:text-center">

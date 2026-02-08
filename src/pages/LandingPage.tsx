@@ -2,6 +2,9 @@ import React from "react";
 import { useLocation } from "react-router-dom";
 import forkTransparent from "../assets/fork-transparent.png";
 
+const COOKIE_DEFAULT = { necessary: true, analytics: false, marketing: false, version: 1 };
+type CookiePrefs = typeof COOKIE_DEFAULT;
+
 export default function Page() {
   // Smooth scroll with header offset (SSR‑safe & legacy‑parser‑safe)
   const scrollToHash = React.useCallback((hash) => {
@@ -40,7 +43,9 @@ export default function Page() {
   const openAuth = (mode = 'login') => { setAuthMode(mode); setAuthOpen(true); };
   const [authEmailSeed, setAuthEmailSeed] = React.useState('');
   const location = useLocation();
-  const [cookieOk, setCookieOk] = React.useState(false);
+  const [cookiePrefs, setCookiePrefs] = React.useState<CookiePrefs | null>(null);
+  const [showCookieSettings, setShowCookieSettings] = React.useState(false);
+  const [draftCookiePrefs, setDraftCookiePrefs] = React.useState<CookiePrefs>(COOKIE_DEFAULT);
 
   // Single source of truth for plan data (used by Pricing cards & Signup modal)
   const PLAN_MAP = React.useMemo(() => ({
@@ -83,9 +88,51 @@ export default function Page() {
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      setCookieOk(window.localStorage.getItem('bokata_cookie_ok') === '1');
+      const raw = window.localStorage.getItem('bokata_cookie_prefs');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setCookiePrefs(parsed);
+        return;
+      }
+      const legacy = window.localStorage.getItem('bokata_cookie_ok');
+      if (legacy === '1') {
+        const prefs = { necessary: true, analytics: true, marketing: true, version: 1 } as CookiePrefs;
+        window.localStorage.setItem('bokata_cookie_prefs', JSON.stringify(prefs));
+        setCookiePrefs(prefs);
+      }
     } catch {}
   }, []);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!cookiePrefs) return;
+    (window as any).__bokataConsent = cookiePrefs;
+    // Non-necessary scripts should only be loaded after explicit consent.
+    // Example: if (cookiePrefs.analytics) { loadAnalytics(); }
+  }, [cookiePrefs]);
+
+  const saveCookiePrefs = (prefs: CookiePrefs) => {
+    setCookiePrefs(prefs);
+    try {
+      window.localStorage.setItem('bokata_cookie_prefs', JSON.stringify(prefs));
+      window.localStorage.setItem('bokata_cookie_ok', '1');
+    } catch {}
+  };
+
+  const acceptAllCookies = () => {
+    saveCookiePrefs({ necessary: true, analytics: true, marketing: true, version: 1 });
+    setShowCookieSettings(false);
+  };
+
+  const rejectNonEssential = () => {
+    saveCookiePrefs({ necessary: true, analytics: false, marketing: false, version: 1 });
+    setShowCookieSettings(false);
+  };
+
+  const openCookieSettings = () => {
+    setDraftCookiePrefs(cookiePrefs ?? COOKIE_DEFAULT);
+    setShowCookieSettings(true);
+  };
 
   React.useEffect(() => {
     if (!location) return;
@@ -374,22 +421,80 @@ export default function Page() {
         </div>
       </section>
 
-      {!cookieOk && (
+      {!cookiePrefs && (
         <div className="fixed bottom-4 left-0 right-0 z-50 px-4">
           <div className="mx-auto max-w-3xl rounded-2xl border border-pink-100 bg-white/95 backdrop-blur shadow-lg px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <div className="text-sm text-gray-700">
-              Vi använder nödvändiga cookies för att sidan ska fungera. Genom att fortsätta godkänner du detta.
+              Vi använder nödvändiga cookies för funktion. Analys/marknadsföring är valfritt.
             </div>
-            <button
-              onClick={() => {
-                try { window.localStorage.setItem('bokata_cookie_ok', '1'); } catch {}
-                setCookieOk(true);
-              }}
-              className="ml-auto px-4 py-2 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700"
-            >
-              Okej
-            </button>
+            <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+              <button
+                onClick={rejectNonEssential}
+                className="px-3 py-2 rounded-full border border-pink-200 text-pink-700 font-semibold hover:bg-pink-50"
+              >
+                Avböj
+              </button>
+              <button
+                onClick={openCookieSettings}
+                className="px-3 py-2 rounded-full border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50"
+              >
+                Inställningar
+              </button>
+              <button
+                onClick={acceptAllCookies}
+                className="px-4 py-2 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700"
+              >
+                Okej
+              </button>
+            </div>
           </div>
+          {showCookieSettings && (
+            <div className="mx-auto mt-2 max-w-3xl rounded-2xl border border-pink-100 bg-white/95 backdrop-blur shadow-lg px-4 py-3">
+              <div className="flex flex-col gap-2 text-sm text-gray-700">
+                <label className="flex items-center justify-between gap-3">
+                  <span className="font-semibold">Nödvändiga</span>
+                  <input type="checkbox" checked disabled />
+                </label>
+                <label className="flex items-center justify-between gap-3">
+                  <span>Analys</span>
+                  <input
+                    type="checkbox"
+                    checked={draftCookiePrefs.analytics}
+                    onChange={(e) =>
+                      setDraftCookiePrefs((prev) => ({ ...prev, analytics: e.target.checked }))
+                    }
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-3">
+                  <span>Marknadsföring</span>
+                  <input
+                    type="checkbox"
+                    checked={draftCookiePrefs.marketing}
+                    onChange={(e) =>
+                      setDraftCookiePrefs((prev) => ({ ...prev, marketing: e.target.checked }))
+                    }
+                  />
+                </label>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      saveCookiePrefs(draftCookiePrefs);
+                      setShowCookieSettings(false);
+                    }}
+                    className="px-3 py-2 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700"
+                  >
+                    Spara
+                  </button>
+                  <button
+                    onClick={() => setShowCookieSettings(false)}
+                    className="px-3 py-2 rounded-full border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50"
+                  >
+                    Stäng
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
