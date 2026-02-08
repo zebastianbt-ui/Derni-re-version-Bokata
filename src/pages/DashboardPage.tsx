@@ -1077,6 +1077,7 @@ export default function ReservationDashboard() {
   const [onboarding, setOnboarding] = useState({
     restaurantName: "",
     address: "",
+    distance: "",
     phone: "",
     email: "",
     payment: "",
@@ -1175,6 +1176,7 @@ export default function ReservationDashboard() {
       "INFOS:",
       "Namn: ...",
       "Adress: ...",
+      "Avstånd: ... (ex: 12 km från Tomelilla)",
       "Telefon: ...",
       "E-post: ...",
       "Webbplats: ...",
@@ -1233,6 +1235,7 @@ export default function ReservationDashboard() {
       "INFOS:",
       data.restaurantName ? `Namn: ${data.restaurantName}` : "",
       data.address ? `Adress: ${data.address}` : "",
+      data.distance ? `Avstånd: ${data.distance}` : "",
       data.phone ? `Telefon: ${data.phone}` : "",
       data.email ? `E-post: ${data.email}` : "",
       web?.siteUrl ? `Webbplats: ${web.siteUrl}` : "",
@@ -1317,6 +1320,7 @@ export default function ReservationDashboard() {
     };
     data.restaurantName = mapField("Namn");
     data.address = mapField("Adress");
+    data.distance = mapField("Avstånd") || mapField("Distance");
     data.phone = mapField("Telefon");
     data.email = mapField("E-post");
     data.payment = mapField("Betalning");
@@ -3144,6 +3148,15 @@ export default function ReservationDashboard() {
                     value={onboarding.address}
                     onChange={(e) => {
                       setOnboarding({ ...onboarding, address: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Avstånd (ex: 12 km från Tomelilla)"
+                    value={onboarding.distance}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, distance: e.target.value });
                       setOnboardingDirty(true);
                     }}
                   />

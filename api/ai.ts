@@ -345,6 +345,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     pets: getField("Djurpolicy"),
     parking: getFieldAny(["Parkering", "Parking"]),
     transport: getField("Kollektivtrafik"),
+    distance: getFieldAny(["Avstånd", "Avstand", "Distance"]),
     instagram: getFieldAny(["Instagram", "Insta"]) || context?.restaurant?.instagram || "",
     facebook: getField("Facebook") || context?.restaurant?.facebook || "",
     googleMaps: getFieldAny(["Google Maps", "Maps", "GoogleMaps"]) || context?.restaurant?.googleMaps || "",
@@ -1040,6 +1041,16 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
   }
   if (/(hemsida|webbplats|website|webb|site)/i.test(msgLower) && kbInfo.website) {
     sendReply(t(`Vår hemsida: ${kbInfo.website}`, `Notre site : ${kbInfo.website}`, `Our website: ${kbInfo.website}`));
+    return;
+  }
+  if (/(km|kilometer|distance|distans|avstånd|avstand|hur\s+långt|combien\s+de\s+km|a\s+combien\s+de\s+km|à\s+combien\s+de\s+km)/i.test(msgLower) && kbInfo.distance) {
+    sendReply(
+      t(
+        `Vi ligger ${kbInfo.distance}.`,
+        `Nous sommes à ${kbInfo.distance}.`,
+        `We are ${kbInfo.distance}.`
+      )
+    );
     return;
   }
   if (/(google maps|karta|maps|vägbeskrivning|hur långt|hur länge|restid|avstånd|kör)/i.test(msgLower) && kbInfo.googleMaps) {
