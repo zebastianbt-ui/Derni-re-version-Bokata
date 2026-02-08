@@ -993,7 +993,7 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       dec: 12,
       december: 12,
     };
-    const dm = txt.match(/\b(\d{1,2})\s+([a-zåäö]+)\b/);
+    const dm = txt.match(/\b(\d{1,2})(?:[:\.]?(?:e|a|er|ème|st|nd|rd|th))?\s+([a-zåäö]+)\b/);
     if (dm) {
       const d = Number(dm[1]);
       const m = months[dm[2]];
@@ -1513,11 +1513,12 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
           return;
         }
       }
+      const dayLabel = lang === "sv" && hours.dayName ? `${hours.dayName} ` : "";
       sendReply(
         t(
-          `Vi har öppet ${hours.open}–${hours.close}.`,
-          `Nous sommes ouverts de ${hours.open} à ${hours.close}.`,
-          `We’re open ${hours.open}–${hours.close}.`
+          `Vi har öppet ${dayLabel}${hours.open}–${hours.close}.`,
+          `Nous sommes ouverts ${dayLabel}${hours.open}–${hours.close}.`,
+          `We’re open ${dayLabel}${hours.open}–${hours.close}.`
         )
       );
       return;
