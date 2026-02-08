@@ -120,6 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(400).json({ error: "Missing booking fields" });
     return;
   }
+  const normalizedEmail = email.trim().toLowerCase();
 
   if (!turnstileToken) {
     res.status(403).json({ error: "Turnstile verification required." });
@@ -149,6 +150,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (guests > maxGuestsPerReservation) {
     res.status(400).json({ error: `För många gäster per bokning (max ${maxGuestsPerReservation}).` });
+    return;
+  }
+
+  const { count: sameEmailCount } = await supabase
+    .from("bookings")
+    .select("id", { count: "exact", head: true })
+    .eq("restaurant_id", restaurantId)
+    .eq("date", date)
+    .eq("client_email", normalizedEmail)
+    .neq("status", "cancelled");
+  if ((sameEmailCount ?? 0) >= 2) {
+    res.status(400).json({ error: "Max 2 bokningar per dag för samma e‑postadress." });
     return;
   }
 
@@ -319,7 +332,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       source: "web",
       duration_min: durationMin,
       table_id: assignedTableId,
-      client_email: email,
+      client_email: normalizedEmail,
       client_phone: phone || null,
       confirm_token: confirmToken,
       confirm_expires_at: confirmExpiresAt,

@@ -834,6 +834,8 @@ export default function ReservationDashboard() {
   const [bookingsReady, setBookingsReady] = useState(false);
   const [newBookingCount, setNewBookingCount] = useState(0);
   const [newBookingDetail, setNewBookingDetail] = useState<string | null>(null);
+  const [newBookingItems, setNewBookingItems] = useState<Array<{ id: string; date: string; time: string; guests: number; name: string }>>([]);
+  const [showNewBookings, setShowNewBookings] = useState(false);
   const lastBookingIdsRef = useRef<Set<string>>(new Set());
   const bookingNoticeTimer = useRef<number | null>(null);
 
@@ -887,12 +889,20 @@ export default function ReservationDashboard() {
             .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""))
             .at(-1);
           if (latest) {
-            setNewBookingDetail(`Ny bokning: ${latest.date} · ${latest.guests} gäster`);
+            setNewBookingDetail(`Ny bokning: ${latest.date} · ${latest.time} · ${latest.guests} gäster`);
             if (bookingNoticeTimer.current) window.clearTimeout(bookingNoticeTimer.current);
             bookingNoticeTimer.current = window.setTimeout(() => {
               setNewBookingDetail(null);
             }, 5000);
           }
+          const items = newOnes.map((b) => ({
+            id: b.id,
+            date: b.date,
+            time: b.time,
+            guests: b.guests,
+            name: b.name,
+          }));
+          setNewBookingItems((prev) => [...items, ...prev].slice(0, 10));
         }
       }
       lastBookingIdsRef.current = incomingIds;
@@ -1997,24 +2007,54 @@ export default function ReservationDashboard() {
       </header>
 
       {newBookingCount > 0 ? (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          <span>
-            {newBookingDetail ??
-              (newBookingCount === 1
-                ? "1 ny bokning mottagen."
-                : `${newBookingCount} nya bokningar mottagna.`)}
-          </span>
-          <button
-            className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-full text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100"
-            onClick={() => {
-              setNewBookingCount(0);
-              setNewBookingDetail(null);
+        <div className="mb-4">
+          <div
+            className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-[#e6007a] bg-[#e6007a] px-4 py-3 text-sm text-white shadow-sm"
+            onClick={() => setShowNewBookings((prev) => !prev)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") setShowNewBookings((prev) => !prev);
             }}
-            aria-label="Stäng"
-            type="button"
           >
-            ×
-          </button>
+            <span>
+              {newBookingDetail ??
+                (newBookingCount === 1
+                  ? "1 ny bokning mottagen."
+                  : `${newBookingCount} nya bokningar mottagna.`)}
+            </span>
+            <button
+              className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-full text-white/90 hover:bg-white/15"
+              onClick={(e) => {
+                e.stopPropagation();
+                setNewBookingCount(0);
+                setNewBookingDetail(null);
+                setNewBookingItems([]);
+                setShowNewBookings(false);
+              }}
+              aria-label="Stäng"
+              type="button"
+            >
+              ×
+            </button>
+          </div>
+          {showNewBookings && newBookingItems.length ? (
+            <div className="mt-2 rounded-xl border border-pink-200 bg-white/90 px-4 py-3 text-sm text-gray-700">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-pink-700">Nya bokningar</div>
+              <div className="space-y-1">
+                {newBookingItems.map((b) => (
+                  <div key={b.id} className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium text-gray-900">
+                      {b.date} · {b.time}
+                    </div>
+                    <div className="text-gray-600">
+                      {b.guests} gäster{b.name ? ` · ${b.name}` : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -2979,12 +3019,12 @@ export default function ReservationDashboard() {
                           </button>
                         )}
                       </div>
-                      <div className="grid grid-cols-12 items-end gap-2">
-                        <div className="col-span-6">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 items-end gap-2">
+                        <div>
                           <Field label="Från">
                             <input
                               type="date"
-                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                              className="mt-1 w-full max-w-[220px] mx-auto rounded-lg border border-gray-300 px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none"
                               value={period.from}
                               onChange={(e) =>
                                 setConfig((prev) => ({
@@ -3000,11 +3040,11 @@ export default function ReservationDashboard() {
                             />
                           </Field>
                         </div>
-                        <div className="col-span-6">
+                        <div>
                           <Field label="Till">
                             <input
                               type="date"
-                              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                              className="mt-1 w-full max-w-[220px] mx-auto rounded-lg border border-gray-300 px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none"
                               value={period.to}
                               onChange={(e) =>
                                 setConfig((prev) => ({
@@ -3026,37 +3066,39 @@ export default function ReservationDashboard() {
                           const d = period.days[day];
                           return (
                             <div key={day} className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2 px-3 py-2">
-                              <div className="sm:col-span-3 capitalize">{day}</div>
-                              <label className="sm:col-span-2 inline-flex items-center gap-2 text-sm whitespace-nowrap">
-                                <input
-                                  type="checkbox"
-                                  checked={d.closed}
-                                  onChange={(e) =>
-                                    setConfig((prev) => ({
-                                      ...prev,
-                                      hours: {
-                                        ...prev.hours,
-                                        periods: prev.hours.periods.map((p) =>
-                                          p.id === period.id
-                                            ? {
-                                                ...p,
-                                                days: {
-                                                  ...p.days,
-                                                  [day]: { ...p.days[day], closed: e.target.checked },
-                                                },
-                                              }
-                                            : p
-                                        ),
-                                      },
-                                    }))
-                                  }
-                                />
-                                Stängt
-                              </label>
-                              <div className="sm:col-span-3">
+                              <div className="flex items-center justify-between sm:col-span-4">
+                                <div className="capitalize">{day}</div>
+                                <label className="inline-flex items-center gap-2 text-sm whitespace-nowrap">
+                                  <input
+                                    type="checkbox"
+                                    checked={d.closed}
+                                    onChange={(e) =>
+                                      setConfig((prev) => ({
+                                        ...prev,
+                                        hours: {
+                                          ...prev.hours,
+                                          periods: prev.hours.periods.map((p) =>
+                                            p.id === period.id
+                                              ? {
+                                                  ...p,
+                                                  days: {
+                                                    ...p.days,
+                                                    [day]: { ...p.days[day], closed: e.target.checked },
+                                                  },
+                                                }
+                                              : p
+                                          ),
+                                        },
+                                      }))
+                                    }
+                                  />
+                                  Stängt
+                                </label>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 sm:col-span-8">
                                 <input
                                   type="time"
-                                  className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60"
+                                  className="w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-center disabled:opacity-60"
                                   value={d.open}
                                   onChange={(e) =>
                                     setConfig((prev) => ({
@@ -3079,11 +3121,9 @@ export default function ReservationDashboard() {
                                   }
                                   disabled={d.closed}
                                 />
-                              </div>
-                              <div className="sm:col-span-3">
                                 <input
                                   type="time"
-                                  className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60"
+                                  className="w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-center disabled:opacity-60"
                                   value={d.close}
                                   onChange={(e) =>
                                     setConfig((prev) => ({
@@ -3144,27 +3184,27 @@ export default function ReservationDashboard() {
                           {h.name}
                           <div className="text-xs text-gray-500">{h.date}</div>
                         </div>
-                        <label className="sm:col-span-2 inline-flex items-center gap-2 text-sm whitespace-nowrap">
-                          <input
-                            type="checkbox"
-                            checked={sp.closed}
-                            onChange={(e) => upsertSpecialByDate(h.date, { closed: e.target.checked })}
-                          />
-                          Stängt
-                        </label>
-                        <div className="sm:col-span-3">
+                        <div className="flex items-center justify-between sm:col-span-4">
+                          <label className="inline-flex items-center gap-2 text-sm whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={sp.closed}
+                              onChange={(e) => upsertSpecialByDate(h.date, { closed: e.target.checked })}
+                            />
+                            Stängt
+                          </label>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 sm:col-span-4">
                           <input
                             type="time"
-                            className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60"
+                            className="w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-center disabled:opacity-60"
                             value={sp.open}
                             onChange={(e) => upsertSpecialByDate(h.date, { open: e.target.value })}
                             disabled={sp.closed}
                           />
-                        </div>
-                        <div className="sm:col-span-3">
                           <input
                             type="time"
-                            className="w-full rounded-md border border-gray-300 px-2 py-1 disabled:opacity-60"
+                            className="w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-center disabled:opacity-60"
                             value={sp.close}
                             onChange={(e) => upsertSpecialByDate(h.date, { close: e.target.value })}
                             disabled={sp.closed}
@@ -3177,28 +3217,28 @@ export default function ReservationDashboard() {
 
                 <div className="mt-6 rounded-lg border border-pink-200 bg-pink-50/40 p-3">
                   <div className="text-base font-bold text-gray-800 mb-2">Stängda perioder</div>
-                  <div className="grid grid-cols-12 items-end gap-2">
-                    <div className="col-span-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 items-end gap-2">
+                    <div>
                       <Field label="Från">
                         <input
                           type="date"
-                          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                          className="mt-1 w-full max-w-[220px] mx-auto rounded-lg border border-gray-300 px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none"
                           value={customClosureFrom}
                           onChange={(e) => setCustomClosureFrom(e.target.value)}
                         />
                       </Field>
                     </div>
-                    <div className="col-span-4">
+                    <div>
                       <Field label="Till">
                         <input
                           type="date"
-                          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                          className="mt-1 w-full max-w-[220px] mx-auto rounded-lg border border-gray-300 px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none"
                           value={customClosureTo}
                           onChange={(e) => setCustomClosureTo(e.target.value)}
                         />
                       </Field>
                     </div>
-                    <div className="col-span-4">
+                    <div>
                       <button
                         type="button"
                         className="w-full px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
