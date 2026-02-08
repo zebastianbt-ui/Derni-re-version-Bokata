@@ -148,6 +148,7 @@ function normalizeHours(hours: BookingPublicSettings["hours"]) {
     rawPeriods.length > 0
       ? rawPeriods.map((p) => ({
           id: p.id,
+          name: p.name,
           from: p.from || from,
           to: p.to || to,
           days: cloneDays(p.days ?? normal),
@@ -541,7 +542,7 @@ export default function BookingPage() {
             hoursConfigured: !!publicSettings?.hours,
             requireManualConfirmation: !!publicSettings?.require_manual_confirmation,
             seating: effectiveSettings.seating,
-            hours: publicSettings?.hours ?? undefined,
+            hours: normalizedHours,
             restaurant: restaurantWebsite ? { website: restaurantWebsite } : undefined,
           },
         }),

@@ -1067,6 +1067,302 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     return;
   }
 
+  const overlapsMonths = (from?: string, to?: string, months: number[] = []) => {
+    if (!from || !to) return false;
+    const start = new Date(from + "T00:00:00Z");
+    const end = new Date(to + "T00:00:00Z");
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+    const cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    const endMonth = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
+    while (cur.getTime() <= endMonth.getTime()) {
+      const m = cur.getUTCMonth() + 1;
+      if (months.includes(m)) return true;
+      cur.setUTCMonth(cur.getUTCMonth() + 1);
+    }
+    return false;
+  };
+
+  const formatPeriodNote = (period?: { name?: string; from?: string; to?: string } | null) => {
+    if (!period) return "";
+    const rawLabel = period.name?.trim() ?? "";
+    const label = rawLabel && !/^period\s*\d+/i.test(rawLabel) ? rawLabel : "";
+    const range = period.from && period.to ? `${period.from}–${period.to}` : "";
+    const parts = [label, range].filter(Boolean);
+    return parts.join(" ");
+  };
+
+  const handleHoursQuestion = async () => {
+    const isHoursQuestion = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
+    if (!isHoursQuestion) return false;
+
+    const base = context?.baseDate ?? fmtDate(new Date());
+    const currentClosed = closedRangeForDate(realToday);
+    const requestedDate = parseDate(msgLower, base);
+    if (currentClosed && (!requestedDate || (requestedDate >= currentClosed.start && requestedDate <= currentClosed.end))) {
+      sendReply(
+        t(
+          `Vi har stängt till ${currentClosed.end}.`,
+          `Nous sommes fermés jusqu’au ${currentClosed.end}.`,
+          `We’re closed until ${currentClosed.end}.`
+        )
+      );
+      return true;
+    }
+
+    const periodForBase = getPeriodForDate(base);
+    if (isPeriodAllClosed(periodForBase, context?.hours?.normal)) {
+      const range = periodForBase ? ` (${periodForBase.from}–${periodForBase.to})` : "";
+      sendReply(
+        t(
+          `Vi har stängt under denna period${range}.`,
+          `Nous sommes fermés sur cette période${range}.`,
+          `We’re closed for this period${range}.`
+        )
+      );
+      return true;
+    }
+
+    if (context && "hoursConfigured" in context && context.hoursConfigured === false) {
+      if (siteUrl) {
+        const webData = await getWebData(siteUrl);
+        if (webData.hoursSummary) {
+          sendReply(
+            t(
+              `Enligt hemsidan: ${webData.hoursSummary}. Kontakta oss gärna för att bekräfta.`,
+              `Selon le site officiel : ${webData.hoursSummary}. Merci de nous contacter pour confirmer.`,
+              `According to the official site: ${webData.hoursSummary}. Please contact us to confirm.`
+            )
+          );
+          return true;
+        }
+      }
+      sendReply(
+        t(
+          "Våra öppettider är inte publicerade just nu. Kontakta oss så hjälper vi dig.",
+          "Nos horaires ne sont pas publiés pour le moment. Contactez‑nous et on vous aide.",
+          "Our opening hours aren’t published right now. Please contact us and we’ll help."
+        )
+      );
+      return true;
+    }
+
+    if (/(sommar|sommaröppettider|été|ete|summer|summer hours)/i.test(msgLower)) {
+      const periods = context?.hours?.periods ?? [];
+      const summerPeriods = periods.filter((p) => {
+        if (p?.name && /(sommar|été|ete|summer)/i.test(p.name)) return true;
+        return overlapsMonths(p?.from, p?.to, [6, 7, 8]);
+      });
+      if (summerPeriods.length) {
+        const lines = summerPeriods
+          .map((p) => {
+            const rawLabel = p?.name?.trim() ? p.name.trim() : "";
+            const label = rawLabel && !/^period\s*\d+/i.test(rawLabel) ? rawLabel : "";
+            const summary = describePeriodHours(p as any);
+            if (!summary) return "";
+            const range = p?.from && p?.to ? ` (${p.from}–${p.to})` : "";
+            return label ? `${label}: ${summary}${range}` : `${summary}${range}`;
+          })
+          .filter(Boolean);
+        if (lines.length) {
+          sendReply(
+            t(
+              `Sommaröppettider: ${lines.join(" | ")}`,
+              `Horaires d'été : ${lines.join(" | ")}`,
+              `Summer hours: ${lines.join(" | ")}`
+            )
+          );
+          return true;
+        }
+      }
+    }
+
+    if (/(höst|host|autumn|fall|automne)/i.test(msgLower)) {
+      const periods = context?.hours?.periods ?? [];
+      const autumnPeriods = periods.filter((p) => {
+        if (p?.name && /(höst|host|autumn|fall|automne)/i.test(p.name)) return true;
+        return overlapsMonths(p?.from, p?.to, [9, 10, 11, 12]);
+      });
+      if (autumnPeriods.length) {
+        const lines = autumnPeriods
+          .map((p) => {
+            const rawLabel = p?.name?.trim() ? p.name.trim() : "";
+            const label = rawLabel && !/^period\s*\d+/i.test(rawLabel) ? rawLabel : "";
+            const summary = describePeriodHours(p as any);
+            if (!summary) return "";
+            const range = p?.from && p?.to ? ` (${p.from}–${p.to})` : "";
+            return label ? `${label}: ${summary}${range}` : `${summary}${range}`;
+          })
+          .filter(Boolean);
+        if (lines.length) {
+          const closedNotice = currentClosed ? ` Stängt under: ${currentClosed.start}–${currentClosed.end}.` : "";
+          sendReply(
+            t(
+              `Höstens öppettider: ${lines.join(" | ")}.${closedNotice}`,
+              `Horaires d'automne : ${lines.join(" | ")}.${closedNotice}`,
+              `Autumn hours: ${lines.join(" | ")}.${closedNotice}`
+            )
+          );
+          return true;
+        }
+      }
+    }
+
+    if (/(påsk|pask|easter|långfredag|langfredag|annandag\s+p[åa]sk)/i.test(msgLower)) {
+      const periods = context?.hours?.periods ?? [];
+      const easterPeriod = periods.find((p) => (p?.name ? /(påsk|pask|easter)/i.test(p.name) : false));
+      if (easterPeriod) {
+        const summary = describePeriodHours(easterPeriod as any);
+        if (summary) {
+          const range = easterPeriod.from && easterPeriod.to ? ` (${easterPeriod.from}–${easterPeriod.to})` : "";
+          sendReply(
+            t(
+              `Öppettider under påsk: ${summary}${range}.`,
+              `Horaires de Pâques : ${summary}${range}.`,
+              `Easter hours: ${summary}${range}.`
+            )
+          );
+          return true;
+        }
+      }
+    }
+
+    if (/nästa vecka|semaine prochaine|next week/i.test(msgLower)) {
+      const baseDt = toUtcDate(base) ?? new Date();
+      const cur = baseDt.getUTCDay();
+      const deltaToNextMon = ((1 - cur + 7) % 7) || 7;
+      const start = addDays(base, deltaToNextMon);
+      const days: string[] = [];
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(start ?? base, i);
+        if (d) days.push(d);
+      }
+      const openDays: string[] = [];
+      const closedDays: string[] = [];
+      for (const d of days) {
+        const hours = getDayHours(d);
+        if (!hours || hours.closed || isClosedDate(d)) {
+          closedDays.push(`${hours?.dayName ?? d}`);
+        } else {
+          openDays.push(`${hours.dayName} ${hours.open}–${hours.close}`);
+        }
+      }
+      if (!openDays.length) {
+        sendReply(t("Vi har stängt hela nästa vecka.", "Nous sommes fermés toute la semaine prochaine.", "We’re closed all next week."));
+        return true;
+      }
+      sendReply(
+        t(
+          `Nästa vecka har vi öppet: ${openDays.join(", ")}.${closedDays.length ? ` Stängt: ${closedDays.join(", ")}.` : ""}`,
+          `Semaine prochaine, nous sommes ouverts : ${openDays.join(", ")}.${closedDays.length ? ` Fermé : ${closedDays.join(", ")}.` : ""}`,
+          `Next week we’re open: ${openDays.join(", ")}.${closedDays.length ? ` Closed: ${closedDays.join(", ")}.` : ""}`
+        )
+      );
+      return true;
+    }
+
+    const date = requestedDate;
+    if (!date) {
+      const period = getPeriodForDate(base);
+      const summary = period ? describePeriodHours(period as any) : describePeriodHours({ from: "", to: "", days: context?.hours?.normal ?? {} } as any);
+      if (summary) {
+        const range = period?.from && period?.to ? ` (${period.from}–${period.to})` : "";
+        const closedNotice = currentClosed ? ` Stängt under: ${currentClosed.start}–${currentClosed.end}.` : "";
+        sendReply(
+          t(
+            `Öppettider: ${summary}${range}.${closedNotice}`,
+            `Horaires: ${summary}${range}.${closedNotice}`,
+            `Hours: ${summary}${range}.${closedNotice}`
+          )
+        );
+        return true;
+      }
+      sendReply(
+        t(
+          "Jag har tyvärr inte öppettiderna just nu. Kontakta oss så hjälper vi dig.",
+          "Je n’ai pas les horaires pour le moment. Contactez-nous et on vous aide.",
+          "I don’t have the hours right now. Please contact us and we’ll help."
+        )
+      );
+      return true;
+    }
+
+    const range = closedRangeForDate(date);
+    if (range) {
+      sendReply(
+        t(
+          `Vi har en stängd period: ${range.start}–${range.end}.`,
+          `Nous sommes fermés pendant cette période : ${range.start}–${range.end}.`,
+          `We’re closed during this period: ${range.start}–${range.end}.`
+        )
+      );
+      return true;
+    }
+
+    const period = getPeriodForDate(date);
+    const periodNote = formatPeriodNote(period);
+    const periodSuffix = periodNote
+      ? t(` (Gäller ${periodNote})`, ` (Période : ${periodNote})`, ` (Period: ${periodNote})`)
+      : "";
+    const hours = getDayHours(date);
+    if (!hours) {
+      sendReply(
+        t(
+          "Jag har tyvärr inte öppettiderna för det datumet. Kontakta oss så hjälper vi dig.",
+          "Je n’ai pas les horaires pour cette date. Contactez-nous et on vous aide.",
+          "I don’t have the hours for that date. Please contact us and we’ll help."
+        )
+      );
+      return true;
+    }
+    if (hours.closed || isClosedDate(date)) {
+      const dayNameSv = lang === "sv" && hours.dayName ? ` (${hours.dayName})` : "";
+      sendReply(
+        t(
+          `Den ${date}${dayNameSv} har vi stängt.${periodSuffix}`,
+          `Le ${date}, nous sommes fermés.${periodSuffix}`,
+          `On ${date}, we’re closed.${periodSuffix}`
+        )
+      );
+      return true;
+    }
+    if (/idag|nu|just nu|today|right now|aujourd/i.test(msgLower) && context?.nowTime) {
+      const nowMin = timeToMin(context.nowTime);
+      const openMin = timeToMin(hours.open);
+      const closeMin = timeToMin(hours.close);
+      if (nowMin < openMin) {
+        sendReply(
+          t(
+            `Vi öppnar kl ${hours.open} idag.`,
+            `Nous ouvrons à ${hours.open} aujourd’hui.`,
+            `We open at ${hours.open} today.`
+          )
+        );
+        return true;
+      }
+      if (nowMin > closeMin) {
+        sendReply(
+          t(
+            `Vi har stängt för idag. Vi stängde kl ${hours.close}.`,
+            `Nous sommes fermés pour aujourd’hui. Nous avons fermé à ${hours.close}.`,
+            `We’re closed for today. We closed at ${hours.close}.`
+          )
+        );
+        return true;
+      }
+    }
+    const dayNameSv = lang === "sv" && hours.dayName ? ` (${hours.dayName})` : "";
+    sendReply(
+      t(
+        `Den ${date}${dayNameSv} har vi öppet ${hours.open}–${hours.close}.${periodSuffix}`,
+        `Le ${date}, nous sommes ouverts ${hours.open}–${hours.close}.${periodSuffix}`,
+        `On ${date}, we’re open ${hours.open}–${hours.close}.${periodSuffix}`
+      )
+    );
+    return true;
+  };
+
+  if (await handleHoursQuestion()) return;
+
   if (!FORCE_OPENAI) {
   const isRestaurantTopic =
     /(boka|bokning|reservation|reservera|réservation|reserver|bord|table|öppet|öppnar|öppning|öppettider|tider|stängt|open|opening|ouvert|horaires|adress|address|adresse|hitta|var ligger|ligger|kontakt|contact|telefon|email|e-post|meny|menu|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|parking|tillgäng|wheelchair|webbplats|hemsida|website|webb|länk|facebook|instagram|social|bus|m[ée]tro|tram|transport|transports|arr[êe]t|gare)/i.test(
@@ -1269,260 +1565,6 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       )
     );
     return;
-  }
-
-  const overlapsMonths = (from?: string, to?: string, months: number[] = []) => {
-    if (!from || !to) return false;
-    const start = new Date(from + "T00:00:00Z");
-    const end = new Date(to + "T00:00:00Z");
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
-    const cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
-    const endMonth = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
-    while (cur.getTime() <= endMonth.getTime()) {
-      const m = cur.getUTCMonth() + 1;
-      if (months.includes(m)) return true;
-      cur.setUTCMonth(cur.getUTCMonth() + 1);
-    }
-    return false;
-  };
-  const isHoursQuestion = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
-  if (isHoursQuestion) {
-    const base = context?.baseDate ?? fmtDate(new Date());
-    const currentClosed = closedRangeForDate(realToday);
-    const requestedDate = parseDate(msgLower, base);
-    if (currentClosed && (!requestedDate || (requestedDate >= currentClosed.start && requestedDate <= currentClosed.end))) {
-      sendReply(
-        t(
-          `Vi har stängt till ${currentClosed.end}.`,
-          `Nous sommes fermés jusqu’au ${currentClosed.end}.`,
-          `We’re closed until ${currentClosed.end}.`
-        )
-      );
-      return;
-    }
-    const periodForBase = getPeriodForDate(base);
-    if (isPeriodAllClosed(periodForBase, context?.hours?.normal)) {
-      const range = periodForBase ? ` (${periodForBase.from}–${periodForBase.to})` : "";
-      sendReply(
-        t(
-          `Vi har stängt under denna period${range}.`,
-          `Nous sommes fermés sur cette période${range}.`,
-          `We’re closed for this period${range}.`
-        )
-      );
-      return;
-    }
-    if (context && "hoursConfigured" in context && context.hoursConfigured === false) {
-      if (siteUrl) {
-        const webData = await getWebData(siteUrl);
-        if (webData.hoursSummary) {
-          sendReply(
-            t(
-              `Enligt hemsidan: ${webData.hoursSummary}. Kontakta oss gärna för att bekräfta.`,
-              `Selon le site officiel : ${webData.hoursSummary}. Merci de nous contacter pour confirmer.`,
-              `According to the official site: ${webData.hoursSummary}. Please contact us to confirm.`
-            )
-          );
-          return;
-        }
-      }
-      sendReply(
-        t(
-          "Våra öppettider är inte publicerade just nu. Kontakta oss så hjälper vi dig.",
-          "Nos horaires ne sont pas publiés pour le moment. Contactez‑nous et on vous aide.",
-          "Our opening hours aren’t published right now. Please contact us and we’ll help."
-        )
-      );
-      return;
-    }
-    if (/(sommar|sommaröppettider|été|ete|summer|summer hours)/i.test(msgLower)) {
-      const periods = context?.hours?.periods ?? [];
-      const summerPeriods = periods.filter((p) => {
-        if (p?.name && /(sommar|été|ete|summer)/i.test(p.name)) return true;
-        return overlapsMonths(p?.from, p?.to, [6, 7, 8]);
-      });
-      if (summerPeriods.length) {
-        const lines = summerPeriods
-          .map((p, idx) => {
-            const rawLabel = p?.name?.trim() ? p.name.trim() : "";
-            const label = rawLabel && !/^period\s*\d+/i.test(rawLabel) ? rawLabel : "";
-            const summary = describePeriodHours(p as any);
-            if (!summary) return "";
-            const range = p?.from && p?.to ? ` (${p.from}–${p.to})` : "";
-            return label ? `${label}: ${summary}${range}` : `${summary}${range}`;
-          })
-          .filter(Boolean);
-        if (lines.length) {
-          sendReply(
-            t(
-              `Sommaröppettider: ${lines.join(" | ")}`,
-              `Horaires d'été : ${lines.join(" | ")}`,
-              `Summer hours: ${lines.join(" | ")}`
-            )
-          );
-          return;
-        }
-      }
-    }
-    if (/(höst|host|autumn|fall|automne)/i.test(msgLower)) {
-      const periods = context?.hours?.periods ?? [];
-      const autumnPeriods = periods.filter((p) => {
-        if (p?.name && /(höst|host|autumn|fall|automne)/i.test(p.name)) return true;
-        return overlapsMonths(p?.from, p?.to, [9, 10, 11, 12]);
-      });
-      if (autumnPeriods.length) {
-        const lines = autumnPeriods
-          .map((p) => {
-            const rawLabel = p?.name?.trim() ? p.name.trim() : "";
-            const label = rawLabel && !/^period\s*\d+/i.test(rawLabel) ? rawLabel : "";
-            const summary = describePeriodHours(p as any);
-            if (!summary) return "";
-            const range = p?.from && p?.to ? ` (${p.from}–${p.to})` : "";
-            return label ? `${label}: ${summary}${range}` : `${summary}${range}`;
-          })
-          .filter(Boolean);
-        if (lines.length) {
-          const closedNotice = currentClosed
-            ? ` Stängt under: ${currentClosed.start}–${currentClosed.end}.`
-            : "";
-          sendReply(
-            t(
-              `Höstens öppettider: ${lines.join(" | ")}.${closedNotice}`,
-              `Horaires d'automne : ${lines.join(" | ")}.${closedNotice}`,
-              `Autumn hours: ${lines.join(" | ")}.${closedNotice}`
-            )
-          );
-          return;
-        }
-      }
-    }
-    if (/(påsk|pask|easter|långfredag|langfredag|annandag\s+p[åa]sk)/i.test(msgLower)) {
-      const periods = context?.hours?.periods ?? [];
-      const easterPeriod = periods.find((p) => (p?.name ? /(påsk|pask|easter)/i.test(p.name) : false));
-      if (easterPeriod) {
-        const summary = describePeriodHours(easterPeriod as any);
-        if (summary) {
-          const range = easterPeriod.from && easterPeriod.to ? ` (${easterPeriod.from}–${easterPeriod.to})` : "";
-          sendReply(
-            t(
-              `Öppettider under påsk: ${summary}${range}.`,
-              `Horaires de Pâques : ${summary}${range}.`,
-              `Easter hours: ${summary}${range}.`
-            )
-          );
-          return;
-        }
-      }
-    }
-    if (/nästa vecka|semaine prochaine|next week/i.test(msgLower)) {
-      const baseDt = toUtcDate(base) ?? new Date();
-      const cur = baseDt.getUTCDay();
-      const deltaToNextMon = ((1 - cur + 7) % 7) || 7;
-      const start = addDays(base, deltaToNextMon);
-      const days: string[] = [];
-      for (let i = 0; i < 7; i++) {
-        const d = addDays(start ?? base, i);
-        if (d) days.push(d);
-      }
-      const openDays: string[] = [];
-      const closedDays: string[] = [];
-      for (const d of days) {
-        const hours = getDayHours(d);
-        if (!hours || hours.closed || isClosedDate(d)) {
-          closedDays.push(`${hours?.dayName ?? d}`);
-        } else {
-          openDays.push(`${hours.dayName} ${hours.open}–${hours.close}`);
-        }
-      }
-      if (!openDays.length) {
-        sendReply(t("Vi har stängt hela nästa vecka.", "Nous sommes fermés toute la semaine prochaine.", "We’re closed all next week."));
-        return;
-      }
-      sendReply(
-        t(
-          `Nästa vecka har vi öppet: ${openDays.join(", ")}.${closedDays.length ? ` Stängt: ${closedDays.join(", ")}.` : ""}`,
-          `Semaine prochaine, nous sommes ouverts : ${openDays.join(", ")}.${closedDays.length ? ` Fermé : ${closedDays.join(", ")}.` : ""}`,
-          `Next week we’re open: ${openDays.join(", ")}.${closedDays.length ? ` Closed: ${closedDays.join(", ")}.` : ""}`
-        )
-      );
-      return;
-    }
-
-    const date = requestedDate;
-    if (!date) {
-      const period = getPeriodForDate(base);
-      const summary = period ? describePeriodHours(period as any) : describePeriodHours({ from: "", to: "", days: context?.hours?.normal ?? {} } as any);
-      if (summary) {
-        const range = period?.from && period?.to ? ` (${period.from}–${period.to})` : "";
-        const closedNotice = currentClosed ? ` Stängt under: ${currentClosed.start}–${currentClosed.end}.` : "";
-        sendReply(
-          t(
-            `Öppettider: ${summary}${range}.${closedNotice}`,
-            `Horaires: ${summary}${range}.${closedNotice}`,
-            `Hours: ${summary}${range}.${closedNotice}`
-          )
-        );
-        return;
-      }
-    }
-    if (date) {
-      const range = closedRangeForDate(date);
-      if (range) {
-        sendReply(
-          t(
-            `Vi har en stängd period: ${range.start}–${range.end}.`,
-            `Nous sommes fermés pendant cette période : ${range.start}–${range.end}.`,
-            `We’re closed during this period: ${range.start}–${range.end}.`
-          )
-        );
-        return;
-      }
-      const hours = getDayHours(date);
-      if (!hours || hours.closed || isClosedDate(date)) {
-        sendReply(
-          t(
-            `Vi har stängt ${hours?.dayName ? `på ${hours.dayName}` : "den dagen"}.`,
-            `Nous sommes fermés ${hours?.dayName ? `ce ${hours.dayName}` : "ce jour‑là"}.`,
-            `We’re closed ${hours?.dayName ? `on ${hours.dayName}` : "that day"}.`
-          )
-        );
-        return;
-      }
-      if (/idag|nu|just nu|today|right now|aujourd/i.test(msgLower) && context?.nowTime) {
-        const nowMin = timeToMin(context.nowTime);
-        const openMin = timeToMin(hours.open);
-        const closeMin = timeToMin(hours.close);
-        if (nowMin < openMin) {
-          sendReply(
-            t(
-              `Vi öppnar kl ${hours.open} idag.`,
-              `Nous ouvrons à ${hours.open} aujourd’hui.`,
-              `We open at ${hours.open} today.`
-            )
-          );
-          return;
-        }
-        if (nowMin > closeMin) {
-          sendReply(
-            t(
-              `Vi har stängt för idag. Vi stängde kl ${hours.close}.`,
-              `Nous sommes fermés pour aujourd’hui. Nous avons fermé à ${hours.close}.`,
-              `We’re closed for today. We closed at ${hours.close}.`
-            )
-          );
-          return;
-        }
-      }
-      const dayLabel = lang === "sv" && hours.dayName ? `${hours.dayName} ` : "";
-      sendReply(
-        t(
-          `Vi har öppet ${dayLabel}${hours.open}–${hours.close}.`,
-          `Nous sommes ouverts ${dayLabel}${hours.open}–${hours.close}.`,
-          `We’re open ${dayLabel}${hours.open}–${hours.close}.`
-        )
-      );
-      return;
-    }
   }
 
   const findAvailableTable = (args: {
