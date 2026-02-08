@@ -1098,16 +1098,25 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     const base = context?.baseDate ?? fmtDate(new Date());
     const currentClosed = closedRangeForDate(realToday);
     const requestedDate = parseDate(msgLower, base);
-    if (currentClosed && (!requestedDate || (requestedDate >= currentClosed.start && requestedDate <= currentClosed.end))) {
-      sendReply(
-        t(
-          `Vi har stängt till ${currentClosed.end}.`,
-          `Nous sommes fermés jusqu’au ${currentClosed.end}.`,
-          `We’re closed until ${currentClosed.end}.`
-        )
-      );
-      return true;
-    }
+    const isEasterKeyword = /(påsk|pask|easter|långfredag|langfredag|annandag\s+p[åa]sk)/i.test(msgLower);
+    const isSummerKeyword = /(sommar|sommaröppettider|été|ete|summer|summer hours)/i.test(msgLower);
+    const isAutumnKeyword = /(höst|host|autumn|fall|automne)/i.test(msgLower);
+    const monthNames = {
+      januari: 1,
+      februari: 2,
+      mars: 3,
+      april: 4,
+      maj: 5,
+      juni: 6,
+      juli: 7,
+      augusti: 8,
+      september: 9,
+      oktober: 10,
+      november: 11,
+      december: 12,
+    } as const;
+    const monthMatch = msgLower.match(/\b(januari|februari|mars|april|maj|juni|juli|augusti|september|oktober|november|december)\b/);
+    const monthNumber = monthMatch ? monthNames[monthMatch[1] as keyof typeof monthNames] : null;
 
     const periodForBase = getPeriodForDate(base);
     if (isPeriodAllClosed(periodForBase, context?.hours?.normal)) {
@@ -1146,7 +1155,7 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       return true;
     }
 
-    if (/(sommar|sommaröppettider|été|ete|summer|summer hours)/i.test(msgLower)) {
+    if (isSummerKeyword) {
       const periods = context?.hours?.periods ?? [];
       const summerPeriods = periods.filter((p) => {
         if (p?.name && /(sommar|été|ete|summer)/i.test(p.name)) return true;
@@ -1176,7 +1185,7 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       }
     }
 
-    if (/(höst|host|autumn|fall|automne)/i.test(msgLower)) {
+    if (isAutumnKeyword) {
       const periods = context?.hours?.periods ?? [];
       const autumnPeriods = periods.filter((p) => {
         if (p?.name && /(höst|host|autumn|fall|automne)/i.test(p.name)) return true;
@@ -1207,13 +1216,51 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       }
     }
 
-    if (/(påsk|pask|easter|långfredag|langfredag|annandag\s+p[åa]sk)/i.test(msgLower)) {
+    if (isEasterKeyword) {
       const periods = context?.hours?.periods ?? [];
       const easterPeriod = periods.find((p) => (p?.name ? /(påsk|pask|easter)/i.test(p.name) : false));
       if (easterPeriod) {
+        const range = easterPeriod.from && easterPeriod.to ? ` (${easterPeriod.from}–${easterPeriod.to})` : "";
+        if (/långfredag|langfredag/i.test(msgLower)) {
+          const day = easterPeriod.days?.fredag;
+          if (day) {
+            sendReply(
+              t(
+                day.closed
+                  ? `Långfredag har vi stängt${range}.`
+                  : `Långfredag har vi öppet ${day.open}–${day.close}${range}.`,
+                day.closed
+                  ? `Le Vendredi saint, nous sommes fermés${range}.`
+                  : `Le Vendredi saint, nous sommes ouverts ${day.open}–${day.close}${range}.`,
+                day.closed
+                  ? `We’re closed on Good Friday${range}.`
+                  : `We’re open on Good Friday ${day.open}–${day.close}${range}.`
+              )
+            );
+            return true;
+          }
+        }
+        if (/annandag\s+p[åa]sk/i.test(msgLower)) {
+          const day = easterPeriod.days?.måndag;
+          if (day) {
+            sendReply(
+              t(
+                day.closed
+                  ? `Annandag påsk har vi stängt${range}.`
+                  : `Annandag påsk har vi öppet ${day.open}–${day.close}${range}.`,
+                day.closed
+                  ? `Le lundi de Pâques, nous sommes fermés${range}.`
+                  : `Le lundi de Pâques, nous sommes ouverts ${day.open}–${day.close}${range}.`,
+                day.closed
+                  ? `We’re closed on Easter Monday${range}.`
+                  : `We’re open on Easter Monday ${day.open}–${day.close}${range}.`
+              )
+            );
+            return true;
+          }
+        }
         const summary = describePeriodHours(easterPeriod as any);
         if (summary) {
-          const range = easterPeriod.from && easterPeriod.to ? ` (${easterPeriod.from}–${easterPeriod.to})` : "";
           sendReply(
             t(
               `Öppettider under påsk: ${summary}${range}.`,
@@ -1224,6 +1271,59 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
           return true;
         }
       }
+      sendReply(
+        t(
+          "Jag har tyvärr inte öppettiderna för påsk just nu. Kontakta oss så hjälper vi dig.",
+          "Je n’ai pas les horaires de Pâques pour le moment. Contactez-nous et on vous aide.",
+          "I don’t have the Easter hours right now. Please contact us and we’ll help."
+        )
+      );
+      return true;
+    }
+
+    if (monthNumber) {
+      const periods = context?.hours?.periods ?? [];
+      const monthPeriods = periods.filter((p) => overlapsMonths(p?.from, p?.to, [monthNumber]));
+      if (monthPeriods.length) {
+        const lines = monthPeriods
+          .map((p) => {
+            const rawLabel = p?.name?.trim() ? p.name.trim() : "";
+            const label = rawLabel && !/^period\s*\d+/i.test(rawLabel) ? rawLabel : "";
+            const summary = describePeriodHours(p as any);
+            if (!summary) return "";
+            return label ? `${label}: ${summary}` : `${summary}`;
+          })
+          .filter(Boolean);
+        if (lines.length) {
+          sendReply(
+            t(
+              `Öppettider i ${monthMatch?.[1]}: ${lines.join(" | ")}`,
+              `Horaires en ${monthMatch?.[1]} : ${lines.join(" | ")}`,
+              `Hours in ${monthMatch?.[1]}: ${lines.join(" | ")}`
+            )
+          );
+          return true;
+        }
+      }
+      sendReply(
+        t(
+          `Jag har tyvärr inte öppettiderna för ${monthMatch?.[1]} just nu. Kontakta oss så hjälper vi dig.`,
+          `Je n’ai pas les horaires pour ${monthMatch?.[1]} pour le moment. Contactez-nous et on vous aide.`,
+          `I don’t have the hours for ${monthMatch?.[1]} right now. Please contact us and we’ll help.`
+        )
+      );
+      return true;
+    }
+
+    if (currentClosed && !requestedDate && !isEasterKeyword && !isSummerKeyword && !isAutumnKeyword && !monthNumber) {
+      sendReply(
+        t(
+          `Vi har stängt till ${currentClosed.end}.`,
+          `Nous sommes fermés jusqu’au ${currentClosed.end}.`,
+          `We’re closed until ${currentClosed.end}.`
+        )
+      );
+      return true;
     }
 
     if (/nästa vecka|semaine prochaine|next week/i.test(msgLower)) {
