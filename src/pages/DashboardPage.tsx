@@ -120,6 +120,9 @@ type Settings = {
     maxTables: number;
     maxBookingDurationMin: 60 | 90 | 120;
     mealRanges: MealRangeMap;
+    followUpEnabled: boolean;
+    followUpDelayDays: number;
+    followUpEmail: string;
   };
   policies: {
     vegan: boolean;
@@ -559,6 +562,9 @@ export default function ReservationDashboard() {
         maxTables: 0,
         maxBookingDurationMin: 90,
         mealRanges: DEFAULT_MEAL_RANGES,
+        followUpEnabled: false,
+        followUpDelayDays: 3,
+        followUpEmail: "",
       },
       policies: {
         vegan: true,
@@ -848,6 +854,9 @@ export default function ReservationDashboard() {
             maxTables: bookingSettings.seating?.maxTables ?? prev.seating.maxTables,
             highChairs: bookingSettings.seating?.highChairs ?? prev.seating.highChairs,
             mealRanges: normalizeMealRanges(bookingSettings.seating?.mealRanges ?? prev.seating.mealRanges),
+            followUpEnabled: bookingSettings.seating?.followUpEnabled ?? prev.seating.followUpEnabled,
+            followUpDelayDays: bookingSettings.seating?.followUpDelayDays ?? prev.seating.followUpDelayDays,
+            followUpEmail: bookingSettings.seating?.followUpEmail ?? prev.seating.followUpEmail,
           },
           escalation: {
             ...prev.escalation,
@@ -2986,6 +2995,60 @@ export default function ReservationDashboard() {
                   />
                   Manuell bekräftelse krävs innan kundens bekräftelsemail
                 </label>
+              </div>
+            </Section>
+
+            <Section title="Följa upp gäster">
+              <div className="grid grid-cols-1 gap-3 text-sm">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={config.seating.followUpEnabled}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        seating: { ...config.seating, followUpEnabled: e.target.checked },
+                      })
+                    }
+                  />
+                  Skicka uppföljningsmail efter besök
+                </label>
+                <Field label="Skicka efter (dagar)">
+                  <input
+                    type="number"
+                    min={1}
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    value={config.seating.followUpDelayDays}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        seating: {
+                          ...config.seating,
+                          followUpDelayDays: Math.max(1, Number(e.target.value) || 1),
+                        },
+                      })
+                    }
+                    disabled={!config.seating.followUpEnabled}
+                  />
+                </Field>
+                <Field label="E‑posttext">
+                  <textarea
+                    rows={3}
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    placeholder="Tack för ert besök! Vi hoppas att ni trivdes..."
+                    value={config.seating.followUpEmail}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        seating: { ...config.seating, followUpEmail: e.target.value },
+                      })
+                    }
+                    disabled={!config.seating.followUpEnabled}
+                  />
+                </Field>
+                <div className="text-xs text-gray-500">
+                  Det här sparar texten och inställningen. Utskick aktiveras när funktionen kopplas på.
+                </div>
               </div>
             </Section>
 

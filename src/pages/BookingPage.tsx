@@ -712,7 +712,7 @@ export default function BookingPage() {
                         <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4 space-y-3">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <label className="block">
-                              <span className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Namn</span>
+                              <span className="text-lg md:text-xl font-semibold text-gray-700">Namn</span>
                               <input
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
@@ -721,7 +721,7 @@ export default function BookingPage() {
                               />
                             </label>
                             <label className="block">
-                              <span className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Antal gäster</span>
+                              <span className="text-lg md:text-xl font-semibold text-gray-700">Antal gäster</span>
                               <input
                                 type="number"
                                 min={1}
@@ -733,7 +733,7 @@ export default function BookingPage() {
                             </label>
                           </div>
                           <label className="block">
-                            <span className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">E‑post</span>
+                            <span className="text-lg md:text-xl font-semibold text-gray-700">E‑post</span>
                             <input
                               type="email"
                               value={email}
@@ -743,7 +743,7 @@ export default function BookingPage() {
                             />
                           </label>
                           <label className="block">
-                            <span className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Kommentar</span>
+                            <span className="text-lg md:text-xl font-semibold text-gray-700">Kommentar</span>
                             <textarea
                               rows={3}
                               value={notes}
