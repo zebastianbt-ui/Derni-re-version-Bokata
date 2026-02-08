@@ -662,7 +662,10 @@ export default function BookingPage() {
                       {turnstileSiteKey ? (
                         <div className="mt-3 md:mt-0 flex items-center justify-end rounded-2xl border border-violet-200 bg-white/80 px-3 py-2 overflow-hidden md:flex-1">
                           <div className="flex flex-col items-end">
-                            <div ref={turnstileRef} className="min-h-[65px] max-w-[220px] sm:max-w-none overflow-hidden origin-top-right transform scale-[0.75] sm:scale-90 md:scale-100" />
+                            <div
+                              ref={turnstileRef}
+                              className="min-h-[65px] max-w-[200px] sm:max-w-none overflow-hidden origin-top-right transform scale-[0.7] sm:scale-90 md:scale-100 pointer-events-auto"
+                            />
                             {turnstileError ? (
                               <div className="mt-2 text-xs text-rose-600">{turnstileError}</div>
                             ) : null}

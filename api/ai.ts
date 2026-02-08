@@ -1396,6 +1396,24 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
         }
       }
     }
+    if (/(påsk|pask|easter|långfredag|langfredag|annandag\s+p[åa]sk)/i.test(msgLower)) {
+      const periods = context?.hours?.periods ?? [];
+      const easterPeriod = periods.find((p) => (p?.name ? /(påsk|pask|easter)/i.test(p.name) : false));
+      if (easterPeriod) {
+        const summary = describePeriodHours(easterPeriod as any);
+        if (summary) {
+          const range = easterPeriod.from && easterPeriod.to ? ` (${easterPeriod.from}–${easterPeriod.to})` : "";
+          sendReply(
+            t(
+              `Öppettider under påsk: ${summary}${range}.`,
+              `Horaires de Pâques : ${summary}${range}.`,
+              `Easter hours: ${summary}${range}.`
+            )
+          );
+          return;
+        }
+      }
+    }
     if (/nästa vecka|semaine prochaine|next week/i.test(msgLower)) {
       const baseDt = toUtcDate(base) ?? new Date();
       const cur = baseDt.getUTCDay();
