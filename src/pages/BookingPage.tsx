@@ -241,7 +241,7 @@ function linkify(text: string) {
 export default function BookingPage() {
   const SECTION_PAD_Y = "py-6 md:py-8";
   const SECTION_PAD_X = "px-6 md:px-10";
-  const SECTION_PAD_Y_BOTTOM = "pt-6 pb-6 md:pt-8 md:pb-8";
+  const SECTION_PAD_Y_BOTTOM = "pt-6 pb-4 md:pt-8 md:pb-8";
   const [restaurantSlug, setRestaurantSlug] = useState("demo");
   const [restaurantName, setRestaurantName] = useState<string | null>(null);
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;

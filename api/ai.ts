@@ -641,7 +641,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const periods = context?.hours?.periods;
     if (!Array.isArray(periods) || !periods.length) return null;
     const matches = periods.filter((p) => iso >= p.from && iso <= p.to);
-    if (!matches.length) return periods[periods.length - 1];
+    if (!matches.length) return null;
     return matches.sort((a, b) => spanDays(a.from, a.to) - spanDays(b.from, b.to))[0];
   };
 
@@ -1431,6 +1431,22 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     }
 
     const date = requestedDate;
+    if (!date) {
+      const period = getPeriodForDate(base);
+      const summary = period ? describePeriodHours(period as any) : describePeriodHours({ from: "", to: "", days: context?.hours?.normal ?? {} } as any);
+      if (summary) {
+        const range = period?.from && period?.to ? ` (${period.from}–${period.to})` : "";
+        const closedNotice = currentClosed ? ` Stängt under: ${currentClosed.start}–${currentClosed.end}.` : "";
+        sendReply(
+          t(
+            `Öppettider: ${summary}${range}.${closedNotice}`,
+            `Horaires: ${summary}${range}.${closedNotice}`,
+            `Hours: ${summary}${range}.${closedNotice}`
+          )
+        );
+        return;
+      }
+    }
     if (date) {
       const range = closedRangeForDate(date);
       if (range) {
