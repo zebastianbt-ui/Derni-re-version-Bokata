@@ -839,6 +839,13 @@ export default function ReservationDashboard() {
   const lastBookingIdsRef = useRef<Set<string>>(new Set());
   const bookingNoticeTimer = useRef<number | null>(null);
 
+  const formatTimeShort = (t?: string | null) => {
+    if (!t) return "";
+    const parts = t.split(":");
+    if (parts.length < 2) return t;
+    return `${parts[0]}:${parts[1]}`;
+  };
+
   useEffect(() => {
     setBookings((prev) => assignTablesForDateWithTables(dateSel, prev, tableCaps));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -889,7 +896,7 @@ export default function ReservationDashboard() {
             .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""))
             .at(-1);
           if (latest) {
-            setNewBookingDetail(`Ny bokning: ${latest.date} · ${latest.time} · ${latest.guests} gäster`);
+            setNewBookingDetail(`Ny bokning: ${latest.date} · ${formatTimeShort(latest.time)} · ${latest.guests} gäster`);
             if (bookingNoticeTimer.current) window.clearTimeout(bookingNoticeTimer.current);
             bookingNoticeTimer.current = window.setTimeout(() => {
               setNewBookingDetail(null);
@@ -898,7 +905,7 @@ export default function ReservationDashboard() {
           const items = newOnes.map((b) => ({
             id: b.id,
             date: b.date,
-            time: b.time,
+            time: formatTimeShort(b.time),
             guests: b.guests,
             name: b.name,
           }));
