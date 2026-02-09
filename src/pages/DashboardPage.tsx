@@ -2245,7 +2245,7 @@ export default function ReservationDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <Stat icon="💗" label="Stammiskunder" value="0" />
             <Stat
-              icon={<img src={bokataFork} alt="Bokata" className="h-4 w-4" />}
+              icon={<img src={forkTransparent} alt="Bokata" className="h-4 w-4" />}
               label="Svar skickade av AI"
               value="0"
               sub="denna vecka"
@@ -3529,40 +3529,6 @@ export default function ReservationDashboard() {
 
               <div className="mt-2 rounded-lg border border-pink-200 bg-pink-50/30 p-3">
               <div className="text-sm font-semibold text-gray-700 mb-2">Kunskapsbas</div>
-              <div className="mb-3 rounded-lg border border-pink-100 bg-pink-50 px-3 py-2 text-xs text-gray-700">
-                <div className="font-semibold">
-                  Kvalitet: {knowledgeScore.score}% {knowledgeScore.missing.length ? `• Saknas: ${knowledgeScore.missing.join(", ")}` : "• Bra!"}
-                </div>
-                {knowledgeScore.score < 70 ? (
-                  <div className="mt-1 text-rose-700">
-                    AI är begränsad tills kunskapsbasen är tillräckligt komplett.
-                  </div>
-                ) : null}
-              </div>
-              <div className="mb-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs"
-                  onClick={addCoreFaqs}
-                >
-                  Lägg till standardfrågor
-                </button>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs"
-                  onClick={() => setShowTemplate((s) => !s)}
-                >
-                  {showTemplate ? "Dölj mall" : "Visa mall"}
-                </button>
-              </div>
-              {showTemplate ? (
-                <textarea
-                  rows={8}
-                  readOnly
-                  className="mb-3 w-full rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-xs"
-                  value={knowledgeTemplate}
-                />
-              ) : null}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                 <input
                   className="w-full rounded-lg border border-gray-300 px-3 py-2"
@@ -3666,17 +3632,6 @@ export default function ReservationDashboard() {
                       setOnboardingDirty(true);
                     }}
                   />
-                  <input
-                    type="number"
-                    min={0}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                    placeholder="Köket stänger (min före stängning)"
-                    value={onboarding.kitchenCloseMinutes}
-                    onChange={(e) => {
-                      setOnboarding({ ...onboarding, kitchenCloseMinutes: e.target.value });
-                      setOnboardingDirty(true);
-                    }}
-                  />
                   <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
                     <input
                       type="checkbox"
@@ -3744,20 +3699,22 @@ export default function ReservationDashboard() {
                     Alkoholtillstånd
                   </label>
                   <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
-                    placeholder="Barn (övrigt)"
-                    value={onboarding.kidsNote}
-                    onChange={(e) => {
-                      setOnboarding({ ...onboarding, kidsNote: e.target.value });
-                      setOnboardingDirty(true);
-                    }}
-                  />
-                  <input
                     className="w-full rounded-lg border border-gray-300 px-3 py-2"
                     placeholder="Djurpolicy"
                     value={onboarding.pets}
                     onChange={(e) => {
                       setOnboarding({ ...onboarding, pets: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Köket stänger (min före stängning)"
+                    value={onboarding.kitchenCloseMinutes}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, kitchenCloseMinutes: e.target.value });
                       setOnboardingDirty(true);
                     }}
                   />

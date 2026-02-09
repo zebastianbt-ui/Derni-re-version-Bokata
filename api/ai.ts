@@ -147,8 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return day.closed ? `${d}: stängt` : `${d}: ${day.open}–${day.close}`;
       })
       .filter(Boolean);
-    const range = period.from && period.to ? ` (${period.from}–${period.to})` : "";
-    return `${lines.join(", ")}${range}`;
+    return `${lines.join(", ")}`;
   };
   const periodsSummary = (() => {
     const periods = context?.hours?.periods ?? [];
@@ -159,7 +158,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const label = rawLabel && !/^period\s*\d+/i.test(rawLabel) ? rawLabel : "";
         const summary = describePeriodHours(p as any);
         if (!summary) return "";
-        return label ? `${label}: ${summary}` : summary;
+        const range = p?.from && p?.to ? ` (${p.from}–${p.to})` : "";
+        return label ? `${label}: ${summary}${range}` : `${summary}${range}`;
       })
       .filter(Boolean);
     return lines.join("\n");
@@ -1047,6 +1047,13 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       dec: 12,
       december: 12,
     };
+    const dmWithDen = txt.match(/\bden\s+(\d{1,2})(?:[:\.]?(?:e|a|er|ème|st|nd|rd|th))?\s+([a-zåäö]+)\b/);
+    if (dmWithDen) {
+      const d = Number(dmWithDen[1]);
+      const m = months[dmWithDen[2]];
+      const [y] = base.split("-").map(Number);
+      if (d >= 1 && d <= 31 && m) return `${y}-${pad2(m)}-${pad2(d)}`;
+    }
     const dm = txt.match(/\b(\d{1,2})(?:[:\.]?(?:e|a|er|ème|st|nd|rd|th))?\s+([a-zåäö]+)\b/);
     if (dm) {
       const d = Number(dm[1]);
@@ -1475,7 +1482,7 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       return true;
     }
 
-    if (monthNumber) {
+    if (monthNumber && !requestedDate) {
       const periods = context?.hours?.periods ?? [];
       const monthPeriods = periods.filter((p) => overlapsMonths(p?.from, p?.to, [monthNumber]));
       if (monthPeriods.length) {
@@ -1485,7 +1492,8 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
             const label = rawLabel && !/^period\s*\d+/i.test(rawLabel) ? rawLabel : "";
             const summary = describePeriodHours(p as any);
             if (!summary) return "";
-            return label ? `${label}: ${summary}` : `${summary}`;
+            const range = p?.from && p?.to ? ` (${p.from}–${p.to})` : "";
+            return label ? `${label}: ${summary}${range}` : `${summary}${range}`;
           })
           .filter(Boolean);
         if (lines.length) {

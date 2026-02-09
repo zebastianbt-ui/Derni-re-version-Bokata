@@ -158,9 +158,6 @@ export default function Page() {
             />
             <span>Bokäta</span>
           </a>
-          <nav className="hidden md:flex items-center gap-4 text-base">
-            <a href="#pricing" onClick={(e)=>onAnchorClick(e,'#pricing')} className="px-3 py-1 rounded-full text-pink-700 font-semibold hover:bg-pink-50 hover:text-pink-800">Priser</a>
-          </nav>
           <div className="flex items-center gap-3">
             <button onClick={()=>{ window.location.href = '/dashboard'; }} className="inline-flex items-center px-4 py-2 rounded-full border border-pink-200 text-pink-700 hover:bg-pink-50">Log in</button>
             <button onClick={()=>openAuth('signup')} className="inline-flex items-center px-4 py-2 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700">Sign up</button>
@@ -186,7 +183,7 @@ export default function Page() {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <a href="#pricing" onClick={(e)=>onAnchorClick(e,'#pricing')} className="inline-flex justify-center items-center px-6 py-3 rounded-full bg-pink-600 text-white font-semibold text-base hover:bg-pink-700">
+            <a href="#pricing" onClick={(e)=>onAnchorClick(e,'#pricing')} className="inline-flex justify-center items-center px-6 py-3 rounded-full bg-pink-600 text-white font-semibold text-lg md:text-xl hover:bg-pink-700">
               Kom igång nu
             </a>
           </div>
@@ -202,7 +199,7 @@ export default function Page() {
           <h3 className="text-2xl md:text-3xl font-semibold text-gray-900 mb-4">
             Hinner du inte svara på mejl, hantera bokningar eller följa upp gäster?
           </h3>
-          <p className="text-gray-700 text-base md:text-base">
+          <p className="text-gray-700 text-2xl md:text-2xl font-bold">
             Bokäta gör (nästan) allt det där åt dig. Mindre stress. Fler bokningar.
           </p>
         </div>
