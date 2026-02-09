@@ -359,6 +359,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     facebook: getField("Facebook") || context?.restaurant?.facebook || "",
     googleMaps: getFieldAny(["Google Maps", "Maps", "GoogleMaps"]) || context?.restaurant?.googleMaps || "",
   };
+  const bookingDurationMin =
+    context?.seating?.maxBookingDurationMin ??
+    (() => {
+      const raw = getFieldAny(["Bordsbokningstid", "Bokningstid", "Sittningstid"]);
+      const match = raw.match(/(\d{1,3})/);
+      return match ? Number(match[1]) : null;
+    })();
   const hasMenuInfo = /meny|menu/i.test(knowledgeText);
   const identity = {
     name: context?.restaurant?.name || kbInfo.name || "",
@@ -380,7 +387,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `E-post: ${identityForPrompt.email}`,
     `Webbplats: ${identityForPrompt.website}`,
   ].filter(Boolean).join("\n");
-  const isHoursQuestionLite = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
+  const isHoursQuestionLite = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|opening|horaires|ouvert|open(?!ai))/i.test(msgLower);
+  const isMapsQuestion = /(google maps|karta|maps|vägbeskrivning|hur långt|restid|avstånd|kör)/i.test(msgLower);
   const needsWebForHours =
     isHoursQuestionLite &&
     (context?.hoursConfigured === false ||
@@ -1188,7 +1196,27 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     );
     return;
   }
-  if (/(google maps|karta|maps|vägbeskrivning|hur långt|hur länge|restid|avstånd|kör)/i.test(msgLower) && kbInfo.googleMaps) {
+  if (/(bokningstid|bordsbokningstid|sittning|sittningar|hur\s+länge|hur\s+lang)/i.test(msgLower) && /(bokning|bordsbokning|reservation)/i.test(msgLower)) {
+    if (bookingDurationMin) {
+      sendReply(
+        t(
+          `En bordsbokning är normalt ${bookingDurationMin} minuter.`,
+          `Une réservation dure généralement ${bookingDurationMin} minutes.`,
+          `A table booking is typically ${bookingDurationMin} minutes.`
+        )
+      );
+    } else {
+      sendReply(
+        t(
+          "Jag har tyvärr ingen bokningstid angiven. Kontakta oss så hjälper vi dig.",
+          "Je n’ai pas de durée de réservation indiquée. Contactez‑nous et on vous aide.",
+          "I don’t have a booking duration set. Please contact us and we’ll help."
+        )
+      );
+    }
+    return;
+  }
+  if (isMapsQuestion && kbInfo.googleMaps) {
     sendReply(
       t(
         `Här hittar du oss och kan se restid: ${kbInfo.googleMaps}`,
@@ -1258,7 +1286,7 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
   };
 
   const handleHoursQuestion = async () => {
-    const isHoursQuestion = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|open|opening|horaires|ouvert)/i.test(msgLower);
+    const isHoursQuestion = /(öppet|öppnar|öppning|öppettider|öppettid|stängt|stängda|opening|horaires|ouvert|open(?!ai))/i.test(msgLower);
     if (!isHoursQuestion) return false;
 
     const base = context?.baseDate ?? fmtDate(new Date());
@@ -1792,7 +1820,7 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     sendReply(`Facebook: ${kbInfo.facebook}.`);
     return;
   }
-  if (/(google maps|karta|maps|vägbeskrivning|hur långt|hur länge|restid|avstånd|kör)/i.test(msgLower) && kbInfo.googleMaps) {
+  if (isMapsQuestion && kbInfo.googleMaps) {
     sendReply(
       t(
         `Här hittar du oss och kan se restid: ${kbInfo.googleMaps}`,
