@@ -3046,7 +3046,7 @@ export default function ReservationDashboard() {
               </div>
             </Section>
 
-            <Section title="Följa upp gäster">
+            <Section title="Följa upp gäster, erbjudanden & omdömen">
               <div className="grid grid-cols-1 gap-3 text-sm">
                 <label className="inline-flex items-center gap-2">
                   <input

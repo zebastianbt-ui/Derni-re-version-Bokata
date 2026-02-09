@@ -184,12 +184,7 @@ export default function Page() {
             <br />
             och fyller dina bord utan krångel.
           </p>
-          <p className="text-base md:text-lg text-white/90">
-            Mindre stress. Fler bokningar.
-          </p>
-          <p className="mt-2 text-base md:text-lg text-white/90">
-            Bokäta svarar på mejl & frågor automatiskt
-          </p>
+          
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <a href="#pricing" onClick={(e)=>onAnchorClick(e,'#pricing')} className="inline-flex justify-center items-center px-6 py-3 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700">
               Kom igång nu
@@ -208,38 +203,30 @@ export default function Page() {
             Hinner du inte svara på mejl, hantera bokningar eller följa upp gäster?
           </h3>
           <p className="text-gray-700 text-lg">
-            Bokäta gör (nästan) allt det där åt dig.
+            Bokäta gör (nästan) allt det där åt dig. Mindre stress. Fler bokningar.
           </p>
         </div>
       </section>
 
-      {/* Solution Section */}
-      <section className="bg-gradient-to-b from-purple-50 to-pink-50 px-6 py-10 text-center">
-        <div className="max-w-3xl mx-auto">
-          <p className="text-gray-700 text-lg">
-            Den svarar på mejl & frågor automatiskt och skickar smarta påminnelser.
-            Mindre stress. Fler bokningar.
-          </p>
-        </div>
-      </section>
+      {/* Solution Section removed */}
 
       <section className="bg-white px-6 py-10">
         <div className="max-w-6xl mx-auto grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl bg-[#0d0d0f] text-white p-6 shadow-lg">
+          <div className="rounded-2xl bg-pink-600 text-white p-6 shadow-lg border border-violet-500">
             <h4 className="text-lg font-semibold mb-2">Ställ in kapacitet & tider</h4>
-            <p className="text-sm text-white/80">
+            <p className="text-lg font-semibold">
               Du bestämmer öppettider, sittningar och bord. Bokäta sköter resten.
             </p>
           </div>
-          <div className="rounded-2xl bg-[#0d0d0f] text-white p-6 shadow-lg">
+          <div className="rounded-2xl bg-pink-600 text-white p-6 shadow-lg border border-violet-500">
             <h4 className="text-lg font-semibold mb-2">Bokningar utan stress</h4>
-            <p className="text-sm text-white/80">
+            <p className="text-lg font-semibold">
               Gästen får svar direkt, med förslag och bekräftelse även när du inte hinner.
             </p>
           </div>
-          <div className="rounded-2xl bg-[#0d0d0f] text-white p-6 shadow-lg">
+          <div className="rounded-2xl bg-pink-600 text-white p-6 shadow-lg border border-violet-500">
             <h4 className="text-lg font-semibold mb-2">Få fler återbesök</h4>
-            <p className="text-sm text-white/80">
+            <p className="text-lg font-semibold">
               Efter besöket ber Bokäta om omdömen och lockar gästen tillbaka.
             </p>
           </div>
