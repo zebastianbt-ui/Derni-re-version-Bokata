@@ -1,4 +1,7 @@
 {
+  "crons": [
+    { "path": "/api/followup-cron", "schedule": "0 8 * * *" }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/" }

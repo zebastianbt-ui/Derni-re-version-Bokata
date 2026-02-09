@@ -191,7 +191,7 @@ export default function Page() {
             </a>
           </div>
           <p className="mt-6 text-sm opacity-90">
-            🌟 Early adopters: De 100 första restaurangerna får 14 dagars gratis provperiod.
+            🌟 14 dagars gratis provperiod.
           </p>
         </div>
       </section>

@@ -564,7 +564,7 @@ export default function ReservationDashboard() {
         mealRanges: DEFAULT_MEAL_RANGES,
         followUpEnabled: false,
         followUpDelayDays: 3,
-        followUpEmail: "",
+        followUpEmail: "Tack för ert besök! Vi hoppas att ni hade en härlig stund.",
       },
       policies: {
         vegan: true,
@@ -3031,11 +3031,11 @@ export default function ReservationDashboard() {
                     disabled={!config.seating.followUpEnabled}
                   />
                 </Field>
-                <Field label="E‑posttext">
+                <Field label="Follow up">
                   <textarea
                     rows={3}
                     className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                    placeholder="Tack för ert besök! Vi hoppas att ni trivdes..."
+                    placeholder="Tack för ert besök! Vi hoppas att ni hade en härlig stund."
                     value={config.seating.followUpEmail}
                     onChange={(e) =>
                       setConfig({
