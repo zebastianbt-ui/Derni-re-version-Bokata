@@ -625,6 +625,7 @@ export default function ReservationDashboard() {
 
   const [config, setConfig] = useState<Settings>(defaultSettings);
   const [openPeriods, setOpenPeriods] = useState<Record<string, boolean>>({});
+  const [showHolidays, setShowHolidays] = useState(true);
   const mealRanges = useMemo(() => normalizeMealRanges(config.seating.mealRanges), [config.seating.mealRanges]);
 
   useEffect(() => {
@@ -1423,12 +1424,12 @@ export default function ReservationDashboard() {
     const lines = [
       "INFOS:",
       "Namn: ...",
+      "Typ av restaurang: ...",
       "Adress: ...",
       "Avstånd: ... (ex: 12 km från Göteborg)",
-      "Telefon: ...",
       "E-post: ...",
+      "Telefon: ...",
       "Webbplats: ...",
-      "Typ av restaurang: ...",
       "Beskrivning / stämning: ...",
       "Mat & meny: ...",
       "Grupp & event: ...",
@@ -1494,15 +1495,15 @@ export default function ReservationDashboard() {
     const lines = [
       "INFOS:",
       data.restaurantName ? `Namn: ${data.restaurantName}` : "",
+      data.restaurantType ? `Typ av restaurang: ${data.restaurantType}` : "",
       data.address ? `Adress: ${data.address}` : "",
       data.distance ? `Avstånd: ${data.distance}` : "",
-      data.phone ? `Telefon: ${data.phone}` : "",
       data.email ? `E-post: ${data.email}` : "",
+      data.phone ? `Telefon: ${data.phone}` : "",
       web?.siteUrl ? `Webbplats: ${web.siteUrl}` : "",
       web?.googleMapsUrl ? `Google Maps: ${web.googleMapsUrl}` : "",
       web?.facebookUrl ? `Facebook: ${web.facebookUrl}` : "",
       web?.instagramUrl ? `Instagram: ${web.instagramUrl}` : "",
-      data.restaurantType ? `Typ av restaurang: ${data.restaurantType}` : "",
       data.restaurantDescription ? `Beskrivning: ${data.restaurantDescription}` : "",
       data.foodType ? `Mat: ${data.foodType}` : "",
       data.groupEvents ? `Grupp & event: ${data.groupEvents}` : "",
@@ -2098,6 +2099,13 @@ export default function ReservationDashboard() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
+
+  const settingsDateInputClass =
+    "mt-1 w-full max-w-[200px] mx-auto rounded-lg border border-gray-300 px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none";
+  const settingsTimeInputClass =
+    "w-full min-w-0 max-w-[160px] mx-auto rounded-md border border-gray-300 px-2 py-1 text-center disabled:opacity-60 sm:mx-0 sm:max-w-none";
+  const settingsTimeGridClass =
+    "grid grid-cols-2 gap-2 justify-items-center sm:justify-items-stretch";
 
   if (!session) {
     return (
@@ -3292,7 +3300,7 @@ export default function ReservationDashboard() {
                               <Field label="Från">
                                 <input
                                   type="date"
-                                  className="mt-1 w-full max-w-[220px] mx-auto rounded-lg border border-gray-300 px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none"
+                                  className={settingsDateInputClass}
                                   value={period.from}
                                   onChange={(e) =>
                                     setConfig((prev) => ({
@@ -3312,7 +3320,7 @@ export default function ReservationDashboard() {
                               <Field label="Till">
                                 <input
                                   type="date"
-                                  className="mt-1 w-full max-w-[220px] mx-auto rounded-lg border border-gray-300 px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none"
+                                  className={settingsDateInputClass}
                                   value={period.to}
                                   onChange={(e) =>
                                     setConfig((prev) => ({
@@ -3363,10 +3371,10 @@ export default function ReservationDashboard() {
                                       Stängt
                                     </label>
                                   </div>
-                                  <div className="grid grid-cols-2 gap-2 sm:col-span-8">
+                                  <div className={`${settingsTimeGridClass} sm:col-span-8`}>
                                     <input
                                       type="time"
-                                      className="w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-center disabled:opacity-60"
+                                      className={settingsTimeInputClass}
                                       value={d.open}
                                       onChange={(e) =>
                                         setConfig((prev) => ({
@@ -3391,7 +3399,7 @@ export default function ReservationDashboard() {
                                     />
                                     <input
                                       type="time"
-                                      className="w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-center disabled:opacity-60"
+                                      className={settingsTimeInputClass}
                                       value={d.close}
                                       onChange={(e) =>
                                         setConfig((prev) => ({
@@ -3429,61 +3437,72 @@ export default function ReservationDashboard() {
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-base font-bold text-gray-800">Röda dagar (helgdagar)</div>
-                  <select
-                    className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm"
-                    value={holidayYear}
-                    onChange={(e) => setHolidayYear(Number(e.target.value))}
-                  >
-                    {[currentYear, currentYear + 1].map((y) => (
-                      <option key={y} value={y}>
-                        {y}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="text-xs text-gray-600 hover:text-gray-900"
+                      onClick={() => setShowHolidays((prev) => !prev)}
+                    >
+                      {showHolidays ? "Dölj" : "Visa"}
+                    </button>
+                    <select
+                      className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm"
+                      value={holidayYear}
+                      onChange={(e) => setHolidayYear(Number(e.target.value))}
+                    >
+                      {[currentYear, currentYear + 1].map((y) => (
+                        <option key={y} value={y}>
+                          {y}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  {(HOLIDAYS_BY_YEAR[holidayYear] ?? []).map((h) => {
-                    const sp =
-                      config.hours.special.find((s) => s.date === h.date) ||
-                      ({ date: h.date, closed: true, open: "11:00", close: "17:00" } as const);
+                {showHolidays ? (
+                  <div className="space-y-2">
+                    {(HOLIDAYS_BY_YEAR[holidayYear] ?? []).map((h) => {
+                      const sp =
+                        config.hours.special.find((s) => s.date === h.date) ||
+                        ({ date: h.date, closed: true, open: "11:00", close: "17:00" } as const);
 
-                    return (
-                    <div key={h.date} className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2">
-                        <div className="sm:col-span-4">
-                          {h.name}
-                          <div className="text-xs text-gray-500">{h.date}</div>
-                        </div>
-                        <div className="flex items-center justify-between sm:col-span-4">
-                          <label className="inline-flex items-center gap-2 text-sm whitespace-nowrap">
+                      return (
+                        <div key={h.date} className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2">
+                          <div className="sm:col-span-4">
+                            {h.name}
+                            <div className="text-xs text-gray-500">{h.date}</div>
+                          </div>
+                          <div className="flex items-center justify-between sm:col-span-4">
+                            <label className="inline-flex items-center gap-2 text-sm whitespace-nowrap">
+                              <input
+                                type="checkbox"
+                                checked={sp.closed}
+                                onChange={(e) => upsertSpecialByDate(h.date, { closed: e.target.checked })}
+                              />
+                              Stängt
+                            </label>
+                          </div>
+                          <div className={`${settingsTimeGridClass} sm:col-span-4`}>
                             <input
-                              type="checkbox"
-                              checked={sp.closed}
-                              onChange={(e) => upsertSpecialByDate(h.date, { closed: e.target.checked })}
+                              type="time"
+                              className={settingsTimeInputClass}
+                              value={sp.open}
+                              onChange={(e) => upsertSpecialByDate(h.date, { open: e.target.value })}
+                              disabled={sp.closed}
                             />
-                            Stängt
-                          </label>
+                            <input
+                              type="time"
+                              className={settingsTimeInputClass}
+                              value={sp.close}
+                              onChange={(e) => upsertSpecialByDate(h.date, { close: e.target.value })}
+                              disabled={sp.closed}
+                            />
+                          </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 sm:col-span-4">
-                          <input
-                            type="time"
-                            className="w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-center disabled:opacity-60"
-                            value={sp.open}
-                            onChange={(e) => upsertSpecialByDate(h.date, { open: e.target.value })}
-                            disabled={sp.closed}
-                          />
-                          <input
-                            type="time"
-                            className="w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-center disabled:opacity-60"
-                            value={sp.close}
-                            onChange={(e) => upsertSpecialByDate(h.date, { close: e.target.value })}
-                            disabled={sp.closed}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
 
                 <div className="mt-6 rounded-lg border border-pink-200 bg-pink-50/40 p-3">
                   <div className="text-base font-bold text-gray-800 mb-2">Stängda perioder</div>
@@ -3492,7 +3511,7 @@ export default function ReservationDashboard() {
                       <Field label="Från">
                         <input
                           type="date"
-                          className="mt-1 w-full max-w-[220px] mx-auto rounded-lg border border-gray-300 px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none"
+                          className={settingsDateInputClass}
                           value={customClosureFrom}
                           onChange={(e) => setCustomClosureFrom(e.target.value)}
                         />
@@ -3502,7 +3521,7 @@ export default function ReservationDashboard() {
                       <Field label="Till">
                         <input
                           type="date"
-                          className="mt-1 w-full max-w-[220px] mx-auto rounded-lg border border-gray-300 px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none"
+                          className={settingsDateInputClass}
                           value={customClosureTo}
                           onChange={(e) => setCustomClosureTo(e.target.value)}
                         />
@@ -3574,58 +3593,58 @@ export default function ReservationDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                 <input
                   className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                    placeholder="Namn på restaurang"
-                    value={onboarding.restaurantName}
-                    onChange={(e) => {
-                      setOnboarding({ ...onboarding, restaurantName: e.target.value });
-                      setOnboardingDirty(true);
-                    }}
-                  />
-                  <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                    placeholder="Adress"
-                    value={onboarding.address}
-                    onChange={(e) => {
-                      setOnboarding({ ...onboarding, address: e.target.value });
-                      setOnboardingDirty(true);
-                    }}
-                  />
-                  <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                    placeholder="Avstånd (ex: 12 km från Göteborg)"
-                    value={onboarding.distance}
-                    onChange={(e) => {
-                      setOnboarding({ ...onboarding, distance: e.target.value });
-                      setOnboardingDirty(true);
-                    }}
-                  />
-                  <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                    placeholder="Telefon"
-                    value={onboarding.phone}
-                    onChange={(e) => {
-                      setOnboarding({ ...onboarding, phone: e.target.value });
-                      setOnboardingDirty(true);
-                    }}
-                  />
-                  <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                    placeholder="E‑post"
-                    value={onboarding.email}
-                    onChange={(e) => {
-                      setOnboarding({ ...onboarding, email: e.target.value });
-                      setOnboardingDirty(true);
-                    }}
-                  />
-                  <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                    placeholder="Typ av restaurang (ex: Café & bistro, vinbar...)"
-                    value={onboarding.restaurantType}
-                    onChange={(e) => {
-                      setOnboarding({ ...onboarding, restaurantType: e.target.value });
-                      setOnboardingDirty(true);
-                    }}
-                  />
+                  placeholder="Namn på restaurang"
+                  value={onboarding.restaurantName}
+                  onChange={(e) => {
+                    setOnboarding({ ...onboarding, restaurantName: e.target.value });
+                    setOnboardingDirty(true);
+                  }}
+                />
+                <input
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  placeholder="Typ av restaurang (ex: Café & bistro, vinbar...)"
+                  value={onboarding.restaurantType}
+                  onChange={(e) => {
+                    setOnboarding({ ...onboarding, restaurantType: e.target.value });
+                    setOnboardingDirty(true);
+                  }}
+                />
+                <input
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  placeholder="Adress"
+                  value={onboarding.address}
+                  onChange={(e) => {
+                    setOnboarding({ ...onboarding, address: e.target.value });
+                    setOnboardingDirty(true);
+                  }}
+                />
+                <input
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  placeholder="Avstånd (ex: 12 km från Göteborg)"
+                  value={onboarding.distance}
+                  onChange={(e) => {
+                    setOnboarding({ ...onboarding, distance: e.target.value });
+                    setOnboardingDirty(true);
+                  }}
+                />
+                <input
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  placeholder="E‑post"
+                  value={onboarding.email}
+                  onChange={(e) => {
+                    setOnboarding({ ...onboarding, email: e.target.value });
+                    setOnboardingDirty(true);
+                  }}
+                />
+                <input
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  placeholder="Telefon"
+                  value={onboarding.phone}
+                  onChange={(e) => {
+                    setOnboarding({ ...onboarding, phone: e.target.value });
+                    setOnboardingDirty(true);
+                  }}
+                />
                   <textarea
                     rows={3}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"

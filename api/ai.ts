@@ -1134,11 +1134,15 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     return;
   }
   if (/(grupp|sällskap|event|företag|födelsedag|birthday|privat|book the whole|hela stället)/i.test(msgLower) && kbInfo.groupEvents) {
+    const contactEmail = context?.restaurant?.email || kbInfo.email || "";
+    const withContact = (base: string, sv: string, fr: string, en: string) =>
+      base + (contactEmail ? t(sv, fr, en) : "");
     sendReply(
-      t(
+      withContact(
         kbInfo.groupEvents,
-        kbInfo.groupEvents,
-        kbInfo.groupEvents
+        ` Kontakta oss gärna på ${contactEmail}.`,
+        ` Merci de nous contacter à ${contactEmail}.`,
+        ` Please contact us at ${contactEmail}.`
       )
     );
     return;
