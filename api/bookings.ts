@@ -391,10 +391,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       email,
       "Din bokning är bekräftad",
       `
-        <h2>Bokning bekräftad</h2>
+        <h2>Tack för din bokning!</h2>
         <p>Hej ${name}!</p>
-        <p>Din bokning är bekräftad: ${summary}.</p>
-        <p>Välkommen!</p>
+        <p>Här är dina bokningsdetaljer:</p>
+        <p><strong>${summary}</strong></p>
+        <p>Vi ser fram emot att välkomna dig.</p>
       `
     );
   }
