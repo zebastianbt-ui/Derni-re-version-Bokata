@@ -175,7 +175,10 @@ export default function Page() {
         />
         <div className="max-w-4xl mx-auto relative">
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight mb-4">Bokäta</h1>
-          <h2 className="text-2xl md:text-3xl mb-4">Den lagar inte mat. Den lagar allt annat.</h2>
+          <h2 className="text-2xl md:text-3xl mb-4">
+            <span className="block sm:inline">Den lagar inte mat</span>{" "}
+            <span className="block sm:inline">Den lagar allt annat.</span>
+          </h2>
           <p className="text-lg md:text-xl leading-relaxed max-w-2xl mx-auto mb-6">
             AI‑assistenten som sköter bokningar, svarar gäster automatiskt
             <br />
@@ -209,21 +212,21 @@ export default function Page() {
 
       <section className="bg-white px-6 py-10">
         <div className="max-w-6xl mx-auto grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl bg-pink-600 text-white p-6 shadow-lg border-[3px] border-violet-500 text-center">
-            <h4 className="text-lg font-semibold mb-2">Ställ in kapacitet & tider</h4>
-            <p className="text-lg font-semibold">
+          <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
+            <h4 className="text-lg font-semibold mb-2 text-pink-200">Ställ in kapacitet & tider</h4>
+            <p className="text-lg font-semibold text-white">
               Du bestämmer öppettider, sittningar och bord. Bokäta sköter resten.
             </p>
           </div>
-          <div className="rounded-2xl bg-pink-600 text-white p-6 shadow-lg border-[3px] border-violet-500 text-center">
-            <h4 className="text-lg font-semibold mb-2">Bokningar utan stress</h4>
-            <p className="text-lg font-semibold">
+          <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
+            <h4 className="text-lg font-semibold mb-2 text-pink-200">Bokningar utan stress</h4>
+            <p className="text-lg font-semibold text-white">
               Gästen får svar direkt, med förslag och bekräftelse även när du inte hinner.
             </p>
           </div>
-          <div className="rounded-2xl bg-pink-600 text-white p-6 shadow-lg border-[3px] border-violet-500 text-center">
-            <h4 className="text-lg font-semibold mb-2">Få fler återbesök</h4>
-            <p className="text-lg font-semibold">
+          <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
+            <h4 className="text-lg font-semibold mb-2 text-pink-200">Få fler återbesök</h4>
+            <p className="text-lg font-semibold text-white">
               Efter besöket ber Bokäta om omdömen och lockar gästen tillbaka.
             </p>
           </div>
@@ -248,7 +251,7 @@ export default function Page() {
           <div className="bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-700 text-white text-center px-6 py-10">
             <h2 className="text-3xl md:text-4xl font-extrabold">Priser</h2>
             <p className="mt-2"><span className="inline-block bg-white text-pink-700 font-semibold px-3 py-1 rounded-full">Gratisperiod: 14 dagar!</span></p>
-            <p className="opacity-90 text-sm mt-2">Inga avgifter per bokad gäst! Fasta priser utan dolda avgifter. Priser inkl. moms.</p>
+            <p className="opacity-90 text-sm mt-2">Inga avgifter per bokad gäst! Fasta priser utan dolda avgifter. Exkl. moms.</p>
           </div>
           <div className="bg-white px-6 md:px-10 py-10">
             <div className="grid md:grid-cols-3 gap-8">
