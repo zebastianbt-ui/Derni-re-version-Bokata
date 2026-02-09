@@ -624,7 +624,29 @@ export default function ReservationDashboard() {
   );
 
   const [config, setConfig] = useState<Settings>(defaultSettings);
+  const [openPeriods, setOpenPeriods] = useState<Record<string, boolean>>({});
   const mealRanges = useMemo(() => normalizeMealRanges(config.seating.mealRanges), [config.seating.mealRanges]);
+
+  useEffect(() => {
+    const ids = config.hours.periods?.map((p) => p.id) ?? [];
+    setOpenPeriods((prev) => {
+      const next: Record<string, boolean> = { ...prev };
+      let changed = false;
+      for (const id of ids) {
+        if (next[id] === undefined) {
+          next[id] = true;
+          changed = true;
+        }
+      }
+      for (const key of Object.keys(next)) {
+        if (!ids.includes(key)) {
+          delete next[key];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [config.hours.periods]);
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [floorplan, setFloorplan] = useState<Floorplan>({
@@ -1281,6 +1303,7 @@ export default function ReservationDashboard() {
   const [aiMsg, setAiMsg] = useState("");
   const [aiPreview, setAiPreview] = useState("");
   const [aiHistory, setAiHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [showDrafts, setShowDrafts] = useState(true);
   const [newFaq, setNewFaq] = useState<string>("");
   const [faqSuccess, setFaqSuccess] = useState(false);
   const faqTimeoutRef = useRef<number | null>(null);
@@ -1451,7 +1474,7 @@ export default function ReservationDashboard() {
     const kidsParts = [
       data.kidsChair ? "barnstol" : "",
       data.kidsMenu ? "barnmeny" : "",
-      data.kidsNote ? data.kidsNote : "",
+      data.kidsNote ? `barnmeny: ${data.kidsNote}` : "",
     ].filter(Boolean);
     const kidsLine = kidsParts.length ? `Barn: ${kidsParts.join(", ")}` : "";
     const kitchenCloseLine = data.kitchenCloseMinutes
@@ -1584,10 +1607,12 @@ export default function ReservationDashboard() {
       .map((t) => t.trim())
       .filter(Boolean);
     const hasBarnstol = /barnstol/i.test(barnLine) || /^(ja|yes|true)$/i.test(barnstolField);
-    const hasBarnmeny = /barnmeny/i.test(barnLine) || /^(ja|yes|true)$/i.test(barnmenyField);
+    const barnmenyMatch = barnLine.match(/barnmeny\s*:\s*([^,;]+)/i);
+    const barnmenyText = barnmenyField || (barnmenyMatch ? barnmenyMatch[1].trim() : "");
+    const hasBarnmeny = /barnmeny/i.test(barnLine) || /^(ja|yes|true)$/i.test(barnmenyField) || !!barnmenyText;
     data.kidsChair = hasBarnstol;
     data.kidsMenu = hasBarnmeny;
-    data.kidsNote = barnTokens.filter((t) => !/barnstol|barnmeny/i.test(t)).join(", ");
+    data.kidsNote = barnmenyText || barnTokens.filter((t) => !/barnstol|barnmeny/i.test(t)).join(", ");
     data.outdoorSeating = /^(ja|yes|true)$/i.test(mapField("Uteservering"));
     data.dogFriendly = /^(ja|yes|true)$/i.test(mapField("Hundvänligt"));
     data.wheelchair = /^(ja|yes|true)$/i.test(mapField("Rullstolsanpassad"));
@@ -1645,6 +1670,8 @@ export default function ReservationDashboard() {
     const missing = checks.filter((c) => !c.ok).map((c) => c.key);
     return { score, missing };
   }, [config.ai.knowledge, config.hours, config.seating]);
+
+  const draftFaqs = useMemo(() => onboardingFaqs.filter((f) => !f.a?.trim()), [onboardingFaqs]);
 
   const callAi = async (text: string) => {
     const r = await fetch("/api/ai", {
@@ -3207,7 +3234,7 @@ export default function ReservationDashboard() {
                 <div className="space-y-4">
                   {config.hours.periods.map((period, idx) => (
                     <div key={period.id} className="rounded-lg border border-pink-200 bg-pink-50/40 p-3">
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                         <input
                           type="text"
                           className="text-sm font-semibold text-violet-700 bg-violet-100/60 border border-transparent focus:border-violet-300 focus:outline-none w-full max-w-[220px] rounded-md px-2 py-1"
@@ -3237,148 +3264,163 @@ export default function ReservationDashboard() {
                             }))
                           }
                         />
-                        {config.hours.periods.length > 1 && (
+                        <div className="flex items-center gap-3">
                           <button
                             type="button"
-                            className="text-xs text-pink-700 hover:text-pink-800"
-                            onClick={() => removeHoursPeriod(period.id)}
+                            className="text-xs text-gray-600 hover:text-gray-900"
+                            onClick={() =>
+                              setOpenPeriods((prev) => ({ ...prev, [period.id]: !prev[period.id] }))
+                            }
                           >
-                            Ta bort period
+                            {openPeriods[period.id] ? "Dölj" : "Visa"}
                           </button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 items-end gap-2">
-                        <div>
-                          <Field label="Från">
-                            <input
-                              type="date"
-                              className="mt-1 w-full max-w-[220px] mx-auto rounded-lg border border-gray-300 px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none"
-                              value={period.from}
-                              onChange={(e) =>
-                                setConfig((prev) => ({
-                                  ...prev,
-                                  hours: {
-                                    ...prev.hours,
-                                    periods: prev.hours.periods.map((p) =>
-                                      p.id === period.id ? { ...p, from: e.target.value } : p
-                                    ),
-                                  },
-                                }))
-                              }
-                            />
-                          </Field>
-                        </div>
-                        <div>
-                          <Field label="Till">
-                            <input
-                              type="date"
-                              className="mt-1 w-full max-w-[220px] mx-auto rounded-lg border border-gray-300 px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none"
-                              value={period.to}
-                              onChange={(e) =>
-                                setConfig((prev) => ({
-                                  ...prev,
-                                  hours: {
-                                    ...prev.hours,
-                                    periods: prev.hours.periods.map((p) =>
-                                      p.id === period.id ? { ...p, to: e.target.value } : p
-                                    ),
-                                  },
-                                }))
-                              }
-                            />
-                          </Field>
+                          {config.hours.periods.length > 1 && (
+                            <button
+                              type="button"
+                              className="text-xs text-pink-700 hover:text-pink-800"
+                              onClick={() => removeHoursPeriod(period.id)}
+                            >
+                              Ta bort period
+                            </button>
+                          )}
                         </div>
                       </div>
-                      <div className="mt-3 divide-y rounded-lg border border-pink-200 bg-white/70">
-                        {DAYS_ORDER.map((day) => {
-                          const d = period.days[day];
-                          return (
-                            <div key={day} className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2 px-3 py-2">
-                              <div className="flex items-center justify-between sm:col-span-4">
-                                <div className="capitalize">{day}</div>
-                                <label className="inline-flex items-center gap-2 text-sm whitespace-nowrap">
-                                  <input
-                                    type="checkbox"
-                                    checked={d.closed}
-                                    onChange={(e) =>
-                                      setConfig((prev) => ({
-                                        ...prev,
-                                        hours: {
-                                          ...prev.hours,
-                                          periods: prev.hours.periods.map((p) =>
-                                            p.id === period.id
-                                              ? {
-                                                  ...p,
-                                                  days: {
-                                                    ...p.days,
-                                                    [day]: { ...p.days[day], closed: e.target.checked },
-                                                  },
-                                                }
-                                              : p
-                                          ),
-                                        },
-                                      }))
-                                    }
-                                  />
-                                  Stängt
-                                </label>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2 sm:col-span-8">
+                      {openPeriods[period.id] ? (
+                        <>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 items-end gap-2">
+                            <div>
+                              <Field label="Från">
                                 <input
-                                  type="time"
-                                  className="w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-center disabled:opacity-60"
-                                  value={d.open}
+                                  type="date"
+                                  className="mt-1 w-full max-w-[220px] mx-auto rounded-lg border border-gray-300 px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none"
+                                  value={period.from}
                                   onChange={(e) =>
                                     setConfig((prev) => ({
                                       ...prev,
                                       hours: {
                                         ...prev.hours,
                                         periods: prev.hours.periods.map((p) =>
-                                          p.id === period.id
-                                            ? {
-                                                ...p,
-                                                days: {
-                                                  ...p.days,
-                                                  [day]: { ...p.days[day], open: e.target.value },
-                                                },
-                                              }
-                                            : p
+                                          p.id === period.id ? { ...p, from: e.target.value } : p
                                         ),
                                       },
                                     }))
                                   }
-                                  disabled={d.closed}
                                 />
-                                <input
-                                  type="time"
-                                  className="w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-center disabled:opacity-60"
-                                  value={d.close}
-                                  onChange={(e) =>
-                                    setConfig((prev) => ({
-                                      ...prev,
-                                      hours: {
-                                        ...prev.hours,
-                                        periods: prev.hours.periods.map((p) =>
-                                          p.id === period.id
-                                            ? {
-                                                ...p,
-                                                days: {
-                                                  ...p.days,
-                                                  [day]: { ...p.days[day], close: e.target.value },
-                                                },
-                                              }
-                                            : p
-                                        ),
-                                      },
-                                    }))
-                                  }
-                                  disabled={d.closed}
-                                />
-                              </div>
+                              </Field>
                             </div>
-                          );
-                        })}
-                      </div>
+                            <div>
+                              <Field label="Till">
+                                <input
+                                  type="date"
+                                  className="mt-1 w-full max-w-[220px] mx-auto rounded-lg border border-gray-300 px-3 py-2 text-center focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none"
+                                  value={period.to}
+                                  onChange={(e) =>
+                                    setConfig((prev) => ({
+                                      ...prev,
+                                      hours: {
+                                        ...prev.hours,
+                                        periods: prev.hours.periods.map((p) =>
+                                          p.id === period.id ? { ...p, to: e.target.value } : p
+                                        ),
+                                      },
+                                    }))
+                                  }
+                                />
+                              </Field>
+                            </div>
+                          </div>
+                          <div className="mt-3 divide-y rounded-lg border border-pink-200 bg-white/70">
+                            {DAYS_ORDER.map((day) => {
+                              const d = period.days[day];
+                              return (
+                                <div key={day} className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2 px-3 py-2">
+                                  <div className="flex items-center justify-between sm:col-span-4">
+                                    <div className="capitalize">{day}</div>
+                                    <label className="inline-flex items-center gap-2 text-sm whitespace-nowrap">
+                                      <input
+                                        type="checkbox"
+                                        checked={d.closed}
+                                        onChange={(e) =>
+                                          setConfig((prev) => ({
+                                            ...prev,
+                                            hours: {
+                                              ...prev.hours,
+                                              periods: prev.hours.periods.map((p) =>
+                                                p.id === period.id
+                                                  ? {
+                                                      ...p,
+                                                      days: {
+                                                        ...p.days,
+                                                        [day]: { ...p.days[day], closed: e.target.checked },
+                                                      },
+                                                    }
+                                                  : p
+                                              ),
+                                            },
+                                          }))
+                                        }
+                                      />
+                                      Stängt
+                                    </label>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2 sm:col-span-8">
+                                    <input
+                                      type="time"
+                                      className="w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-center disabled:opacity-60"
+                                      value={d.open}
+                                      onChange={(e) =>
+                                        setConfig((prev) => ({
+                                          ...prev,
+                                          hours: {
+                                            ...prev.hours,
+                                            periods: prev.hours.periods.map((p) =>
+                                              p.id === period.id
+                                                ? {
+                                                    ...p,
+                                                    days: {
+                                                      ...p.days,
+                                                      [day]: { ...p.days[day], open: e.target.value },
+                                                    },
+                                                  }
+                                                : p
+                                            ),
+                                          },
+                                        }))
+                                      }
+                                      disabled={d.closed}
+                                    />
+                                    <input
+                                      type="time"
+                                      className="w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-center disabled:opacity-60"
+                                      value={d.close}
+                                      onChange={(e) =>
+                                        setConfig((prev) => ({
+                                          ...prev,
+                                          hours: {
+                                            ...prev.hours,
+                                            periods: prev.hours.periods.map((p) =>
+                                              p.id === period.id
+                                                ? {
+                                                    ...p,
+                                                    days: {
+                                                      ...p.days,
+                                                      [day]: { ...p.days[day], close: e.target.value },
+                                                    },
+                                                  }
+                                                : p
+                                            ),
+                                          },
+                                        }))
+                                      }
+                                      disabled={d.closed}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -3646,17 +3688,6 @@ export default function ReservationDashboard() {
                   <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
                     <input
                       type="checkbox"
-                      checked={onboarding.kidsMenu}
-                      onChange={(e) => {
-                        setOnboarding({ ...onboarding, kidsMenu: e.target.checked });
-                        setOnboardingDirty(true);
-                      }}
-                    />
-                    Barnmeny
-                  </label>
-                  <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
                       checked={onboarding.outdoorSeating}
                       onChange={(e) => {
                         setOnboarding({ ...onboarding, outdoorSeating: e.target.checked });
@@ -3665,6 +3696,15 @@ export default function ReservationDashboard() {
                     />
                     Uteservering
                   </label>
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
+                    placeholder="Barnmeny (ex: pannkakor, köttbullar, mindre portioner)"
+                    value={onboarding.kidsNote}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, kidsNote: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
                   <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
                     <input
                       type="checkbox"
@@ -3699,15 +3739,6 @@ export default function ReservationDashboard() {
                     Alkoholtillstånd
                   </label>
                   <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                    placeholder="Djurpolicy"
-                    value={onboarding.pets}
-                    onChange={(e) => {
-                      setOnboarding({ ...onboarding, pets: e.target.value });
-                      setOnboardingDirty(true);
-                    }}
-                  />
-                  <input
                     type="number"
                     min={0}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2"
@@ -3715,6 +3746,15 @@ export default function ReservationDashboard() {
                     value={onboarding.kitchenCloseMinutes}
                     onChange={(e) => {
                       setOnboarding({ ...onboarding, kitchenCloseMinutes: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Djurpolicy"
+                    value={onboarding.pets}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, pets: e.target.value });
                       setOnboardingDirty(true);
                     }}
                   />
@@ -3885,13 +3925,23 @@ export default function ReservationDashboard() {
                 {faqSuccess && <div className="mt-2 text-center text-xs text-green-700">Fråga tillagd</div>}
               </div>
 
-              {onboardingFaqs.filter((f) => !f.a?.trim()).length ? (
+              {draftFaqs.length ? (
                 <div className="mt-3 rounded-lg border border-gray-200 bg-white p-2">
-                  <div className="text-sm font-semibold text-gray-700 mb-2">Utkast (lägg till svar och spara)</div>
-                  <div className="space-y-2">
-                    {onboardingFaqs
-                      .filter((f) => !f.a?.trim())
-                      .map((f, i) => (
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm font-semibold text-gray-700">
+                      Utkast (lägg till svar och spara) ({draftFaqs.length})
+                    </div>
+                    <button
+                      type="button"
+                      className="text-xs text-gray-600 hover:text-gray-900"
+                      onClick={() => setShowDrafts((prev) => !prev)}
+                    >
+                      {showDrafts ? "Dölj" : "Visa"}
+                    </button>
+                  </div>
+                  {showDrafts ? (
+                    <div className="space-y-2">
+                      {draftFaqs.map((f, i) => (
                         <div key={`${f.q}-${i}`} className="rounded-lg border border-gray-200 bg-white p-2">
                           <div className="flex items-center justify-between gap-2">
                             <div className="text-sm font-semibold text-gray-800">{f.q}</div>
@@ -3920,7 +3970,8 @@ export default function ReservationDashboard() {
                           />
                         </div>
                       ))}
-                  </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
