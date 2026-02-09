@@ -148,8 +148,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const maxTables = s.seating?.maxTables ?? 20;
   const maxGuestsPerReservation = s.seating?.maxGuestsPerReservation ?? 22;
 
-  if (guests > maxGuestsPerReservation) {
-    res.status(400).json({ error: `För många gäster per bokning (max ${maxGuestsPerReservation}).` });
+  if (maxGuestsPerReservation > 0 && guests >= maxGuestsPerReservation) {
+    const contactEmail = notifyEmail ? ` Kontakta oss på ${notifyEmail}.` : "";
+    res
+      .status(400)
+      .json({ error: `För ${maxGuestsPerReservation} gäster eller fler behöver ni kontakta oss direkt.${contactEmail}` });
     return;
   }
 

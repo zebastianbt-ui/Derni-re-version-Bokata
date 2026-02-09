@@ -1441,7 +1441,7 @@ export default function ReservationDashboard() {
       "Rullstolsanpassad: Ja/Nej",
       "Alkoholtillstånd: Ja/Nej",
       "Köket stänger: ... min före stängning",
-      "Gruppbokning: För fler än X gäster, kontakta oss på ...",
+      "Max gäster per bokning: ... (vid X gäster eller fler, kontakta oss på ...)",
       "Djurpolicy: ...",
       "Parkering: ...",
       "Kollektivtrafik: ...",
@@ -1483,14 +1483,9 @@ export default function ReservationDashboard() {
       : "";
     const contactEmail = config.info.email || config.notifications.to || "";
     const maxPer = config.escalation.maxGuestsPerReservation;
-    const group = config.seating.groupThreshold;
     const groupLine =
-      contactEmail && (maxPer > 0 || group > 0)
-        ? group > 0 && (maxPer <= 0 || group <= maxPer)
-          ? `Gruppbokning: Från ${group} gäster, kontakta oss på ${contactEmail}.`
-          : maxPer > 0
-          ? `Gruppbokning: För fler än ${maxPer} gäster, kontakta oss på ${contactEmail}.`
-          : ""
+      contactEmail && maxPer > 0
+        ? `Max gäster per bokning: ${maxPer}. Vid ${maxPer} gäster eller fler, kontakta oss på ${contactEmail}.`
         : "";
     const lines = [
       "INFOS:",
@@ -1545,15 +1540,11 @@ export default function ReservationDashboard() {
     }
     const contactEmail = config.info.email || config.notifications.to || "";
     const maxPer = config.escalation.maxGuestsPerReservation;
-    const group = config.seating.groupThreshold;
-    if (contactEmail && (maxPer > 0 || group > 0)) {
-      const groupLine =
-        group > 0 && (maxPer <= 0 || group <= maxPer)
-          ? `Från ${group} gäster, kontakta oss på ${contactEmail}.`
-          : maxPer > 0
-          ? `För fler än ${maxPer} gäster, kontakta oss på ${contactEmail}.`
-          : "";
-      append("Gruppbokning", groupLine);
+    if (contactEmail && maxPer > 0) {
+      append(
+        "Max gäster per bokning",
+        `Vid ${maxPer} gäster eller fler, kontakta oss på ${contactEmail}.`
+      );
     }
     return lines.filter(Boolean).join("\n").trim();
   };
@@ -1572,7 +1563,6 @@ export default function ReservationDashboard() {
     config.ai.webSearch.facebookUrl,
     config.ai.webSearch.instagramUrl,
     config.escalation.maxGuestsPerReservation,
-    config.seating.groupThreshold,
     config.info.email,
     config.notifications.to,
   ]);
@@ -1800,8 +1790,10 @@ export default function ReservationDashboard() {
   function aiRespond(text: string) {
     if (!isBookingIntent(text)) return config.ai.outOfScopeReply.replace("{email}", config.notifications.to);
     const guests = extractGuests(text) ?? 2;
-    if (guests > config.escalation.maxGuestsPerReservation)
-      return `Tack! För ${guests} gäster behöver vi manuell bekräftelse. Vi återkommer snarast.`;
+    if (config.escalation.maxGuestsPerReservation > 0 && guests >= config.escalation.maxGuestsPerReservation) {
+      const contactEmail = config.info.email || config.notifications.to || "";
+      return `För ${guests} gäster behöver ni kontakta oss direkt${contactEmail ? ` på ${contactEmail}` : ""}.`;
+    }
 
     const tableId = findAvailableTable({
       date: dateSel,
@@ -1844,7 +1836,13 @@ export default function ReservationDashboard() {
     if (!d.date) return { ok: false, error: "Datum krävs." };
     if (!d.time) return { ok: false, error: "Tid krävs." };
     if (d.guests < 1) return { ok: false, error: "Ogiltigt antal gäster." };
-    if (d.guests > config.escalation.maxGuestsPerReservation) return { ok: false, error: "Kräver manuell bekräftelse (grupp)." };
+    if (config.escalation.maxGuestsPerReservation > 0 && d.guests >= config.escalation.maxGuestsPerReservation) {
+      const contactEmail = config.info.email || config.notifications.to || "";
+      return {
+        ok: false,
+        error: `För ${d.guests} gäster behöver ni kontakta oss direkt${contactEmail ? ` på ${contactEmail}` : ""}.`,
+      };
+    }
 
     const when = round30(d.time);
     const durationMin = config.seating.maxBookingDurationMin;
@@ -3180,20 +3178,9 @@ export default function ReservationDashboard() {
                       })
                     }
                   />
-                </Field>
-
-                <Field label="Gräns för grupp">
-                  <input
-                    type="number"
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                    value={config.seating.groupThreshold}
-                    onChange={(e) =>
-                      setConfig({
-                        ...config,
-                        seating: { ...config.seating, groupThreshold: Math.max(1, Number(e.target.value) || 1) },
-                      })
-                    }
-                  />
+                  <div className="mt-1 text-xs text-gray-500">
+                    Vid {config.escalation.maxGuestsPerReservation} gäster eller fler ska gästen kontakta er via e‑post.
+                  </div>
                 </Field>
 
                 <Field label="Max tid per bokning (minuter)">

@@ -1931,7 +1931,6 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
 
     const maxPer = context.seating?.maxGuestsPerReservation ?? 12;
     const maxTotal = context.seating?.maxGuests ?? 60;
-    const group = context.seating?.groupThreshold ?? maxPer;
     if (guests > maxTotal) {
       sendReply(
         t(
@@ -1942,22 +1941,22 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       );
       return;
     }
-    if (guests > maxPer || guests >= group) {
+    if (maxPer > 0 && guests >= maxPer) {
       if (isTerrace) {
         sendReply(
           t(
-            `Vi kan gärna ta emot önskemål om uteservering. För ${guests} gäster behöver vi manuell bekräftelse. Skriv gärna "uteservering" i kommentaren så återkommer vi snarast.${contactBlurb ? ` ${contactBlurb}` : ""}`,
-            `Nous pouvons prendre en compte une demande de terrasse. Pour ${guests} personnes, une confirmation manuelle est nécessaire. Indiquez "terrasse" dans le commentaire et nous reviendrons vers vous rapidement.${contactBlurb ? ` ${contactBlurb}` : ""}`,
-            `We can take outdoor seating requests. For ${guests} guests we need manual confirmation. Please mention "outdoor seating" in the comment and we’ll get back to you shortly.${contactBlurb ? ` ${contactBlurb}` : ""}`
+            `Vi tar gärna emot större sällskap. För ${guests} gäster behöver ni kontakta oss direkt.${contactBlurb ? ` ${contactBlurb}` : ""}`,
+            `Nous prenons volontiers les grands groupes. Pour ${guests} personnes, merci de nous contacter directement.${contactBlurb ? ` ${contactBlurb}` : ""}`,
+            `We’re happy to host larger groups. For ${guests} guests, please contact us directly.${contactBlurb ? ` ${contactBlurb}` : ""}`
           )
         );
         return;
       }
       sendReply(
         t(
-          `För ${guests} gäster behöver vi manuell bekräftelse. Vi återkommer snarast.${contactBlurb ? ` ${contactBlurb}` : ""}`,
-          `Pour ${guests} personnes, une confirmation manuelle est nécessaire. Nous reviendrons vers vous rapidement.${contactBlurb ? ` ${contactBlurb}` : ""}`,
-          `For ${guests} guests, we need manual confirmation. We’ll get back to you shortly.${contactBlurb ? ` ${contactBlurb}` : ""}`
+          `För ${guests} gäster behöver ni kontakta oss direkt.${contactBlurb ? ` ${contactBlurb}` : ""}`,
+          `Pour ${guests} personnes, merci de nous contacter directement.${contactBlurb ? ` ${contactBlurb}` : ""}`,
+          `For ${guests} guests, please contact us directly.${contactBlurb ? ` ${contactBlurb}` : ""}`
         )
       );
       return;
