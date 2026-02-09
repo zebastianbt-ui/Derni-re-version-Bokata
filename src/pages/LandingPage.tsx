@@ -176,7 +176,7 @@ export default function Page() {
         <div className="max-w-4xl mx-auto relative">
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight mb-4">Bokäta</h1>
           <h2 className="text-2xl md:text-3xl mb-4">
-            <span className="block sm:inline">Den lagar inte mat</span>{" "}
+            <span className="block sm:inline">Den lagar inte mat.</span>{" "}
             <span className="block sm:inline">Den lagar allt annat.</span>
           </h2>
           <p className="text-lg md:text-xl leading-relaxed max-w-2xl mx-auto mb-6">
@@ -185,7 +185,7 @@ export default function Page() {
             och fyller dina bord utan krångel.
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <div className="mt-2 flex flex-col sm:flex-row gap-3 justify-center">
             <a href="#pricing" onClick={(e)=>onAnchorClick(e,'#pricing')} className="inline-flex justify-center items-center px-6 py-3 rounded-full bg-pink-600 text-white font-semibold text-lg md:text-xl hover:bg-pink-700">
               Kom igång nu
             </a>
@@ -213,19 +213,19 @@ export default function Page() {
       <section className="bg-white px-6 py-10">
         <div className="max-w-6xl mx-auto grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
-            <h4 className="text-lg font-semibold mb-2 text-pink-200">Ställ in kapacitet & tider</h4>
+            <h4 className="text-lg font-semibold mb-2 text-pink-500">Ställ in kapacitet & tider</h4>
             <p className="text-lg font-semibold text-white">
               Du bestämmer öppettider, sittningar och bord. Bokäta sköter resten.
             </p>
           </div>
           <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
-            <h4 className="text-lg font-semibold mb-2 text-pink-200">Bokningar utan stress</h4>
+            <h4 className="text-lg font-semibold mb-2 text-pink-500">Bokningar utan stress</h4>
             <p className="text-lg font-semibold text-white">
               Gästen får svar direkt, med förslag och bekräftelse även när du inte hinner.
             </p>
           </div>
           <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
-            <h4 className="text-lg font-semibold mb-2 text-pink-200">Få fler återbesök</h4>
+            <h4 className="text-lg font-semibold mb-2 text-pink-500">Få fler återbesök</h4>
             <p className="text-lg font-semibold text-white">
               Efter besöket ber Bokäta om omdömen och lockar gästen tillbaka.
             </p>
@@ -251,7 +251,7 @@ export default function Page() {
           <div className="bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-700 text-white text-center px-6 py-10">
             <h2 className="text-3xl md:text-4xl font-extrabold">Priser</h2>
             <p className="mt-2"><span className="inline-block bg-white text-pink-700 font-semibold px-3 py-1 rounded-full">Gratisperiod: 14 dagar!</span></p>
-            <p className="opacity-90 text-sm mt-2">Inga avgifter per bokad gäst! Fasta priser utan dolda avgifter. Exkl. moms.</p>
+            <p className="opacity-90 text-sm mt-2">Inga avgifter per bokad gäst! Fasta priser utan dolda avgifter. Utan moms.</p>
           </div>
           <div className="bg-white px-6 md:px-10 py-10">
             <div className="grid md:grid-cols-3 gap-8">
@@ -751,7 +751,7 @@ function Feature({ children }) {
 function PriceCard({ title, priceLine, note, cta, highlight, onSelect }) {
   return (
     <div
-      className={`relative bg-white p-6 rounded-2xl shadow-sm border ${
+      className={`relative bg-white p-6 rounded-2xl shadow-sm border ring-1 ring-violet-300 ${
         highlight ? 'border-2 border-pink-500' : 'border-pink-100'
       }`}
     >
