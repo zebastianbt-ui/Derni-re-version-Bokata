@@ -343,6 +343,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     allergies: getField("Allergier"),
     kids: getField("Barn"),
     pets: getField("Djurpolicy"),
+    outdoorSeating: getField("Uteservering"),
+    dogFriendly: getField("Hundvänligt"),
+    wheelchair: getField("Rullstolsanpassad"),
+    alcoholLicense: getField("Alkoholtillstånd"),
+    kitchenClose: getField("Köket stänger"),
+    restaurantType: getField("Typ av restaurang"),
+    description: getFieldAny(["Beskrivning", "Stämning"]),
+    food: getFieldAny(["Mat", "Mat & meny"]),
+    groupEvents: getField("Grupp & event"),
     parking: getFieldAny(["Parkering", "Parking"]),
     transport: getField("Kollektivtrafik"),
     distance: getFieldAny(["Avstånd", "Avstand", "Distance"]),
@@ -815,6 +824,13 @@ Tu n’utilises jamais:
 
 ---
 
+## 6.1 Après réservation (obligatoire)
+
+* Après une réservation, le client reçoit un **e‑mail de confirmation**.
+* Si une confirmation manuelle est requise, l’e‑mail est envoyé **après validation**.
+
+---
+
 ## 7. Menu & recommandations
 
 * Tu décris uniquement les plats existants
@@ -956,10 +972,39 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
   const parseDate = (txt: string, baseDate?: string) => {
     const realBase = fmtDate(new Date());
     const base = baseDate ?? realBase;
+    const baseForRel = baseDate ?? realBase;
     if (/i\s*dag|idag/.test(txt)) return realBase;
     if (/i\s*morgon|imorgon/.test(txt)) return addDays(realBase, 1);
     if (/aujourd['’]hui|aujourdhui/.test(txt)) return realBase;
     if (/demain/.test(txt)) return addDays(realBase, 1);
+    const numberWords: Record<string, number> = {
+      en: 1,
+      ett: 1,
+      två: 2,
+      tva: 2,
+      tre: 3,
+      fyra: 4,
+      fem: 5,
+      sex: 6,
+      sju: 7,
+      åtta: 8,
+      atta: 8,
+      nio: 9,
+      tio: 10,
+    };
+    const relWeeks = txt.match(/\bom\s+(\d+|en|ett|två|tva|tre|fyra|fem|sex|sju|åtta|atta|nio|tio)\s+veck/i);
+    if (relWeeks) {
+      const raw = relWeeks[1].toLowerCase();
+      const n = numberWords[raw] ?? Number(raw);
+      if (Number.isFinite(n) && n > 0) return addDays(baseForRel, n * 7);
+    }
+    const relDays = txt.match(/\bom\s+(\d+|en|ett|två|tva|tre|fyra|fem|sex|sju|åtta|atta|nio|tio)\s+dag/i);
+    if (relDays) {
+      const raw = relDays[1].toLowerCase();
+      const n = numberWords[raw] ?? Number(raw);
+      if (Number.isFinite(n) && n > 0) return addDays(baseForRel, n);
+    }
+    if (/nästa\s+vecka/i.test(txt)) return addDays(baseForRel, 7);
     const iso = txt.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
     if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
     const dmy = txt.match(/\b(\d{1,2})[\/\.](\d{1,2})\b/);
@@ -1027,7 +1072,7 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
   };
 
   const isBookingIntent = (txt: string) =>
-    /(boka|bokning|reservation|reservera|bord|table)/i.test(txt) ||
+    /(boka|bokning|reservation|reservera|bord|table|bordsbokning|fixa\s+en\s+tid|tid\s+runt|kan\s+du\s+fixa\s+en\s+tid)/i.test(txt) ||
     /\b\d{1,2}[:\.h]\d{2}\b/.test(txt) ||
     /\b\d{1,3}\s*(gäster|guests|personer|pers)\b/i.test(txt);
 
@@ -1043,12 +1088,102 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     sendReply(t(`Vår hemsida: ${kbInfo.website}`, `Notre site : ${kbInfo.website}`, `Our website: ${kbInfo.website}`));
     return;
   }
+  if (/(typ\s+av\s+restaurang|restaurangtyp|what\s+kind|type\s+of\s+restaurant|quel\s+type)/i.test(msgLower) && kbInfo.restaurantType) {
+    sendReply(
+      t(
+        `Vi är: ${kbInfo.restaurantType}.`,
+        `Nous sommes : ${kbInfo.restaurantType}.`,
+        `We are: ${kbInfo.restaurantType}.`
+      )
+    );
+    return;
+  }
+  if (/(stämning|stamning|atmosfär|atmosfar|ambiance|ambiente|beskriv|describe)/i.test(msgLower) && kbInfo.description) {
+    sendReply(
+      t(
+        kbInfo.description,
+        kbInfo.description,
+        kbInfo.description
+      )
+    );
+    return;
+  }
+  if (/(vad\s+serverar|what\s+do\s+you\s+serve|servez-vous|menu|mat)/i.test(msgLower) && kbInfo.food) {
+    sendReply(
+      t(
+        kbInfo.food,
+        kbInfo.food,
+        kbInfo.food
+      )
+    );
+    return;
+  }
+  if (/(grupp|sällskap|event|företag|födelsedag|birthday|privat|book the whole|hela stället)/i.test(msgLower) && kbInfo.groupEvents) {
+    sendReply(
+      t(
+        kbInfo.groupEvents,
+        kbInfo.groupEvents,
+        kbInfo.groupEvents
+      )
+    );
+    return;
+  }
   if (/(km|kilometer|distance|distans|avstånd|avstand|hur\s+långt|combien\s+de\s+km|a\s+combien\s+de\s+km|à\s+combien\s+de\s+km)/i.test(msgLower) && kbInfo.distance) {
     sendReply(
       t(
         `Vi ligger ${kbInfo.distance}.`,
         `Nous sommes à ${kbInfo.distance}.`,
         `We are ${kbInfo.distance}.`
+      )
+    );
+    return;
+  }
+  if (/(uteservering|uteplats|terrass|terrasse|patio)/i.test(msgLower) && kbInfo.outdoorSeating) {
+    sendReply(
+      t(
+        `Uteservering: ${kbInfo.outdoorSeating}.`,
+        `Terrasse : ${kbInfo.outdoorSeating}.`,
+        `Outdoor seating: ${kbInfo.outdoorSeating}.`
+      )
+    );
+    return;
+  }
+  if (/(hund|hundvänlig|djurvänlig|pets)/i.test(msgLower) && kbInfo.dogFriendly) {
+    sendReply(
+      t(
+        `Hundvänligt: ${kbInfo.dogFriendly}.`,
+        `Chiens bienvenus : ${kbInfo.dogFriendly}.`,
+        `Dog friendly: ${kbInfo.dogFriendly}.`
+      )
+    );
+    return;
+  }
+  if (/(rullstol|rullstolsanpassad|wheelchair|accessible)/i.test(msgLower) && kbInfo.wheelchair) {
+    sendReply(
+      t(
+        `Rullstolsanpassad: ${kbInfo.wheelchair}.`,
+        `Accessible fauteuil roulant : ${kbInfo.wheelchair}.`,
+        `Wheelchair accessible: ${kbInfo.wheelchair}.`
+      )
+    );
+    return;
+  }
+  if (/(alkohol|alkoholtillstånd|vin|öl|beer|wine)/i.test(msgLower) && kbInfo.alcoholLicense) {
+    sendReply(
+      t(
+        `Alkoholtillstånd: ${kbInfo.alcoholLicense}.`,
+        `Licence d’alcool : ${kbInfo.alcoholLicense}.`,
+        `Alcohol license: ${kbInfo.alcoholLicense}.`
+      )
+    );
+    return;
+  }
+  if (/(kök|köket|kitchen)/i.test(msgLower) && kbInfo.kitchenClose) {
+    sendReply(
+      t(
+        `Köket stänger ${kbInfo.kitchenClose}.`,
+        `La cuisine ferme ${kbInfo.kitchenClose}.`,
+        `The kitchen closes ${kbInfo.kitchenClose}.`
       )
     );
     return;
@@ -1061,6 +1196,26 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
         `Here is our location and travel time: ${kbInfo.googleMaps}`
       )
     );
+    return;
+  }
+  if (/(vad händer efter|vad hander efter|after i book|after i reserve|après avoir réservé|apres avoir reserve|confirmation)/i.test(msgLower)) {
+    if (context?.requireManualConfirmation) {
+      sendReply(
+        t(
+          "Efter att du bokat får du en bekräftelse via e‑post när restaurangen har godkänt bokningen. 😊",
+          "Après votre réservation, vous recevrez un e‑mail de confirmation dès que le restaurant l’aura validée. 😊",
+          "After you book, you’ll receive a confirmation email once the restaurant approves it. 😊"
+        )
+      );
+    } else {
+      sendReply(
+        t(
+          "Efter att du bokat får du en bekräftelse via e‑post. 😊",
+          "Après votre réservation, vous recevrez un e‑mail de confirmation. 😊",
+          "After you book, you’ll receive a confirmation email. 😊"
+        )
+      );
+    }
     return;
   }
   if (
@@ -1476,7 +1631,7 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
 
   if (!FORCE_OPENAI) {
   const isRestaurantTopic =
-    /(boka|bokning|reservation|reservera|réservation|reserver|bord|table|öppet|öppnar|öppning|öppettider|tider|stängt|open|opening|ouvert|horaires|adress|address|adresse|hitta|var ligger|ligger|kontakt|contact|telefon|email|e-post|meny|menu|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|parkering|parking|tillgäng|wheelchair|webbplats|hemsida|website|webb|länk|facebook|instagram|social|bus|m[ée]tro|tram|transport|transports|arr[êe]t|gare)/i.test(
+    /(boka|bokning|reservation|reservera|réservation|reserver|bord|table|öppet|öppnar|öppning|öppettider|tider|stängt|open|opening|ouvert|horaires|adress|address|adresse|hitta|var ligger|ligger|kontakt|contact|telefon|email|e-post|meny|menu|allergi|gluten|laktos|nöt|betal|kort|kontant|swish|pris|vegetar|vegan|barn|barnstol|hund|djur|terrass|uteservering|parkering|parking|tillgäng|wheelchair|rullstol|alkohol|vin|öl|serverar|kök|kitchen|webbplats|hemsida|website|webb|länk|facebook|instagram|social|bus|m[ée]tro|tram|transport|transports|arr[êe]t|gare)/i.test(
       msgLower
     );
   const lastAssistant = history?.slice().reverse().find((h) => h.role === "assistant")?.content || "";
@@ -1822,9 +1977,9 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       if (t < timeToMin(open) || t > latestStart) {
         sendReply(
           t(
-            `Vi har öppet ${open}–${close}. Sista bokningsbara tiden är ${minToTime(latestStart)}.`,
-            `Nous sommes ouverts de ${open} à ${close}. La dernière heure réservable est ${minToTime(latestStart)}.`,
-            `We’re open ${open}–${close}. The last bookable time is ${minToTime(latestStart)}.`
+            `Vi har öppet ${open}–${close}. Sista bokningsbara tiden är ${minToTime(latestStart)}. Välj gärna en tidigare tid eller en annan dag.`,
+            `Nous sommes ouverts de ${open} à ${close}. La dernière heure réservable est ${minToTime(latestStart)}. Choisissez une heure plus tôt ou un autre jour.`,
+            `We’re open ${open}–${close}. The last bookable time is ${minToTime(latestStart)}. Please choose an earlier time or another day.`
           )
         );
         return;
@@ -1848,9 +2003,9 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
 
     sendReply(
       t(
-        `Ja, det finns plats. Vill du att jag bokar ${date} kl ${time} för ${guests} gäster?`,
-        `Oui, il y a de la place. Voulez‑vous que je réserve le ${date} à ${time} pour ${guests} personnes ?`,
-        `Yes, we have availability. Would you like me to book ${date} at ${time} for ${guests} guests?`
+        `Det finns plats ${date} kl ${time} för ${guests} gäster. Boka gärna direkt i bokningen här på sidan. 😊`,
+        `Il y a de la place le ${date} à ${time} pour ${guests} personnes. Réservez directement ici sur la page. 😊`,
+        `We have availability on ${date} at ${time} for ${guests} guests. Please book directly here on the page. 😊`
       )
     );
     return;

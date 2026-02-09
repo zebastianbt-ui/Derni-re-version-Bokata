@@ -159,7 +159,6 @@ export default function Page() {
             <span>Bokäta</span>
           </a>
           <nav className="hidden md:flex items-center gap-4 text-base">
-            <a href="#features" onClick={(e)=>onAnchorClick(e,'#features')} className="px-3 py-1 rounded-full text-pink-700 font-semibold hover:bg-pink-50 hover:text-pink-800">Funktioner</a>
             <a href="#pricing" onClick={(e)=>onAnchorClick(e,'#pricing')} className="px-3 py-1 rounded-full text-pink-700 font-semibold hover:bg-pink-50 hover:text-pink-800">Priser</a>
           </nav>
           <div className="flex items-center gap-3">
@@ -180,10 +179,16 @@ export default function Page() {
         <div className="max-w-4xl mx-auto relative">
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight mb-4">Bokäta</h1>
           <h2 className="text-2xl md:text-3xl mb-4">Den lagar inte mat. Den lagar allt annat.</h2>
-          <p className="text-lg md:text-xl leading-relaxed max-w-2xl mx-auto mb-8">
+          <p className="text-lg md:text-xl leading-relaxed max-w-2xl mx-auto mb-6">
             AI‑assistenten som sköter bokningar, svarar gäster automatiskt
             <br />
             och fyller dina bord utan krångel.
+          </p>
+          <p className="text-base md:text-lg text-white/90">
+            Mindre stress. Fler bokningar.
+          </p>
+          <p className="mt-2 text-base md:text-lg text-white/90">
+            Bokäta svarar på mejl & frågor automatiskt
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <a href="#pricing" onClick={(e)=>onAnchorClick(e,'#pricing')} className="inline-flex justify-center items-center px-6 py-3 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700">
@@ -203,7 +208,7 @@ export default function Page() {
             Hinner du inte svara på mejl, hantera bokningar eller följa upp gäster?
           </h3>
           <p className="text-gray-700 text-lg">
-            Förfrågningar blir liggande. Bord står tomma. Och återbesöken uteblir.
+            Bokäta gör (nästan) allt det där åt dig.
           </p>
         </div>
       </section>
@@ -211,11 +216,33 @@ export default function Page() {
       {/* Solution Section */}
       <section className="bg-gradient-to-b from-purple-50 to-pink-50 px-6 py-10 text-center">
         <div className="max-w-3xl mx-auto">
-          <p className="text-2xl md:text-3xl font-extrabold text-pink-700 mb-4">Bokäta gör (nästan) allt det där åt dig.</p>
           <p className="text-gray-700 text-lg">
-            Den svarar på frågor, föreslår lediga tider, hanterar väntelista och skickar smarta påminnelser.
-            Efter besöket ber den om Google‑omdömen och lockar till återbesök.
+            Den svarar på mejl & frågor automatiskt och skickar smarta påminnelser.
+            Mindre stress. Fler bokningar.
           </p>
+        </div>
+      </section>
+
+      <section className="bg-white px-6 py-10">
+        <div className="max-w-6xl mx-auto grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl bg-[#0d0d0f] text-white p-6 shadow-lg">
+            <h4 className="text-lg font-semibold mb-2">Ställ in kapacitet & tider</h4>
+            <p className="text-sm text-white/80">
+              Du bestämmer öppettider, sittningar och bord. Bokäta sköter resten.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-[#0d0d0f] text-white p-6 shadow-lg">
+            <h4 className="text-lg font-semibold mb-2">Bokningar utan stress</h4>
+            <p className="text-sm text-white/80">
+              Gästen får svar direkt, med förslag och bekräftelse även när du inte hinner.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-[#0d0d0f] text-white p-6 shadow-lg">
+            <h4 className="text-lg font-semibold mb-2">Få fler återbesök</h4>
+            <p className="text-sm text-white/80">
+              Efter besöket ber Bokäta om omdömen och lockar gästen tillbaka.
+            </p>
+          </div>
         </div>
       </section>
 
@@ -229,44 +256,7 @@ export default function Page() {
         </div>
       </section>
 
-      {/* Funktioner */}
-      <section className="px-6 py-10" id="features">
-        <div className="max-w-6xl mx-auto rounded-3xl overflow-hidden border border-pink-100 shadow-[0_14px_40px_rgba(236,72,153,0.15)]">
-          <div className="bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-700 text-white text-center px-6 py-10">
-            <h3 className="text-3xl md:text-4xl font-extrabold">Funktioner</h3>
-            <p className="opacity-90">Så funkar det och allt du behöver, samlat.</p>
-            <div className="mt-4 flex justify-center gap-2 text-sm">
-              <a href="#features" onClick={(e)=>onAnchorClick(e,'#features')} className="px-4 py-2 rounded-full bg-white text-pink-700 font-semibold shadow ring-1 ring-pink-200 hover:bg-pink-50 text-base md:text-lg">Funktioner</a>
-              <a href="#pricing" onClick={(e)=>onAnchorClick(e,'#pricing')} className="px-4 py-2 rounded-full bg-white text-pink-700 font-semibold shadow ring-1 ring-pink-200 hover:bg-pink-50 text-base md:text-lg">Priser</a>
-            </div>
-          </div>
-
-          <div className="bg-white px-6 md:px-10 py-10">
-            {/* Steps */}
-            <div className="grid md:grid-cols-3 gap-6 mb-10">
-              <StepCard index={1} title="Ställ in kapacitet & tider" text="Lägg in öppettider, sittningar och bord. Importera från kalender om du vill." />
-              <StepCard index={2} title="AI:n sköter dialogen" text="Gästen får svar direkt, med förslag, väntelista och bekräftelse." />
-              <StepCard index={3} title="Få fler återbesök" text="Efter besöket: omdömen och erbjudanden för att få gästen tillbaka." />
-            </div>
-
-            {/* Features grid */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 text-gray-900">
-              <Feature>📩 Svarar på mejl & frågor automatiskt</Feature>
-              <Feature>📅 Bokningar med bekräftelse och påminnelse</Feature>
-              <Feature>🤖 Din egen AI‑assistent hanterar dina bokningar</Feature>
-              <Feature>🔁 Erbjudanden för att få gäster tillbaka</Feature>
-              <Feature>⭐ Be om Google‑omdömen efter besök</Feature>
-              <Feature>🧠 Smart väntelista och överlappsskydd</Feature>
-              <Feature>📊 Enkel statistik & export</Feature>
-              <Feature>🧾 Förhandsbetalning valbar (grupper/event)</Feature>
-            </div>
-
-            <div className="mt-10 flex items-center justify-center">
-              <a href="#pricing" onClick={(e)=>onAnchorClick(e,'#pricing')} className="inline-flex justify-center items-center px-6 py-3 rounded-full bg-pink-600 text-white font-semibold hover:bg-pink-700 text-lg" role="button">Kom igång</a>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* Funktioner section removed */}
 
       {/* Pricing Section */}
       <section className="px-6 py-10" id="pricing">

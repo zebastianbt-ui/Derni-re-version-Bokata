@@ -564,7 +564,8 @@ export default function ReservationDashboard() {
         mealRanges: DEFAULT_MEAL_RANGES,
         followUpEnabled: false,
         followUpDelayDays: 3,
-        followUpEmail: "Tack för ert besök! Vi hoppas att ni hade en härlig stund.",
+        followUpEmail:
+          "Tack för ert besök! Vi hoppas att ni hade en härlig stund.\nOm du vill får du gärna lämna en Google‑recension.",
       },
       policies: {
         vegan: true,
@@ -1299,6 +1300,15 @@ export default function ReservationDashboard() {
     kidsChair: false,
     kidsMenu: false,
     kidsNote: "",
+    wheelchair: false,
+    outdoorSeating: false,
+    dogFriendly: false,
+    alcoholLicense: false,
+    kitchenCloseMinutes: "",
+    restaurantType: "",
+    restaurantDescription: "",
+    foodType: "",
+    groupEvents: "",
     pets: "",
     parking: "",
     transport: "",
@@ -1357,6 +1367,7 @@ export default function ReservationDashboard() {
     "Vad är max antal gäster per bokning?",
     "Har ni take away?",
     "Serverar ni alkohol?",
+    "Har ni alkoholtillstånd?",
     "Har ni lunchmeny?",
     "Kan man boka bord online?",
     "Vilken adress har ni?",
@@ -1394,9 +1405,18 @@ export default function ReservationDashboard() {
       "Telefon: ...",
       "E-post: ...",
       "Webbplats: ...",
+      "Typ av restaurang: ...",
+      "Beskrivning / stämning: ...",
+      "Mat & meny: ...",
+      "Grupp & event: ...",
       "Betalning: ...",
       "Allergier: ...",
       "Barn: barnstol, barnmeny",
+      "Uteservering: Ja/Nej",
+      "Hundvänligt: Ja/Nej",
+      "Rullstolsanpassad: Ja/Nej",
+      "Alkoholtillstånd: Ja/Nej",
+      "Köket stänger: ... min före stängning",
       "Gruppbokning: För fler än X gäster, kontakta oss på ...",
       "Djurpolicy: ...",
       "Parkering: ...",
@@ -1434,6 +1454,9 @@ export default function ReservationDashboard() {
       data.kidsNote ? data.kidsNote : "",
     ].filter(Boolean);
     const kidsLine = kidsParts.length ? `Barn: ${kidsParts.join(", ")}` : "";
+    const kitchenCloseLine = data.kitchenCloseMinutes
+      ? `Köket stänger: ${data.kitchenCloseMinutes} min före stängning`
+      : "";
     const contactEmail = config.info.email || config.notifications.to || "";
     const maxPer = config.escalation.maxGuestsPerReservation;
     const group = config.seating.groupThreshold;
@@ -1456,9 +1479,18 @@ export default function ReservationDashboard() {
       web?.googleMapsUrl ? `Google Maps: ${web.googleMapsUrl}` : "",
       web?.facebookUrl ? `Facebook: ${web.facebookUrl}` : "",
       web?.instagramUrl ? `Instagram: ${web.instagramUrl}` : "",
+      data.restaurantType ? `Typ av restaurang: ${data.restaurantType}` : "",
+      data.restaurantDescription ? `Beskrivning: ${data.restaurantDescription}` : "",
+      data.foodType ? `Mat: ${data.foodType}` : "",
+      data.groupEvents ? `Grupp & event: ${data.groupEvents}` : "",
       data.payment ? `Betalning: ${data.payment}` : "",
       data.allergies ? `Allergier: ${data.allergies}` : "",
       kidsLine,
+      data.outdoorSeating ? "Uteservering: Ja" : "Uteservering: Nej",
+      data.dogFriendly ? "Hundvänligt: Ja" : "Hundvänligt: Nej",
+      data.wheelchair ? "Rullstolsanpassad: Ja" : "Rullstolsanpassad: Nej",
+      data.alcoholLicense ? "Alkoholtillstånd: Ja" : "Alkoholtillstånd: Nej",
+      kitchenCloseLine,
       groupLine,
       data.pets ? `Djurpolicy: ${data.pets}` : "",
       data.parking ? `Parkering: ${data.parking}` : "",
@@ -1537,8 +1569,13 @@ export default function ReservationDashboard() {
     data.distance = mapField("Avstånd") || mapField("Distance");
     data.phone = mapField("Telefon");
     data.email = mapField("E-post");
+    data.restaurantType = mapField("Typ av restaurang");
+    data.restaurantDescription = mapField("Beskrivning") || mapField("Stämning");
+    data.foodType = mapField("Mat") || mapField("Mat & meny");
+    data.groupEvents = mapField("Grupp & event");
     data.payment = mapField("Betalning");
     data.allergies = mapField("Allergier");
+    data.kitchenCloseMinutes = mapField("Köket stänger").match(/\d+/)?.[0] || "";
     const barnLine = mapField("Barn");
     const barnstolField = mapField("Barnstol");
     const barnmenyField = mapField("Barnmeny");
@@ -1551,6 +1588,10 @@ export default function ReservationDashboard() {
     data.kidsChair = hasBarnstol;
     data.kidsMenu = hasBarnmeny;
     data.kidsNote = barnTokens.filter((t) => !/barnstol|barnmeny/i.test(t)).join(", ");
+    data.outdoorSeating = /^(ja|yes|true)$/i.test(mapField("Uteservering"));
+    data.dogFriendly = /^(ja|yes|true)$/i.test(mapField("Hundvänligt"));
+    data.wheelchair = /^(ja|yes|true)$/i.test(mapField("Rullstolsanpassad"));
+    data.alcoholLicense = /^(ja|yes|true)$/i.test(mapField("Alkoholtillstånd"));
     data.pets = mapField("Djurpolicy");
     data.parking = mapField("Parkering");
     data.transport = mapField("Kollektivtrafik");
@@ -1589,6 +1630,13 @@ export default function ReservationDashboard() {
       { key: "Allergier", ok: /allergi|gluten|laktos|nöt/.test(k) },
       { key: "Barn", ok: /barnstol|barnvagn|barnmeny|barn/.test(k) },
       { key: "Djurpolicy", ok: /hund|djur|terrass/.test(k) },
+      { key: "Uteservering", ok: /uteservering/.test(k) },
+      { key: "Rullstol", ok: /rullstol/.test(k) },
+      { key: "Alkohol", ok: /alkohol/.test(k) },
+      { key: "Kök stänger", ok: /kök\s*stänger/.test(k) },
+      { key: "Restaurangtyp", ok: /typ\s+av\s+restaurang/.test(k) },
+      { key: "Mat", ok: /mat:|serverar/.test(k) },
+      { key: "Stämning", ok: /beskrivning|stämning/.test(k) },
       { key: "Parkering", ok: /parkering/.test(k) },
       { key: "Kollektivtrafik", ok: /kollektivtrafik|buss|tunnelbana|tram|spårvagn/.test(k) },
     ];
@@ -3035,7 +3083,7 @@ export default function ReservationDashboard() {
                   <textarea
                     rows={3}
                     className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                    placeholder="Tack för ert besök! Vi hoppas att ni hade en härlig stund."
+                    placeholder="Tack för ert besök! Vi hoppas att ni hade en härlig stund. Om du vill får du gärna lämna en Google‑recension."
                     value={config.seating.followUpEmail}
                     onChange={(e) =>
                       setConfig({
@@ -3562,6 +3610,45 @@ export default function ReservationDashboard() {
                     }}
                   />
                   <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Typ av restaurang (ex: Café & bistro, vinbar...)"
+                    value={onboarding.restaurantType}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, restaurantType: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <textarea
+                    rows={3}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
+                    placeholder="Hur skulle du beskriva din restaurang? (stämning, målgrupp...)"
+                    value={onboarding.restaurantDescription}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, restaurantDescription: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <textarea
+                    rows={3}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
+                    placeholder="Vilken typ av mat serverar ni? (ex: husmanskost, vegetarisk...)"
+                    value={onboarding.foodType}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, foodType: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <textarea
+                    rows={3}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
+                    placeholder="Grupp & event (ex: födelsedag, större sällskap, företagsevent...)"
+                    value={onboarding.groupEvents}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, groupEvents: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
                     placeholder="Betalning (ex: kort, kontant, Swish)"
                     value={onboarding.payment}
@@ -3576,6 +3663,17 @@ export default function ReservationDashboard() {
                     value={onboarding.allergies}
                     onChange={(e) => {
                       setOnboarding({ ...onboarding, allergies: e.target.value });
+                      setOnboardingDirty(true);
+                    }}
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Köket stänger (min före stängning)"
+                    value={onboarding.kitchenCloseMinutes}
+                    onChange={(e) => {
+                      setOnboarding({ ...onboarding, kitchenCloseMinutes: e.target.value });
                       setOnboardingDirty(true);
                     }}
                   />
@@ -3600,6 +3698,50 @@ export default function ReservationDashboard() {
                       }}
                     />
                     Barnmeny
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={onboarding.outdoorSeating}
+                      onChange={(e) => {
+                        setOnboarding({ ...onboarding, outdoorSeating: e.target.checked });
+                        setOnboardingDirty(true);
+                      }}
+                    />
+                    Uteservering
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={onboarding.dogFriendly}
+                      onChange={(e) => {
+                        setOnboarding({ ...onboarding, dogFriendly: e.target.checked });
+                        setOnboardingDirty(true);
+                      }}
+                    />
+                    Hundvänligt
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={onboarding.wheelchair}
+                      onChange={(e) => {
+                        setOnboarding({ ...onboarding, wheelchair: e.target.checked });
+                        setOnboardingDirty(true);
+                      }}
+                    />
+                    Rullstolsanpassad
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={onboarding.alcoholLicense}
+                      onChange={(e) => {
+                        setOnboarding({ ...onboarding, alcoholLicense: e.target.checked });
+                        setOnboardingDirty(true);
+                      }}
+                    />
+                    Alkoholtillstånd
                   </label>
                   <input
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 md:col-span-2"
