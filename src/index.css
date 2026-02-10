@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+input[type="date"].bokata-date {
+  text-align: center;
+}
+
+input[type="date"].bokata-date::-webkit-date-and-time-value {
+  text-align: center;
+}

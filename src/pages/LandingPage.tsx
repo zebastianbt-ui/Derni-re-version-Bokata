@@ -191,47 +191,56 @@ export default function Page() {
             </a>
           </div>
           <p className="mt-8 text-lg md:text-xl opacity-90">
-            🌟 14 dagars gratis provperiod.
+            🌟 14 dagar gratis. Inget kort krävs.
           </p>
         </div>
       </section>
 
       {/* Problem Section */}
       <section className="bg-white px-6 py-10 text-center">
-        <div className="max-w-3xl mx-auto">
-          <h3 className="text-2xl md:text-3xl font-semibold text-gray-900 mb-4">
-            <span className="block">Hinner du inte svara på mejl,</span>
-            <span className="block">hantera bokningar eller</span>
-            <span className="block">följa upp gäster?</span>
+        <div className="max-w-6xl mx-auto">
+          <h3 className="text-2xl md:text-3xl font-semibold text-gray-900 mb-4 md:whitespace-nowrap">
+            Hinner du inte svara på mejl, hantera bokningar eller följa upp gäster?
           </h3>
-          <p className="text-gray-700 text-2xl md:text-2xl font-bold">
-            <span className="block">BOKÄTA tar hand om det där åt dig.</span>
-            <span className="block">Mindre stress. Fler bokningar.</span>
-          </p>
         </div>
       </section>
 
       {/* Solution Section removed */}
 
       <section className="bg-white px-6 py-10">
-        <div className="max-w-6xl mx-auto grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
-            <h4 className="text-lg font-semibold mb-2 text-pink-600 uppercase">Ställ in kapacitet & tider</h4>
-            <p className="text-lg font-semibold text-white">
-              Du bestämmer öppettider, sittningar och bord. Bokäta sköter resten.
+        <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-3">
+          <div className="space-y-4">
+            <p className="text-gray-700 text-lg md:text-xl font-semibold text-center md:text-left">
+              Tänk dig en assistent som svarar på gästernas frågor 24/7.
             </p>
+            <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
+              <h4 className="text-lg font-semibold mb-2 text-pink-600 uppercase">Ställ in kapacitet & tider</h4>
+              <p className="text-lg font-semibold text-white">
+                Du bestämmer öppettider, sittningar och bord. Bokäta sköter resten.
+              </p>
+            </div>
           </div>
-          <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
-            <h4 className="text-lg font-semibold mb-2 text-pink-600 uppercase">Bokningar utan stress</h4>
-            <p className="text-lg font-semibold text-white">
-              Gästen får svar direkt, med förslag och bekräftelse även när du inte hinner.
-            </p>
+          <div className="space-y-4">
+            <div className="w-full flex justify-center">
+              {/* Foto: lägg till bilden på handen som skriver på iPhone här. */}
+            </div>
+            <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
+              <h4 className="text-lg font-semibold mb-2 text-pink-600 uppercase">Bokningar utan stress</h4>
+              <p className="text-lg font-semibold text-white">
+                Gästen får svar direkt, med förslag och bekräftelse även när du inte hinner.
+              </p>
+            </div>
           </div>
-          <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
-            <h4 className="text-lg font-semibold mb-2 text-pink-600 uppercase">Få fler återbesök</h4>
-            <p className="text-lg font-semibold text-white">
-              Efter besöket ber Bokäta om omdömen och lockar gästen tillbaka.
+          <div className="space-y-4">
+            <p className="text-gray-700 text-lg md:text-xl font-semibold text-center md:text-right">
+              BOKÄTA tar hand om det där åt dig. Mindre stress. Fler bokningar.
             </p>
+            <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
+              <h4 className="text-lg font-semibold mb-2 text-pink-600 uppercase">Få fler återbesök</h4>
+              <p className="text-lg font-semibold text-white">
+                Efter besöket ber Bokäta om omdömen och lockar gästen tillbaka.
+              </p>
+            </div>
           </div>
         </div>
       </section>

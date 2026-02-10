@@ -795,14 +795,21 @@ export default function ReservationDashboard() {
         console.error("Stripe subscription lookup error", subError);
       }
 
-      if (!member && !sub) {
+      const hasAccess = !!member || !!sub;
+      const hadLookupError = !!memberError || !!subError;
+      if (!hasAccess && !hadLookupError) {
         const baseMsg = "Du saknar aktivt abonnemang. Kontakta oss om du behöver åtkomst.";
+        const emailMsg = userEmail ? ` (${userEmail})` : "";
+        setAccessDenied(`${baseMsg}${emailMsg}`.trim());
+        setSettingsReady(true);
+        return;
+      }
+      if (!hasAccess && hadLookupError) {
+        const baseMsg = "Kunde inte verifiera abonnemanget just nu. Försök igen om en stund.";
         const emailMsg = userEmail ? ` (${userEmail})` : "";
         const memberErrMsg = memberError ? ` | membership: ${memberError.message}` : "";
         const subErrMsg = subError ? ` | subscription: ${subError.message}` : "";
         setAccessDenied(`${baseMsg}${emailMsg}${memberErrMsg}${subErrMsg}`.trim());
-        await supabase.auth.signOut();
-        return;
       }
 
       let restaurant: { restaurantId: string | null; role?: string | null; name?: string | null } | null = null;
@@ -2151,7 +2158,7 @@ export default function ReservationDashboard() {
   };
 
   const settingsDateInputClass =
-    "mt-1 w-full min-w-0 max-w-[140px] mx-auto rounded-lg border border-gray-300 px-2 py-1 text-center text-[11px] focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none sm:text-base sm:px-3 sm:py-2";
+    "bokata-date mt-1 w-full min-w-0 max-w-[140px] mx-auto rounded-lg border border-gray-300 px-2 py-1 text-center text-[11px] focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none sm:text-base sm:px-3 sm:py-2";
   const settingsTimeInputClass =
     "w-full min-w-0 max-w-[104px] mx-auto rounded-md border border-gray-300 px-2 py-1 text-center text-[10px] disabled:opacity-60 sm:mx-0 sm:max-w-none sm:text-sm";
   const settingsTimeGridClass =
@@ -2245,6 +2252,11 @@ export default function ReservationDashboard() {
           </div>
         </div>
       </header>
+      {accessDenied ? (
+        <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {accessDenied}
+        </div>
+      ) : null}
 
       {newBookingCount > 0 ? (
         <div className="mb-4">

@@ -801,13 +801,12 @@ export default function BookingPage() {
               <div className={`relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 ${SECTION_PAD_Y_BOTTOM} ${SECTION_PAD_X} overflow-hidden`}>
                 <div className="max-w-6xl mx-auto flex flex-col lg:flex-row items-start gap-6">
                   <div className="w-full lg:w-[70%] rounded-3xl border border-violet-100 bg-white p-4 md:p-6 flex flex-col">
-                    <h3 className="text-xl font-bold text-gray-800">Frågor?</h3>
-                    <p className="text-sm text-gray-600 mt-1">Ställ din fråga och AI:n svarar.</p>
+                    <h3 className="text-xl font-bold text-gray-800">Har du frågor?</h3>
                     <div className="mt-4 space-y-3">
                       <textarea
                         value={qaQuestion}
                         onChange={(e) => setQaQuestion(e.target.value)}
-                        placeholder="Ex: Har ni öppet på söndag? Finns det parkering?"
+                        placeholder="Ex: Har ni öppet imorgon? Finns parkering?"
                         className="w-full min-h-[120px] rounded-2xl border border-violet-200 bg-violet-50/60 px-4 py-3 focus:border-violet-400 focus:ring-violet-400"
                       />
                       <div className="flex flex-wrap items-center gap-3">
