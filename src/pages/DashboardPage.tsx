@@ -809,7 +809,7 @@ function ReservationDashboardInner() {
       let changed = false;
       for (const id of ids) {
         if (next[id] === undefined) {
-          next[id] = true;
+          next[id] = false;
           changed = true;
         }
       }
@@ -1757,34 +1757,7 @@ function ReservationDashboardInner() {
     if (!k.trim()) return;
     const lines = k.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     const data = { ...onboarding };
-    const labels = [
-      "Namn",
-      "Typ av restaurang",
-      "Adress",
-      "Avstånd",
-      "Distance",
-      "Telefon",
-      "E-post",
-      "Email",
-      "Beskrivning",
-      "Stämning",
-      "Mat",
-      "Mat & meny",
-      "Grupp & event",
-      "Betalning",
-      "Allergier",
-      "Barn",
-      "Barnstol",
-      "Barnmeny",
-      "Uteservering",
-      "Hundvänligt",
-      "Rullstolsanpassad",
-      "Alkoholtillstånd",
-      "Köket stänger",
-      "Djurpolicy",
-      "Parkering",
-      "Kollektivtrafik",
-    ];
+    const labels = KNOWLEDGE_LABELS;
     const fieldMap: Record<string, string> = {};
     let current: string | null = null;
     for (const rawLine of k.split(/\r?\n/)) {
