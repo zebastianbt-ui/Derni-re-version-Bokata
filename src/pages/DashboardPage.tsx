@@ -9,6 +9,55 @@ import forkTransparent from "../assets/fork-transparent.png";
 // Cette version est une *reconstruction fidèle* du dashboard que tu décris (calendrier + timeline + modals + settings + preview IA),
 // mais en code propre et exécutable pour que tu puisses le *voir en preview*.
 
+const installDashboardErrorOverlay = () => {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  if ((window as any).__bokataDashboardErrorOverlayInstalled) return;
+  (window as any).__bokataDashboardErrorOverlayInstalled = true;
+
+  const show = (message: string, stack?: string) => {
+    let el = document.getElementById("bokata-dashboard-error");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "bokata-dashboard-error";
+      el.style.position = "fixed";
+      el.style.inset = "16px";
+      el.style.zIndex = "99999";
+      el.style.background = "#fff5f5";
+      el.style.border = "1px solid #fecaca";
+      el.style.borderRadius = "16px";
+      el.style.padding = "16px";
+      el.style.fontFamily = "system-ui, -apple-system, Segoe UI, sans-serif";
+      el.style.color = "#9f1239";
+      el.style.overflow = "auto";
+      document.body.appendChild(el);
+    }
+    el.innerHTML = `
+      <div style="font-weight:700;font-size:18px;margin-bottom:8px;">Dashboard crash</div>
+      <div style="font-size:13px;white-space:pre-wrap;">${message || "Unknown error"}</div>
+      ${stack ? `<div style="margin-top:12px;font-size:11px;white-space:pre-wrap;color:#6b7280;">${stack}</div>` : ""}
+      <div style="margin-top:12px;font-size:12px;color:#6b7280;">Refresh the page after sending this message.</div>
+    `;
+  };
+
+  window.addEventListener("error", (event) => {
+    const err = (event as ErrorEvent).error as Error | undefined;
+    const message = err?.message || (event as ErrorEvent).message || "Unknown error";
+    const stack = err?.stack;
+    (window as any).__bokata_dashboard_error = { message, stack, time: new Date().toISOString() };
+    show(message, stack);
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = (event as PromiseRejectionEvent).reason as Error | string | undefined;
+    const message = typeof reason === "string" ? reason : reason?.message || "Unhandled rejection";
+    const stack = typeof reason === "string" ? undefined : reason?.stack;
+    (window as any).__bokata_dashboard_error = { message, stack, time: new Date().toISOString() };
+    show(message, stack);
+  });
+};
+
+installDashboardErrorOverlay();
+
 type Meal = "Alla" | "Frukost" | "Lunch" | "Middag";
 type MealKey = "Frukost" | "Lunch" | "Middag";
 type MealRangeMap = Record<MealKey, [string, string]>;
@@ -90,6 +139,59 @@ type Floorplan = {
 };
 
 type TableCap = { id: number; cap: number; label?: string };
+
+class DashboardErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("Dashboard crashed", error, info);
+    if (typeof window !== "undefined") {
+      (window as any).__bokata_dashboard_error = {
+        message: error.message,
+        stack: error.stack,
+        componentStack: info.componentStack,
+        time: new Date().toISOString(),
+      };
+    }
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="min-h-screen bg-pink-50 p-6 flex items-center justify-center">
+          <div className="w-full max-w-2xl rounded-2xl border border-rose-200 bg-white p-6 shadow-lg">
+            <h1 className="text-2xl font-bold text-gray-900">Dashboarden kunde inte laddas</h1>
+            <p className="mt-2 text-sm text-gray-700">
+              Ett fel uppstod när sidan laddades. Säg gärna till oss vad som står här nedan.
+            </p>
+            <div className="mt-4 rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-xs text-rose-700 whitespace-pre-wrap">
+              {this.state.error.message}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                className="rounded-full px-4 py-2 bg-pink-600 text-white font-semibold hover:bg-pink-700"
+                onClick={() => window.location.reload()}
+              >
+                Ladda om
+              </button>
+              <a
+                className="rounded-full px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50"
+                href="/"
+              >
+                Till startsidan
+              </a>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const makeDefaultDays = () => ({
   söndag: { closed: false, open: "11:00", close: "17:00" },
@@ -227,13 +329,22 @@ const HOLIDAYS_BY_YEAR: Record<number, { date: string; name: string }[]> = {
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const timeToMin = (t: string) => {
-  const [h, m] = t.split(":").map(Number);
+  if (!t || typeof t !== "string") return 0;
+  const parts = t.split(":");
+  if (parts.length < 2) return 0;
+  const [h, m] = parts.map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
   return h * 60 + m;
 };
 const minToTime = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
 
 const round30 = (t: string) => {
-  const [h, m] = t.split(":").map(Number);
+  if (!t || typeof t !== "string") return "00:00";
+  const parts = t.split(":");
+  if (parts.length < 2) return "00:00";
+  const [hRaw, mRaw] = parts.map(Number);
+  const h = Number.isFinite(hRaw) ? hRaw : 0;
+  const m = Number.isFinite(mRaw) ? mRaw : 0;
   if (m < 15) return `${pad2(h)}:00`;
   if (m < 45) return `${pad2(h)}:30`;
   return `${pad2((h + 1) % 24)}:00`;
@@ -301,7 +412,10 @@ const normalizeHours = (hours?: Settings["hours"] | null) => {
 };
 
 const isValidTime = (t: string) => {
-  const [h, m] = t.split(":").map(Number);
+  if (!t || typeof t !== "string") return false;
+  const parts = t.split(":");
+  if (parts.length < 2) return false;
+  const [h, m] = parts.map(Number);
   return Number.isFinite(h) && Number.isFinite(m) && h >= 0 && h <= 23 && m >= 0 && m <= 59;
 };
 
@@ -488,7 +602,7 @@ function isTableAvailable(args: {
   });
 }
 
-export default function ReservationDashboard() {
+function ReservationDashboardInner() {
   const [session, setSession] = useState<Session | null>(null);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -4267,5 +4381,13 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
+  );
+}
+
+export default function ReservationDashboard() {
+  return (
+    <DashboardErrorBoundary>
+      <ReservationDashboardInner />
+    </DashboardErrorBoundary>
   );
 }
