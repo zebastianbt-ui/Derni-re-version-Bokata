@@ -118,7 +118,7 @@ type Settings = {
     allowCombineTables: boolean;
     maxGuests: number;
     maxTables: number;
-    maxBookingDurationMin: 60 | 90 | 120;
+    maxBookingDurationMin: number;
     mealRanges: MealRangeMap;
     followUpEnabled: boolean;
     followUpDelayDays: number;
@@ -560,7 +560,7 @@ export default function ReservationDashboard() {
         allowCombineTables: false,
         maxGuests: 0,
         maxTables: 0,
-        maxBookingDurationMin: 90,
+        maxBookingDurationMin: 0,
         mealRanges: DEFAULT_MEAL_RANGES,
         followUpEnabled: false,
         followUpDelayDays: 3,
@@ -627,6 +627,7 @@ export default function ReservationDashboard() {
   const [openPeriods, setOpenPeriods] = useState<Record<string, boolean>>({});
   const [showHolidays, setShowHolidays] = useState(true);
   const mealRanges = useMemo(() => normalizeMealRanges(config.seating.mealRanges), [config.seating.mealRanges]);
+  const bookingDurationMin = config.seating.maxBookingDurationMin || 90;
 
   useEffect(() => {
     const ids = config.hours.periods?.map((p) => p.id) ?? [];
@@ -923,7 +924,7 @@ export default function ReservationDashboard() {
       { id: uid(), date: "2025-09-05", time: "13:00", name: "Familjen Sjögren", guests: 4, color: "bg-green-200", note: true, notes: "Barnstol. Hörnbord om möjligt." },
       { id: uid(), date: "2025-09-05", time: "18:00", name: "Familjen Karlsson", guests: 8, color: "bg-yellow-200", note: true, notes: "Jordnöt – inga spår." },
     ];
-    const durationMin = defaultSettings.seating.maxBookingDurationMin;
+    const durationMin = defaultSettings.seating.maxBookingDurationMin || 90;
     return base.map((b) => ({ ...b, durationMin }));
   }, [defaultSettings.seating.maxBookingDurationMin]);
 
@@ -952,13 +953,13 @@ export default function ReservationDashboard() {
 
   useEffect(() => {
     setBookings((prev) => {
-      const updated = prev.map((b) => ({ ...b, durationMin: config.seating.maxBookingDurationMin }));
+      const updated = prev.map((b) => ({ ...b, durationMin: bookingDurationMin }));
       const dates = Array.from(new Set<string>(updated.map((b) => b.date)));
       let out = updated;
       for (const d of dates) out = assignTablesForDateWithTables(d, out, tableCaps, mealRanges);
       return out;
     });
-  }, [config.seating.maxBookingDurationMin, tableCaps, mealRanges]);
+  }, [bookingDurationMin, tableCaps, mealRanges]);
 
   const fetchBookings = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -978,7 +979,7 @@ export default function ReservationDashboard() {
         notes: r.notes ?? "",
         note: !!r.notes,
         tableId: r.table_id ?? null,
-        durationMin: r.duration_min ?? config.seating.maxBookingDurationMin,
+        durationMin: r.duration_min ?? bookingDurationMin,
         status: (r.status as BookingStatus) ?? "confirmed",
         source: (r.source as Booking["source"]) ?? "walkin",
         createdAt: r.created_at ?? undefined,
@@ -1016,7 +1017,7 @@ export default function ReservationDashboard() {
       setBookings(assignTablesForDateWithTables(dateSel, mapped, tableCaps, mealRanges));
       setBookingsReady(true);
     },
-    [restaurantId, settingsReady, config.seating.maxBookingDurationMin, dateSel, tableCaps, mealRanges]
+    [restaurantId, settingsReady, bookingDurationMin, dateSel, tableCaps, mealRanges]
   );
 
   useEffect(() => {
@@ -1800,7 +1801,7 @@ export default function ReservationDashboard() {
       time: "12:00",
       guests,
       bookings,
-      durationMin: config.seating.maxBookingDurationMin,
+      durationMin: bookingDurationMin,
       tables: tableCaps,
       mealRanges,
     });
@@ -1845,7 +1846,7 @@ export default function ReservationDashboard() {
     }
 
     const when = round30(d.time);
-    const durationMin = config.seating.maxBookingDurationMin;
+    const durationMin = bookingDurationMin;
     let tableId = d.tableId ?? null;
     if (tableId != null) {
       const table = tableCaps.find((t) => t.id === tableId);
@@ -1887,7 +1888,7 @@ export default function ReservationDashboard() {
             guests: b.guests,
             notes: b.notes || null,
             table_id: b.tableId ?? null,
-            duration_min: b.durationMin ?? config.seating.maxBookingDurationMin,
+            duration_min: b.durationMin ?? bookingDurationMin,
             status: b.status ?? "confirmed",
             source: b.source ?? "walkin",
           })
@@ -2898,7 +2899,7 @@ export default function ReservationDashboard() {
                         guests: next.guests,
                         notes: next.notes || null,
                         table_id: next.tableId ?? null,
-                        duration_min: next.durationMin ?? config.seating.maxBookingDurationMin,
+                        duration_min: next.durationMin ?? bookingDurationMin,
                       })
                       .eq("id", openBooking.id)
                       .eq("restaurant_id", restaurantId);
@@ -3139,11 +3140,11 @@ export default function ReservationDashboard() {
                   <input
                     type="number"
                     className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                    value={config.seating.maxGuests}
+                    value={config.seating.maxGuests || ""}
                     onChange={(e) =>
                       setConfig({
                         ...config,
-                        seating: { ...config.seating, maxGuests: Math.max(1, Number(e.target.value) || 1) },
+                        seating: { ...config.seating, maxGuests: Math.max(0, Number(e.target.value) || 0) },
                       })
                     }
                   />
@@ -3153,11 +3154,11 @@ export default function ReservationDashboard() {
                   <input
                     type="number"
                     className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                    value={config.seating.maxTables}
+                    value={config.seating.maxTables || ""}
                     onChange={(e) =>
                       setConfig({
                         ...config,
-                        seating: { ...config.seating, maxTables: Math.max(1, Number(e.target.value) || 1) },
+                        seating: { ...config.seating, maxTables: Math.max(0, Number(e.target.value) || 0) },
                       })
                     }
                   />
@@ -3167,33 +3168,36 @@ export default function ReservationDashboard() {
                   <input
                     type="number"
                     className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                    value={config.escalation.maxGuestsPerReservation}
+                    value={config.escalation.maxGuestsPerReservation || ""}
                     onChange={(e) =>
                       setConfig({
                         ...config,
                         escalation: {
                           ...config.escalation,
-                          maxGuestsPerReservation: Math.max(1, Number(e.target.value) || 1),
+                          maxGuestsPerReservation: Math.max(0, Number(e.target.value) || 0),
                         },
                       })
                     }
                   />
-                  <div className="mt-1 text-xs text-gray-500">
-                    Vid {config.escalation.maxGuestsPerReservation} gäster eller fler ska gästen kontakta er via e‑post.
-                  </div>
+                  {config.escalation.maxGuestsPerReservation > 0 ? (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Vid {config.escalation.maxGuestsPerReservation} gäster eller fler ska gästen kontakta er via e‑post.
+                    </div>
+                  ) : null}
                 </Field>
 
                 <Field label="Max tid per bokning (minuter)">
                   <select
                     className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                    value={config.seating.maxBookingDurationMin}
+                    value={config.seating.maxBookingDurationMin || ""}
                     onChange={(e) =>
                       setConfig({
                         ...config,
-                        seating: { ...config.seating, maxBookingDurationMin: Number(e.target.value) as 60 | 90 | 120 },
+                        seating: { ...config.seating, maxBookingDurationMin: Number(e.target.value) || 0 },
                       })
                     }
                   >
+                    <option value="">—</option>
                     <option value={60}>60</option>
                     <option value={90}>90</option>
                     <option value={120}>120</option>
@@ -3204,7 +3208,7 @@ export default function ReservationDashboard() {
                   <input
                     type="number"
                     className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                    value={config.seating.highChairs}
+                    value={config.seating.highChairs || ""}
                     onChange={(e) =>
                       setConfig({
                         ...config,

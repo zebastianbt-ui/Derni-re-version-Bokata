@@ -282,8 +282,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const msgLower = message.toLowerCase();
   const detectLang = () => {
-    if (/(aujourd|demain|ouvert|horaires|réservation|reservation|table|menu|adresse|merci|bus|m[ée]tro|tram|transport|transports|arr[êe]t|gare)/i.test(msgLower)) return "fr";
-    if (/(today|tomorrow|open|opening|hours|reservation|booking|menu|address|thanks)/i.test(msgLower)) return "en";
+    if (/(å|ä|ö|och|inte|är|har|ni|jag|vi|tack|bokning|boka|öppet|öppettider|stängt|gäster?|sällskap)/i.test(msgLower)) {
+      return "sv";
+    }
+    if (/(bonjour|merci|svp|s['’]il|vous|nous|où|ou|horaires|réserv|adresse|aujourd|demain|ouvert|fermé|sans|avec|pour|che(z|s))/i.test(msgLower)) {
+      return "fr";
+    }
+    if (/(hello|thanks|open|opening|hours|reservation|booking|address|menu|please)/i.test(msgLower)) return "en";
     return "sv";
   };
   const lang = detectLang();
