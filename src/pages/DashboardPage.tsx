@@ -140,6 +140,65 @@ type Floorplan = {
 
 type TableCap = { id: number; cap: number; label?: string };
 
+const KNOWLEDGE_LABELS = [
+  "Namn",
+  "Typ av restaurang",
+  "Adress",
+  "Avstånd",
+  "Distance",
+  "E-post",
+  "Email",
+  "Telefon",
+  "Webbplats",
+  "Hemsida",
+  "Website",
+  "Beskrivning",
+  "Stämning",
+  "Mat",
+  "Mat & meny",
+  "Grupp & event",
+  "Betalning",
+  "Allergier",
+  "Barn",
+  "Barnstol",
+  "Barnmeny",
+  "Uteservering",
+  "Hundvänligt",
+  "Rullstolsanpassad",
+  "Alkoholtillstånd",
+  "Köket stänger",
+  "Max gäster per bokning",
+  "Djurpolicy",
+  "Parkering",
+  "Kollektivtrafik",
+  "Google Maps",
+  "Facebook",
+  "Instagram",
+];
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const normalizeKnowledgeLabels = (base: string) => {
+  let text = (base ?? "").replace(/\r/g, "");
+  for (const label of KNOWLEDGE_LABELS) {
+    const pattern = new RegExp(`([^\\n])\\s*${escapeRegExp(label)}:`, "gi");
+    text = text.replace(pattern, `$1\n${label}:`);
+  }
+  return text;
+};
+
+const dedupeKnowledgeLines = (lines: string[]) => {
+  const seen = new Set<string>();
+  return lines.filter((line) => {
+    const label = KNOWLEDGE_LABELS.find((l) => line.toLowerCase().startsWith(l.toLowerCase() + ":"));
+    if (!label) return true;
+    const key = label.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 class DashboardErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
 
@@ -975,7 +1034,7 @@ function ReservationDashboardInner() {
           ...prev,
           ai: {
             ...prev.ai,
-            knowledge: settings.knowledge ?? prev.ai.knowledge,
+            knowledge: settings.knowledge != null ? normalizeKnowledgeLabels(settings.knowledge) : prev.ai.knowledge,
             name: settings.assistant_name ?? prev.ai.name,
             webSearch: {
               enabled: settings.web_search_enabled ?? prev.ai.webSearch.enabled,
@@ -1642,7 +1701,9 @@ function ReservationDashboardInner() {
   };
 
   const buildPublicKnowledge = (base: string, webSearch: Settings["ai"]["webSearch"]) => {
-    const lines = (base || "").split(/\r?\n/).map((l) => l.trim());
+    const normalized = normalizeKnowledgeLabels(base || "");
+    let lines = normalized.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    lines = dedupeKnowledgeLines(lines);
     const getLabelValue = (label: string) => {
       const line = lines.find((l) => l.toLowerCase().startsWith(label.toLowerCase() + ":"));
       if (!line) return "";
@@ -1667,6 +1728,7 @@ function ReservationDashboardInner() {
         `Vid ${maxPer} gäster eller fler, kontakta oss på ${contactEmail}.`
       );
     }
+    lines = dedupeKnowledgeLines(lines);
     return lines.filter(Boolean).join("\n").trim();
   };
 
@@ -1691,9 +1753,9 @@ function ReservationDashboardInner() {
   useEffect(() => {
     if (onboardingDirty) return;
     if (onboardInitRef.current) return;
-    const k = config.ai.knowledge || "";
+    const k = normalizeKnowledgeLabels(config.ai.knowledge || "");
     if (!k.trim()) return;
-    const lines = k.split(/\r?\n/).map((l) => l.trim());
+    const lines = k.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     const data = { ...onboarding };
     const labels = [
       "Namn",
