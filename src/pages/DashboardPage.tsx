@@ -1693,6 +1693,7 @@ function ReservationDashboardInner() {
     if (onboardInitRef.current) return;
     const k = config.ai.knowledge || "";
     if (!k.trim()) return;
+    const lines = k.split(/\r?\n/).map((l) => l.trim());
     const data = { ...onboarding };
     const labels = [
       "Namn",
