@@ -322,11 +322,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
 
   const knowledgeText = (knowledge ?? "").trim();
-  const knowledgeLines = knowledgeText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const getField = (label: string) => {
-    const line = knowledgeLines.find((l) => l.toLowerCase().startsWith(label.toLowerCase() + ":"));
-    return line ? line.split(":").slice(1).join(":").trim() : "";
-  };
+  const knowledgeRawLines = knowledgeText.split(/\r?\n/);
+  const knowledgeLines = knowledgeRawLines.map((l) => l.trim()).filter(Boolean);
+  const knowledgeFieldLabels = [
+    "Namn",
+    "Typ av restaurang",
+    "Adress",
+    "Avstånd",
+    "Distance",
+    "E-post",
+    "Email",
+    "Telefon",
+    "Webbplats",
+    "Hemsida",
+    "Website",
+    "Google Maps",
+    "Facebook",
+    "Instagram",
+    "Beskrivning",
+    "Stämning",
+    "Mat",
+    "Mat & meny",
+    "Grupp & event",
+    "Betalning",
+    "Allergier",
+    "Barn",
+    "Barnstol",
+    "Barnmeny",
+    "Uteservering",
+    "Hundvänligt",
+    "Rullstolsanpassad",
+    "Alkoholtillstånd",
+    "Köket stänger",
+    "Max gäster per bokning",
+    "Djurpolicy",
+    "Parkering",
+    "Kollektivtrafik",
+  ];
+  const knowledgeFieldMap = (() => {
+    const map: Record<string, string> = {};
+    let current: string | null = null;
+    for (const rawLine of knowledgeRawLines) {
+      const line = rawLine.trim();
+      if (!line) {
+        if (current && map[current]) map[current] += "\n";
+        continue;
+      }
+      const lower = line.toLowerCase();
+      if (lower === "infos:" || lower.startsWith("fråga:") || lower.startsWith("svar:")) {
+        current = null;
+        continue;
+      }
+      const match = knowledgeFieldLabels.find((label) => lower.startsWith(label.toLowerCase() + ":"));
+      if (match) {
+        current = match;
+        map[match] = line.split(":").slice(1).join(":").trim();
+        continue;
+      }
+      if (current) {
+        map[current] = map[current] ? `${map[current]}\n${line}` : line;
+      }
+    }
+    return map;
+  })();
+  const getField = (label: string) => knowledgeFieldMap[label] ?? "";
   const getFieldAny = (labels: string[]) => {
     for (const label of labels) {
       const val = getField(label);
@@ -347,6 +406,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     payment: getField("Betalning"),
     allergies: getField("Allergier"),
     kids: getField("Barn"),
+    kidsChair: getFieldAny(["Barnstol", "Barnstolar"]),
+    kidsMenu: getField("Barnmeny"),
     pets: getField("Djurpolicy"),
     outdoorSeating: getField("Uteservering"),
     dogFriendly: getField("Hundvänligt"),
@@ -364,6 +425,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     facebook: getField("Facebook") || context?.restaurant?.facebook || "",
     googleMaps: getFieldAny(["Google Maps", "Maps", "GoogleMaps"]) || context?.restaurant?.googleMaps || "",
   };
+  const paymentInfo = (() => {
+    const text = (kbInfo.payment || "").trim();
+    const lower = text.toLowerCase();
+    return {
+      text,
+      hasAny: !!text,
+      swish: /swish/.test(lower),
+      cash: /kontant|cash/.test(lower),
+      card: /kort|card|visa|mastercard|amex|kredit|debit/.test(lower),
+      bitcoin: /bitcoin|btc/.test(lower),
+    };
+  })();
+  const kidsInfo = (() => {
+    const combined = [kbInfo.kids, kbInfo.kidsChair, kbInfo.kidsMenu].filter(Boolean).join(" ");
+    const menuFromKids = kbInfo.kids.match(/barnmeny\s*:\s*([^,;]+)/i)?.[1]?.trim() || "";
+    const menuRaw = (kbInfo.kidsMenu || "").trim();
+    const menuText =
+      menuRaw && !/^(ja|nej|yes|no|true|false)$/i.test(menuRaw)
+        ? menuRaw
+        : menuFromKids;
+    const chairRaw = (kbInfo.kidsChair || "").trim();
+    return {
+      hasAny: !!combined,
+      chairYes: /barnstol/i.test(combined) || /^(ja|yes|true)$/i.test(chairRaw),
+      chairNo: /^(nej|no|false)$/i.test(chairRaw) || /inga\s+barnstol/i.test(combined),
+      menuYes: /barnmeny/i.test(combined) || /^(ja|yes|true)$/i.test(menuRaw) || !!menuText,
+      menuNo: /^(nej|no|false)$/i.test(menuRaw),
+      menuText,
+    };
+  })();
   const bookingDurationMin =
     context?.seating?.maxBookingDurationMin ??
     (() => {
@@ -470,7 +561,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
 
   let systemPrompt = "";
-  const guardrailPrompt = `Rappel: tu parles toujours au nom de ${identityForPrompt.name}. Ne demande jamais quel établissement. Si une info est "Inconnu", dis-le clairement et invite à compléter la base Bokäta.`;
+  const guardrailPrompt = `Kom ihåg: du svarar alltid som ${identityForPrompt.name}. Fråga aldrig vilket ställe det gäller. Om en uppgift är "Inconnu", säg tydligt att den saknas och be restaurangen fylla i den i Bokäta.`;
+  const languageDirective =
+    lang === "fr"
+      ? "SPRÅK: Svara på franska."
+      : lang === "en"
+      ? "SPRÅK: Svara på engelska."
+      : "SPRÅK: Svara på svenska.";
 
   const sanitizeUrl = (input: string) => {
     try {
@@ -1516,22 +1613,25 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
           return true;
         }
       }
+      const closedForMonth = closedRanges.filter((r) => overlapsMonths(r.start, r.end, [monthNumber]));
+      if (closedForMonth.length) {
+        const rangesText = closedForMonth
+          .map((r) => (r.start === r.end ? r.start : `${r.start}–${r.end}`))
+          .join(", ");
+        sendReply(
+          t(
+            `Vi har stängt under ${monthMatch?.[1]}: ${rangesText}.`,
+            `Nous sommes fermés pendant ${monthMatch?.[1]} : ${rangesText}.`,
+            `We’re closed during ${monthMatch?.[1]}: ${rangesText}.`
+          )
+        );
+        return true;
+      }
       sendReply(
         t(
           `Jag har tyvärr inte öppettiderna för ${monthMatch?.[1]} just nu. Kontakta oss så hjälper vi dig.`,
           `Je n’ai pas les horaires pour ${monthMatch?.[1]} pour le moment. Contactez-nous et on vous aide.`,
           `I don’t have the hours for ${monthMatch?.[1]} right now. Please contact us and we’ll help.`
-        )
-      );
-      return true;
-    }
-
-    if (currentClosed && !requestedDate && !isEasterKeyword && !isSummerKeyword && !isAutumnKeyword && !monthNumber) {
-      sendReply(
-        t(
-          `Vi har stängt till ${currentClosed.end}.`,
-          `Nous sommes fermés jusqu’au ${currentClosed.end}.`,
-          `We’re closed until ${currentClosed.end}.`
         )
       );
       return true;
@@ -1621,6 +1721,16 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
           "Jag har tyvärr inte öppettiderna för det datumet. Kontakta oss så hjälper vi dig.",
           "Je n’ai pas les horaires pour cette date. Contactez-nous et on vous aide.",
           "I don’t have the hours for that date. Please contact us and we’ll help."
+        )
+      );
+      return true;
+    }
+    if (!hours.open || !hours.close) {
+      sendReply(
+        t(
+          "Jag har tyvärr inga öppettider registrerade för det datumet. Kontakta oss så hjälper vi dig.",
+          "Je n’ai pas d’horaires enregistrés pour cette date. Contactez-nous et on vous aide.",
+          "I don’t have opening hours recorded for that date. Please contact us and we’ll help."
         )
       );
       return true;
@@ -1847,16 +1957,167 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     );
     return;
   }
-  if (/(betal|kort|kontant|swish)/i.test(msgLower) && kbInfo.payment) {
-    sendReply(`Vi tar ${kbInfo.payment}.`);
+  if (/(betal|kort|kontant|swish|cash|bitcoin|btc|apple\s*pay|klarna|faktura)/i.test(msgLower)) {
+    const hasPayment = paymentInfo.hasAny;
+    if (/swish/i.test(msgLower)) {
+      if (paymentInfo.swish) {
+        sendReply(t("Ja, vi tar Swish.", "Oui, nous acceptons Swish.", "Yes, we accept Swish."));
+      } else if (hasPayment) {
+        sendReply(
+          t(
+            `Nej, vi tar inte Swish. Vi tar ${paymentInfo.text}.`,
+            `Non, nous n'acceptons pas Swish. Nous acceptons ${paymentInfo.text}.`,
+            `No, we don’t accept Swish. We accept ${paymentInfo.text}.`
+          )
+        );
+      } else {
+        sendReply(
+          t(
+            "Tyvärr har jag ingen information om Swish eller betalningsmetoder just nu.",
+            "Je n’ai pas d’information sur Swish ou les moyens de paiement pour le moment.",
+            "I don’t have information about Swish or payment methods right now."
+          )
+        );
+      }
+      return;
+    }
+    if (/(kontant|cash)/i.test(msgLower)) {
+      if (paymentInfo.cash) {
+        sendReply(t("Ja, vi tar kontanter.", "Oui, nous acceptons les espèces.", "Yes, we accept cash."));
+      } else if (hasPayment) {
+        sendReply(
+          t(
+            `Nej, vi tar inte kontanter. Vi tar ${paymentInfo.text}.`,
+            `Non, nous n'acceptons pas les espèces. Nous acceptons ${paymentInfo.text}.`,
+            `No, we don’t accept cash. We accept ${paymentInfo.text}.`
+          )
+        );
+      } else {
+        sendReply(
+          t(
+            "Tyvärr har jag ingen information om kontantbetalning just nu.",
+            "Je n’ai pas d’information sur le paiement en espèces pour le moment.",
+            "I don’t have information about cash payments right now."
+          )
+        );
+      }
+      return;
+    }
+    if (/(kort|card|visa|mastercard|amex)/i.test(msgLower)) {
+      if (paymentInfo.card) {
+        sendReply(t("Ja, vi tar kort.", "Oui, nous acceptons les cartes.", "Yes, we accept cards."));
+      } else if (hasPayment) {
+        sendReply(
+          t(
+            `Nej, vi tar inte kort. Vi tar ${paymentInfo.text}.`,
+            `Non, nous n'acceptons pas les cartes. Nous acceptons ${paymentInfo.text}.`,
+            `No, we don’t accept cards. We accept ${paymentInfo.text}.`
+          )
+        );
+      } else {
+        sendReply(
+          t(
+            "Tyvärr har jag ingen information om kortbetalning just nu.",
+            "Je n’ai pas d’information sur le paiement par carte pour le moment.",
+            "I don’t have information about card payments right now."
+          )
+        );
+      }
+      return;
+    }
+    if (/(bitcoin|btc)/i.test(msgLower)) {
+      if (paymentInfo.bitcoin) {
+        sendReply(t("Ja, vi tar Bitcoin.", "Oui, nous acceptons le Bitcoin.", "Yes, we accept Bitcoin."));
+      } else if (hasPayment) {
+        sendReply(
+          t(
+            `Nej, vi tar inte Bitcoin. Vi tar ${paymentInfo.text}.`,
+            `Non, nous n'acceptons pas le Bitcoin. Nous acceptons ${paymentInfo.text}.`,
+            `No, we don’t accept Bitcoin. We accept ${paymentInfo.text}.`
+          )
+        );
+      } else {
+        sendReply(
+          t(
+            "Tyvärr har jag ingen information om Bitcoin‑betalning just nu.",
+            "Je n’ai pas d’information sur le paiement en Bitcoin pour le moment.",
+            "I don’t have information about Bitcoin payments right now."
+          )
+        );
+      }
+      return;
+    }
+    if (hasPayment) {
+      sendReply(t(`Vi tar ${paymentInfo.text}.`, `Nous acceptons ${paymentInfo.text}.`, `We accept ${paymentInfo.text}.`));
+      return;
+    }
+    sendReply(
+      t(
+        "Tyvärr har jag ingen information om betalningsmetoder just nu.",
+        "Je n’ai pas d’information sur les moyens de paiement pour le moment.",
+        "I don’t have information about payment methods right now."
+      )
+    );
     return;
   }
   if (/(allerg|gluten|laktos|nöt)/i.test(msgLower) && kbInfo.allergies) {
     sendReply(`Vi kan hjälpa till med: ${kbInfo.allergies}.`);
     return;
   }
-  if (/(barn|barnstol|barnmeny|barnvagn)/i.test(msgLower) && kbInfo.kids) {
-    sendReply(`För barn gäller: ${kbInfo.kids}.`);
+  if (/(barnstol)/i.test(msgLower)) {
+    if (kidsInfo.chairYes) {
+      sendReply(t("Ja, vi har barnstolar.", "Oui, nous avons des chaises hautes.", "Yes, we have high chairs."));
+    } else if (kidsInfo.chairNo || kidsInfo.hasAny) {
+      sendReply(t("Nej, vi har inga barnstolar.", "Non, nous n’avons pas de chaises hautes.", "No, we don’t have high chairs."));
+    } else {
+      sendReply(
+        t(
+          "Jag har tyvärr ingen information om barnstolar just nu.",
+          "Je n’ai pas d’information sur les chaises hautes pour le moment.",
+          "I don’t have information about high chairs right now."
+        )
+      );
+    }
+    return;
+  }
+  if (/(barnmeny|barnrätt|barnratter|barnvänlig|barnvanlig)/i.test(msgLower)) {
+    if (kidsInfo.menuText) {
+      sendReply(t(`Barnmeny: ${kidsInfo.menuText}.`, `Menu enfant : ${kidsInfo.menuText}.`, `Kids menu: ${kidsInfo.menuText}.`));
+    } else if (kidsInfo.menuYes) {
+      sendReply(t("Ja, vi har barnmeny.", "Oui, nous avons un menu enfant.", "Yes, we have a kids menu."));
+    } else if (kidsInfo.menuNo || kidsInfo.hasAny) {
+      sendReply(t("Nej, vi har ingen barnmeny.", "Non, nous n’avons pas de menu enfant.", "No, we don’t have a kids menu."));
+    } else {
+      sendReply(
+        t(
+          "Jag har tyvärr ingen information om barnmeny just nu.",
+          "Je n’ai pas d’information sur le menu enfant pour le moment.",
+          "I don’t have information about a kids menu right now."
+        )
+      );
+    }
+    return;
+  }
+  if (/(barn|barnvagn)/i.test(msgLower) && (kbInfo.kids || kidsInfo.hasAny)) {
+    if (kbInfo.kids) {
+      sendReply(`För barn gäller: ${kbInfo.kids}.`);
+    } else {
+      const parts = [
+        kidsInfo.chairYes ? "barnstolar" : kidsInfo.chairNo ? "inga barnstolar" : "",
+        kidsInfo.menuText ? `barnmeny (${kidsInfo.menuText})` : kidsInfo.menuYes ? "barnmeny" : kidsInfo.menuNo ? "ingen barnmeny" : "",
+      ].filter(Boolean);
+      if (parts.length) {
+        sendReply(`För barn: ${parts.join(", ")}.`);
+      } else {
+        sendReply(
+          t(
+            "Jag har tyvärr ingen information om barnvänliga alternativ just nu.",
+            "Je n’ai pas d’information sur les options pour enfants pour le moment.",
+            "I don’t have information about kids options right now."
+          )
+        );
+      }
+    }
     return;
   }
   if (/(hund|djur|terrass)/i.test(msgLower) && kbInfo.pets) {
@@ -2014,6 +2275,16 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     }
     const open = hours.open;
     const close = hours.close;
+    if (!open || !close) {
+      sendReply(
+        t(
+          "Jag har tyvärr inga öppettider registrerade för den dagen. Välj gärna en annan dag eller kontakta oss.",
+          "Je n’ai pas les horaires pour ce jour-là. Choisissez un autre jour ou contactez-nous.",
+          "I don’t have the opening hours for that day. Please choose another day or contact us."
+        )
+      );
+      return;
+    }
     if (open && close) {
       const t = timeToMin(time);
       const lastBookingBufferMin = 60;
@@ -2100,6 +2371,7 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       messages: [
         { role: "system", content: systemPrompt },
         { role: "system", content: guardrailPrompt },
+        { role: "system", content: languageDirective },
         ...(history ?? []),
         { role: "user", content: message },
       ],

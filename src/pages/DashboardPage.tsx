@@ -1436,7 +1436,8 @@ export default function ReservationDashboard() {
       "Grupp & event: ...",
       "Betalning: ...",
       "Allergier: ...",
-      "Barn: barnstol, barnmeny",
+      "Barnstol: Ja/Nej",
+      "Barnmeny: ...",
       "Uteservering: Ja/Nej",
       "Hundvänligt: Ja/Nej",
       "Rullstolsanpassad: Ja/Nej",
@@ -1473,12 +1474,9 @@ export default function ReservationDashboard() {
 
   const buildKnowledge = (data: typeof onboarding, faqs: { q: string; a: string }[], webSearch: Settings["ai"]["webSearch"]) => {
     const web = webSearch?.enabled ? webSearch : null;
-    const kidsParts = [
-      data.kidsChair ? "barnstol" : "",
-      data.kidsMenu ? "barnmeny" : "",
-      data.kidsNote ? `barnmeny: ${data.kidsNote}` : "",
-    ].filter(Boolean);
-    const kidsLine = kidsParts.length ? `Barn: ${kidsParts.join(", ")}` : "";
+    const kidsMenuText = data.kidsNote?.trim() || "";
+    const kidsChairLine = `Barnstol: ${data.kidsChair ? "Ja" : "Nej"}`;
+    const kidsMenuLine = kidsMenuText ? `Barnmeny: ${kidsMenuText}` : `Barnmeny: ${data.kidsMenu ? "Ja" : "Nej"}`;
     const kitchenCloseLine = data.kitchenCloseMinutes
       ? `Köket stänger: ${data.kitchenCloseMinutes} min före stängning`
       : "";
@@ -1505,7 +1503,8 @@ export default function ReservationDashboard() {
       data.groupEvents ? `Grupp & event: ${data.groupEvents}` : "",
       data.payment ? `Betalning: ${data.payment}` : "",
       data.allergies ? `Allergier: ${data.allergies}` : "",
-      kidsLine,
+      kidsChairLine,
+      kidsMenuLine,
       data.outdoorSeating ? "Uteservering: Ja" : "Uteservering: Nej",
       data.dogFriendly ? "Hundvänligt: Ja" : "Hundvänligt: Nej",
       data.wheelchair ? "Rullstolsanpassad: Ja" : "Rullstolsanpassad: Nej",
@@ -1573,12 +1572,59 @@ export default function ReservationDashboard() {
     if (onboardInitRef.current) return;
     const k = config.ai.knowledge || "";
     if (!k.trim()) return;
-    const lines = k.split(/\r?\n/).map((l) => l.trim());
     const data = { ...onboarding };
-    const mapField = (label: string) => {
-      const line = lines.find((l) => l.toLowerCase().startsWith(label.toLowerCase() + ":"));
-      return line ? line.split(":").slice(1).join(":").trim() : "";
-    };
+    const labels = [
+      "Namn",
+      "Typ av restaurang",
+      "Adress",
+      "Avstånd",
+      "Distance",
+      "Telefon",
+      "E-post",
+      "Email",
+      "Beskrivning",
+      "Stämning",
+      "Mat",
+      "Mat & meny",
+      "Grupp & event",
+      "Betalning",
+      "Allergier",
+      "Barn",
+      "Barnstol",
+      "Barnmeny",
+      "Uteservering",
+      "Hundvänligt",
+      "Rullstolsanpassad",
+      "Alkoholtillstånd",
+      "Köket stänger",
+      "Djurpolicy",
+      "Parkering",
+      "Kollektivtrafik",
+    ];
+    const fieldMap: Record<string, string> = {};
+    let current: string | null = null;
+    for (const rawLine of k.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line) {
+        if (current && fieldMap[current]) fieldMap[current] += "\n";
+        continue;
+      }
+      const lower = line.toLowerCase();
+      if (lower === "infos:" || lower.startsWith("fråga:") || lower.startsWith("svar:")) {
+        current = null;
+        continue;
+      }
+      const match = labels.find((label) => lower.startsWith(label.toLowerCase() + ":"));
+      if (match) {
+        current = match;
+        fieldMap[match] = line.split(":").slice(1).join(":").trim();
+        continue;
+      }
+      if (current) {
+        fieldMap[current] = fieldMap[current] ? `${fieldMap[current]}\n${line}` : line;
+      }
+    }
+    const mapField = (label: string) => fieldMap[label] ?? "";
     data.restaurantName = mapField("Namn");
     data.address = mapField("Adress");
     data.distance = mapField("Avstånd") || mapField("Distance");
@@ -1598,10 +1644,12 @@ export default function ReservationDashboard() {
       .split(/[,;]+/)
       .map((t) => t.trim())
       .filter(Boolean);
-    const hasBarnstol = /barnstol/i.test(barnLine) || /^(ja|yes|true)$/i.test(barnstolField);
+    const hasBarnstol = /^(ja|yes|true)$/i.test(barnstolField) || /barnstol/i.test(barnLine);
     const barnmenyMatch = barnLine.match(/barnmeny\s*:\s*([^,;]+)/i);
-    const barnmenyText = barnmenyField || (barnmenyMatch ? barnmenyMatch[1].trim() : "");
-    const hasBarnmeny = /barnmeny/i.test(barnLine) || /^(ja|yes|true)$/i.test(barnmenyField) || !!barnmenyText;
+    const barnmenyText = barnmenyField && !/^(ja|nej|yes|no|true|false)$/i.test(barnmenyField)
+      ? barnmenyField
+      : (barnmenyMatch ? barnmenyMatch[1].trim() : "");
+    const hasBarnmeny = /^(ja|yes|true)$/i.test(barnmenyField) || /barnmeny/i.test(barnLine) || !!barnmenyText;
     data.kidsChair = hasBarnstol;
     data.kidsMenu = hasBarnmeny;
     data.kidsNote = barnmenyText || barnTokens.filter((t) => !/barnstol|barnmeny/i.test(t)).join(", ");
@@ -1629,6 +1677,9 @@ export default function ReservationDashboard() {
     setOnboarding(data);
     setOnboardingFaqs(faqs);
     onboardInitRef.current = true;
+    if (!/barnstol:/i.test(k) || !/barnmeny:/i.test(k)) {
+      setOnboardingDirty(true);
+    }
   }, [config.ai.knowledge, onboardingDirty]);
 
   const knowledgeScore = useMemo(() => {

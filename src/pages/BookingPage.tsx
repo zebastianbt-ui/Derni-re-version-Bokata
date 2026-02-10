@@ -89,6 +89,20 @@ const DEFAULT_HOURS: BookingPublicSettings["hours"] = {
   ],
 };
 
+const EMPTY_HOURS: BookingPublicSettings["hours"] = {
+  normal: {
+    måndag: { closed: true, open: "", close: "" },
+    tisdag: { closed: true, open: "", close: "" },
+    onsdag: { closed: true, open: "", close: "" },
+    torsdag: { closed: true, open: "", close: "" },
+    fredag: { closed: true, open: "", close: "" },
+    lördag: { closed: true, open: "", close: "" },
+    söndag: { closed: true, open: "", close: "" },
+  },
+  special: [],
+  periods: [],
+};
+
 const DEFAULT_SEATING: BookingPublicSettings["seating"] = {
   maxGuests: 60,
   maxGuestsPerReservation: 8,
@@ -267,6 +281,7 @@ export default function BookingPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const [publicSettings, setPublicSettings] = useState<BookingPublicSettings | null>(null);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [qaQuestion, setQaQuestion] = useState("");
   const [qaAnswer, setQaAnswer] = useState<string | null>(null);
   const [qaLoading, setQaLoading] = useState(false);
@@ -327,16 +342,29 @@ export default function BookingPage() {
   };
 
   useEffect(() => {
+    let active = true;
     const load = async () => {
-      if (!restaurantSlug || restaurantSlug === "demo") return;
+      if (!restaurantSlug || restaurantSlug === "demo") {
+        if (active) {
+          setPublicSettings(null);
+          setSettingsLoaded(true);
+        }
+        return;
+      }
+      if (active) setSettingsLoaded(false);
       const { data } = await supabase
         .from("booking_public_settings")
         .select("public_id,hours,seating,knowledge_public")
         .eq("public_id", restaurantSlug)
         .maybeSingle();
+      if (!active) return;
       if (data) setPublicSettings(data as BookingPublicSettings);
+      setSettingsLoaded(true);
     };
     load();
+    return () => {
+      active = false;
+    };
   }, [restaurantSlug]);
 
   const parseRestaurantNameFromKnowledge = (knowledge?: string | null) => {
@@ -385,9 +413,11 @@ export default function BookingPage() {
     [publicSettings?.knowledge_public]
   );
 
-  const effectiveSettings = publicSettings ?? { public_id: restaurantSlug, hours: DEFAULT_HOURS, seating: DEFAULT_SEATING };
+  const effectiveSettings = settingsLoaded
+    ? publicSettings ?? { public_id: restaurantSlug, hours: DEFAULT_HOURS, seating: DEFAULT_SEATING }
+    : { public_id: restaurantSlug, hours: EMPTY_HOURS, seating: DEFAULT_SEATING };
   const normalizedHours = useMemo(() => normalizeHours(effectiveSettings.hours), [effectiveSettings.hours]);
-  const settingsMissing = !publicSettings && restaurantSlug !== "demo";
+  const settingsMissing = settingsLoaded && !publicSettings && restaurantSlug !== "demo";
 
   const isClosedDate = (iso: string) => {
     const special = normalizedHours.special.find((s) => s.date === iso);
