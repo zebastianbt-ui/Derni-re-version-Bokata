@@ -2099,9 +2099,9 @@ export default function ReservationDashboard() {
   };
 
   const settingsDateInputClass =
-    "mt-1 w-full min-w-0 max-w-[150px] mx-auto rounded-lg border border-gray-300 px-2 py-1.5 text-center text-xs focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none sm:text-base sm:px-3 sm:py-2";
+    "mt-1 w-full min-w-0 max-w-[140px] mx-auto rounded-lg border border-gray-300 px-2 py-1 text-center text-[11px] focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none sm:text-base sm:px-3 sm:py-2";
   const settingsTimeInputClass =
-    "w-full min-w-0 max-w-[110px] mx-auto rounded-md border border-gray-300 px-2 py-1 text-center text-[11px] disabled:opacity-60 sm:mx-0 sm:max-w-none sm:text-sm";
+    "w-full min-w-0 max-w-[104px] mx-auto rounded-md border border-gray-300 px-2 py-1 text-center text-[10px] disabled:opacity-60 sm:mx-0 sm:max-w-none sm:text-sm";
   const settingsTimeGridClass =
     "grid grid-cols-2 gap-1 justify-items-center sm:gap-2 sm:justify-items-stretch";
 

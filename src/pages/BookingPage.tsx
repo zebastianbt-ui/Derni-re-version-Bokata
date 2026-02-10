@@ -446,7 +446,7 @@ export default function BookingPage() {
   const [viewYear, setViewYear] = useState(() => Number(date.split("-")[0]));
 
   const monthName = (m: number) =>
-    ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"][m];
+    ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"][m].toUpperCase();
   const daysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
   const startOffset = (y: number, m: number) => (new Date(y, m, 1).getDay() + 6) % 7; // Monday=0
   const calendarDays = useMemo(() => {
