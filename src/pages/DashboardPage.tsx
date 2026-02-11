@@ -174,7 +174,10 @@ const KNOWLEDGE_LABELS = [
   "Google Maps",
   "Facebook",
   "Instagram",
+  "Bokningsmeddelande",
 ];
+
+const BOOKING_MESSAGE_LABEL = "Bokningsmeddelande";
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -185,6 +188,29 @@ const normalizeKnowledgeLabels = (base: string) => {
     text = text.replace(pattern, `$1\n${label}:`);
   }
   return text;
+};
+
+const extractMultilineLabelValue = (base: string, label: string) => {
+  const normalized = normalizeKnowledgeLabels(base || "");
+  const lines = normalized.split(/\r?\n/).map((l) => l.trimEnd());
+  const labelLower = `${label.toLowerCase()}:`;
+  const startIdx = lines.findIndex((l) => l.toLowerCase().startsWith(labelLower));
+  if (startIdx === -1) return "";
+  const first = lines[startIdx].split(":").slice(1).join(":").trim();
+  const collected: string[] = [];
+  if (first) collected.push(first);
+  for (let i = startIdx + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line) {
+      if (collected.length) collected.push("");
+      continue;
+    }
+    const lower = line.toLowerCase();
+    if (lower === "infos:" || lower.startsWith("fråga:") || lower.startsWith("svar:")) break;
+    if (KNOWLEDGE_LABELS.some((l) => lower.startsWith(`${l.toLowerCase()}:`))) break;
+    collected.push(line.trim());
+  }
+  return collected.join("\n").trim();
 };
 
 const dedupeKnowledgeLines = (lines: string[]) => {
@@ -273,6 +299,7 @@ const cloneDays = (days: Record<DayName, { closed: boolean; open: string; close:
 
 type Settings = {
   info: { email: string };
+  publicMessage: string;
   seating: {
     groupThreshold: number;
     highChairs: number;
@@ -727,6 +754,7 @@ function ReservationDashboardInner() {
   const defaultSettings: Settings = useMemo(
     () => ({
       info: { email: "bookings@example.se" },
+      publicMessage: "",
       seating: {
         groupThreshold: 0,
         highChairs: 0,
@@ -822,6 +850,12 @@ function ReservationDashboardInner() {
       return changed ? next : prev;
     });
   }, [config.hours.periods]);
+
+  useEffect(() => {
+    if (settingsOpen) {
+      setShowDrafts(false);
+    }
+  }, [settingsOpen]);
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [floorplan, setFloorplan] = useState<Floorplan>({
@@ -1077,6 +1111,8 @@ function ReservationDashboardInner() {
             notifyOnNewBooking: bookingSettings.notify_enabled ?? prev.notifications.notifyOnNewBooking,
             requireManualConfirmation: bookingSettings.require_manual_confirmation ?? prev.notifications.requireManualConfirmation,
           },
+          publicMessage:
+            extractMultilineLabelValue(bookingSettings.knowledge_public ?? "", BOOKING_MESSAGE_LABEL) || prev.publicMessage,
         }));
       }
 
@@ -1286,7 +1322,7 @@ function ReservationDashboardInner() {
             notify_email: config.info.email || config.notifications.to || null,
             notify_enabled: config.notifications.notifyOnNewBooking,
             require_manual_confirmation: config.notifications.requireManualConfirmation,
-            knowledge_public: buildPublicKnowledge(config.ai.knowledge, config.ai.webSearch),
+            knowledge_public: buildPublicKnowledge(config.ai.knowledge, config.ai.webSearch, config.publicMessage),
           }),
         });
         if (!resp.ok) {
@@ -1314,6 +1350,7 @@ function ReservationDashboardInner() {
     config.notifications.to,
     config.notifications.notifyOnNewBooking,
     config.notifications.requireManualConfirmation,
+    config.publicMessage,
     restaurantId,
     settingsReady,
   ]);
@@ -1485,7 +1522,7 @@ function ReservationDashboardInner() {
   const [aiMsg, setAiMsg] = useState("");
   const [aiPreview, setAiPreview] = useState("");
   const [aiHistory, setAiHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
-  const [showDrafts, setShowDrafts] = useState(true);
+  const [showDrafts, setShowDrafts] = useState(false);
   const [newFaq, setNewFaq] = useState<string>("");
   const [faqSuccess, setFaqSuccess] = useState(false);
   const faqTimeoutRef = useRef<number | null>(null);
@@ -1700,7 +1737,11 @@ function ReservationDashboardInner() {
     return [...lines, ...qa].join("\n").trim();
   };
 
-  const buildPublicKnowledge = (base: string, webSearch: Settings["ai"]["webSearch"]) => {
+  const buildPublicKnowledge = (
+    base: string,
+    webSearch: Settings["ai"]["webSearch"],
+    publicMessage?: string
+  ) => {
     const normalized = normalizeKnowledgeLabels(base || "");
     let lines = normalized.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     lines = dedupeKnowledgeLines(lines);
@@ -1713,6 +1754,42 @@ function ReservationDashboardInner() {
     const append = (label: string, value?: string) => {
       if (!value || hasValue(label)) return;
       lines.push(`${label}: ${value}`);
+    };
+    const appendMultiline = (label: string, value?: string) => {
+      const trimmed = value?.trim();
+      if (!trimmed) return;
+      const parts = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      if (!parts.length) return;
+      lines.push(`${label}: ${parts[0]}`);
+      for (const part of parts.slice(1)) {
+        lines.push(part);
+      }
+    };
+    const stripLabelBlock = (input: string[], label: string) => {
+      const labelLower = label.toLowerCase();
+      const out: string[] = [];
+      let skipping = false;
+      for (const line of input) {
+        const lower = line.toLowerCase();
+        if (!skipping && lower.startsWith(labelLower + ":")) {
+          skipping = true;
+          continue;
+        }
+        if (skipping) {
+          if (
+            lower === "infos:" ||
+            lower.startsWith("fråga:") ||
+            lower.startsWith("svar:") ||
+            KNOWLEDGE_LABELS.some((l) => lower.startsWith(`${l.toLowerCase()}:`))
+          ) {
+            skipping = false;
+            out.push(line);
+          }
+          continue;
+        }
+        out.push(line);
+      }
+      return out;
     };
     if (webSearch?.enabled) {
       append("Webbplats", webSearch.siteUrl || "");
@@ -1727,6 +1804,12 @@ function ReservationDashboardInner() {
         "Max gäster per bokning",
         `Vid ${maxPer} gäster eller fler, kontakta oss på ${contactEmail}.`
       );
+    }
+    const resolvedMessage =
+      (publicMessage ?? "").trim() || extractMultilineLabelValue(base || "", BOOKING_MESSAGE_LABEL);
+    if (resolvedMessage) {
+      lines = stripLabelBlock(lines, BOOKING_MESSAGE_LABEL);
+      appendMultiline(BOOKING_MESSAGE_LABEL, resolvedMessage);
     }
     lines = dedupeKnowledgeLines(lines);
     return lines.filter(Boolean).join("\n").trim();
@@ -1882,7 +1965,7 @@ function ReservationDashboardInner() {
       },
       body: JSON.stringify({
         message: text,
-        knowledge: buildPublicKnowledge(config.ai?.knowledge ?? "", config.ai.webSearch),
+        knowledge: buildPublicKnowledge(config.ai?.knowledge ?? "", config.ai.webSearch, config.publicMessage),
         history: aiHistory,
         context: {
           baseDate: dateSel,
@@ -3261,6 +3344,20 @@ function ReservationDashboardInner() {
                       })
                     }
                   />
+                </Field>
+              </div>
+              <div className="mt-4">
+                <Field label="Bokningsmeddelande (valfritt)">
+                  <textarea
+                    rows={4}
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    placeholder="Skriv en kort hälsning eller info till gästerna som visas på bokningssidan."
+                    value={config.publicMessage}
+                    onChange={(e) => setConfig({ ...config, publicMessage: e.target.value })}
+                  />
+                  <div className="mt-2 text-xs text-gray-500">
+                    Visas under kommentarsfältet på bokningssidan.
+                  </div>
                 </Field>
               </div>
               <div className="mt-3 grid grid-cols-1 gap-2 text-sm">

@@ -110,6 +110,79 @@ const DEFAULT_SEATING: BookingPublicSettings["seating"] = {
   maxBookingDurationMin: 90,
 };
 
+const KNOWLEDGE_LABELS = [
+  "Namn",
+  "Typ av restaurang",
+  "Adress",
+  "Avstånd",
+  "Distance",
+  "E-post",
+  "Email",
+  "Telefon",
+  "Webbplats",
+  "Hemsida",
+  "Website",
+  "Beskrivning",
+  "Stämning",
+  "Mat",
+  "Mat & meny",
+  "Grupp & event",
+  "Betalning",
+  "Allergier",
+  "Barn",
+  "Barnstol",
+  "Barnmeny",
+  "Uteservering",
+  "Hundvänligt",
+  "Rullstolsanpassad",
+  "Alkoholtillstånd",
+  "Köket stänger",
+  "Max gäster per bokning",
+  "Djurpolicy",
+  "Parkering",
+  "Kollektivtrafik",
+  "Google Maps",
+  "Facebook",
+  "Instagram",
+  "Bokningsmeddelande",
+];
+
+const BOOKING_MESSAGE_LABEL = "Bokningsmeddelande";
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const normalizeKnowledgeLabels = (base: string) => {
+  let text = (base ?? "").replace(/\r/g, "");
+  for (const label of KNOWLEDGE_LABELS) {
+    const pattern = new RegExp(`([^\\n])\\s*${escapeRegExp(label)}:`, "gi");
+    text = text.replace(pattern, `$1\n${label}:`);
+  }
+  return text;
+};
+
+const extractMultilineLabelValue = (base: string, label: string) => {
+  const normalized = normalizeKnowledgeLabels(base || "");
+  const lines = normalized.split(/\r?\n/).map((l) => l.trimEnd());
+  const labelLower = `${label.toLowerCase()}:`;
+  const startIdx = lines.findIndex((l) => l.toLowerCase().startsWith(labelLower));
+  if (startIdx === -1) return "";
+  const first = lines[startIdx].split(":").slice(1).join(":").trim();
+  const collected: string[] = [];
+  if (first) collected.push(first);
+  for (let i = startIdx + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line) {
+      if (collected.length) collected.push("");
+      continue;
+    }
+    const lower = line.toLowerCase();
+    if (lower === "infos:" || lower.startsWith("fråga:") || lower.startsWith("svar:")) break;
+    if (KNOWLEDGE_LABELS.some((l) => lower.startsWith(`${l.toLowerCase()}:`))) break;
+    collected.push(line.trim());
+  }
+  return collected.join("\n").trim();
+};
+
 function loadReservations(): Reservation[] {
   try {
     const raw = typeof window !== "undefined" ? localStorage.getItem("bokata_reservations") : null;
@@ -394,7 +467,8 @@ export default function BookingPage() {
 
   const parseRestaurantNameFromKnowledge = (knowledge?: string | null) => {
     if (!knowledge) return null;
-    const lines = knowledge.split(/\r?\n/).map((l) => l.trim());
+    const normalized = normalizeKnowledgeLabels(knowledge);
+    const lines = normalized.split(/\r?\n/).map((l) => l.trim());
     const nameLine = lines.find((l) => l.toLowerCase().startsWith("namn:"));
     if (!nameLine) return null;
     const value = nameLine.split(":").slice(1).join(":").trim();
@@ -402,8 +476,14 @@ export default function BookingPage() {
   };
   const parseWebsiteFromKnowledge = (knowledge?: string | null) => {
     if (!knowledge) return null;
-    const lines = knowledge.split(/\r?\n/).map((l) => l.trim());
-    const siteLine = lines.find((l) => l.toLowerCase().startsWith("webbplats:") || l.toLowerCase().startsWith("hemsida:") || l.toLowerCase().startsWith("website:"));
+    const normalized = normalizeKnowledgeLabels(knowledge);
+    const lines = normalized.split(/\r?\n/).map((l) => l.trim());
+    const siteLine = lines.find(
+      (l) =>
+        l.toLowerCase().startsWith("webbplats:") ||
+        l.toLowerCase().startsWith("hemsida:") ||
+        l.toLowerCase().startsWith("website:")
+    );
     if (siteLine) {
       const value = siteLine.split(":").slice(1).join(":").trim();
       return value || null;
@@ -435,6 +515,10 @@ export default function BookingPage() {
   }, [publicSettings?.knowledge_public, restaurantName]);
   const restaurantWebsite = useMemo(
     () => parseWebsiteFromKnowledge(publicSettings?.knowledge_public ?? ""),
+    [publicSettings?.knowledge_public]
+  );
+  const bookingMessage = useMemo(
+    () => extractMultilineLabelValue(publicSettings?.knowledge_public ?? "", BOOKING_MESSAGE_LABEL),
     [publicSettings?.knowledge_public]
   );
 
@@ -807,6 +891,11 @@ export default function BookingPage() {
                               className="mt-1.5 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2.5 text-sm font-semibold text-gray-900 placeholder:text-gray-400"
                             />
                           </label>
+                          {bookingMessage ? (
+                            <div className="rounded-xl border border-violet-100 bg-white px-4 py-3 text-sm text-gray-600 whitespace-pre-wrap">
+                              {bookingMessage}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </div>
