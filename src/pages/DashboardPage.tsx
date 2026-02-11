@@ -826,7 +826,10 @@ function ReservationDashboardInner() {
 
   const [config, setConfig] = useState<Settings>(defaultSettings);
   const [openPeriods, setOpenPeriods] = useState<Record<string, boolean>>({});
-  const [showHolidays, setShowHolidays] = useState(true);
+  const [showHolidays, setShowHolidays] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.innerWidth >= 768;
+  });
   const mealRanges = useMemo(() => normalizeMealRanges(config.seating.mealRanges), [config.seating.mealRanges]);
   const bookingDurationMin = config.seating.maxBookingDurationMin || 90;
 
@@ -850,6 +853,13 @@ function ReservationDashboardInner() {
       return changed ? next : prev;
     });
   }, [config.hours.periods]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setShowHolidays(false);
+    }
+  }, [settingsOpen]);
 
   useEffect(() => {
     if (settingsOpen) {
@@ -3807,9 +3817,9 @@ function ReservationDashboardInner() {
 
                 <div className="mt-6 rounded-lg border border-pink-200 bg-pink-50/40 p-3">
                   <div className="text-base font-bold text-gray-800 mb-2">Stängda perioder</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 items-end gap-2">
-                    <div>
-                      <Field label="Från">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 items-end gap-2 justify-items-center sm:justify-items-stretch">
+                    <div className="w-full sm:w-auto">
+                      <Field label="Från" className="text-center sm:text-left">
                         <input
                           type="date"
                           className={settingsDateInputClass}
@@ -3818,8 +3828,8 @@ function ReservationDashboardInner() {
                         />
                       </Field>
                     </div>
-                    <div>
-                      <Field label="Till">
+                    <div className="w-full sm:w-auto">
+                      <Field label="Till" className="text-center sm:text-left">
                         <input
                           type="date"
                           className={settingsDateInputClass}
