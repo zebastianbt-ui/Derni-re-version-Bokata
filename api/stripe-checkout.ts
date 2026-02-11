@@ -1,18 +1,18 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Stripe from "stripe";
-import { createClient } from "@supabase/supabase-js";
 import { rateLimit } from "./_rateLimit";
 
 const getEnv = (key: string) => process.env[key] ?? "";
-const getSiteUrl = () => getEnv("SITE_URL") || "https://www.bokata.se";
 const normalizeEmail = (value?: string | null) => (value ?? "").trim().toLowerCase();
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Autoriser uniquement POST
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method Not Allowed" });
     return;
   }
 
+  // Rate limit simple (anti-abus)
   const RATE_LIMIT_WINDOW_MS = 60_000;
   const RATE_LIMIT_MAX = 10;
   const getClientIp = () => {
@@ -26,62 +26,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // Variables d’environnement
   const secretKey = getEnv("STRIPE_SECRET_KEY");
   const priceMonthly = getEnv("STRIPE_PRICE_MONTHLY");
   const priceYearly = getEnv("STRIPE_PRICE_YEARLY");
   const price2Year = getEnv("STRIPE_PRICE_2YEAR");
-  const supabaseUrl = getEnv("SUPABASE_URL") || getEnv("VITE_SUPABASE_URL");
-  const serviceKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const priceIdDirect = getEnv("STRIPE_PRICE_ID");
+  const siteUrl = getEnv("SITE_URL") || "https://www.bokata.se";
+  const successUrl = getEnv("STRIPE_SUCCESS_URL") || `${siteUrl}/?checkout=success`;
+  const cancelUrl = getEnv("STRIPE_CANCEL_URL") || `${siteUrl}/?checkout=cancel`;
 
-  if (!secretKey || !priceMonthly || !priceYearly || !price2Year) {
-    res.status(500).json({ error: "Missing Stripe env vars" });
-    return;
-  }
-  if (!supabaseUrl || !serviceKey) {
-    res.status(500).json({ error: "Missing Supabase env vars" });
+  if (!secretKey) {
+    res.status(500).json({ error: "Missing STRIPE_SECRET_KEY" });
     return;
   }
 
   const { planKey, email } = (req.body ?? {}) as { planKey?: string; email?: string };
   const normalizedEmail = normalizeEmail(email);
-  if (!normalizedEmail) {
-    res.status(400).json({ error: "E-post krävs för att starta provperioden." });
+
+  // Choix du price (priorité à STRIPE_PRICE_ID si fourni)
+  const priceId =
+    priceIdDirect ||
+    (planKey === "ettar" ? priceYearly : planKey === "tvar" ? price2Year : priceMonthly);
+
+  if (!priceId) {
+    res.status(500).json({ error: "Missing Stripe price id" });
     return;
   }
-  const priceId =
-    planKey === "ettar" ? priceYearly : planKey === "tvar" ? price2Year : priceMonthly;
 
+  // Init Stripe
   const stripe = new Stripe(secretKey, { apiVersion: "2023-10-16" });
-  const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
-  const origin = getSiteUrl();
 
   try {
-    const { data: priorSub, error: priorError } = await supabase
-      .from("stripe_subscriptions")
-      .select("id,status")
-      .ilike("email", normalizedEmail)
-      .limit(1)
-      .maybeSingle();
-    if (priorError) {
-      console.error("Stripe subscription lookup error", priorError);
-    }
-    const allowTrial = !priorSub && !priorError;
-    const subscriptionData = allowTrial
-      ? {
-          trial_period_days: 14,
-          trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
-        }
-      : undefined;
-
+    // Session Stripe Checkout (mode subscription, trial 14 jours, sans carte)
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      payment_method_collection: allowTrial ? "if_required" : "always",
+      payment_method_collection: "if_required",
       allow_promotion_codes: true,
-      customer_email: normalizedEmail,
+      customer_email: normalizedEmail || undefined,
       line_items: [{ price: priceId, quantity: 1 }],
-      ...(subscriptionData ? { subscription_data: subscriptionData } : {}),
-      success_url: `${origin}/?checkout=success`,
-      cancel_url: `${origin}/?checkout=cancel`,
+      subscription_data: {
+        trial_period_days: 14,
+        trial_settings: {
+          end_behavior: { missing_payment_method: "cancel" },
+        },
+      },
+      success_url: successUrl,
+      cancel_url: cancelUrl,
     });
 
     res.status(200).json({ url: session.url });
