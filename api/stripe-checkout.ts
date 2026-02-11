@@ -67,7 +67,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       customer_email: normalizedEmail || undefined,
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        trial_period_days: 14,
+        trial_period_days: 30,
         trial_settings: {
           end_behavior: { missing_payment_method: "cancel" },
         },
