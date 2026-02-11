@@ -62,6 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
+      locale: "sv",
       payment_method_collection: "if_required",
       allow_promotion_codes: true,
       customer_email: normalizedEmail || undefined,
