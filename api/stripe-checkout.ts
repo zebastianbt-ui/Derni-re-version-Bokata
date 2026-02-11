@@ -71,6 +71,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           end_behavior: { missing_payment_method: "cancel" },
         },
       },
+      custom_text: {
+        submit: {
+          message: "14 dagar gratis · Inget kort krävs · Avsluta när du vill",
+        },
+      },
       success_url: successUrl,
       cancel_url: cancelUrl,
     });
