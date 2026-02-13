@@ -224,9 +224,9 @@ export default function Page() {
                   <path d="M0,0 L9,3 L0,6 Z" fill="#ff5da2" />
                 </marker>
               </defs>
-              <path d="M440 90 C535 70, 600 120, 640 165 C665 195, 655 230, 620 235 C590 240, 585 210, 615 195 C650 175, 690 175, 720 90" className="bokata-line bokata-line-1" markerEnd="url(#bokata-arrow)" />
-              <path d="M440 260 C535 250, 600 250, 640 260 C670 270, 670 300, 640 310 C615 318, 600 300, 620 285 C650 265, 690 255, 720 260" className="bokata-line bokata-line-2" markerEnd="url(#bokata-arrow)" />
-              <path d="M440 430 C535 450, 600 400, 640 355 C665 325, 655 290, 620 285 C590 280, 585 310, 615 325 C650 345, 690 345, 720 430" className="bokata-line bokata-line-3" markerEnd="url(#bokata-arrow)" />
+              <path d="M440 90 C520 70, 560 120, 600 150 C630 170, 630 210, 590 215 C550 220, 540 190, 570 170 C610 140, 660 130, 720 90" className="bokata-line bokata-line-1" markerEnd="url(#bokata-arrow)" />
+              <path d="M440 260 C520 240, 560 250, 600 260 C630 270, 630 300, 590 305 C550 310, 540 280, 570 265 C610 245, 660 245, 720 260" className="bokata-line bokata-line-2" markerEnd="url(#bokata-arrow)" />
+              <path d="M440 430 C520 450, 560 400, 600 370 C630 350, 630 310, 590 305 C550 300, 540 330, 570 345 C610 365, 660 370, 720 430" className="bokata-line bokata-line-3" markerEnd="url(#bokata-arrow)" />
             </svg>
             <div className="flex flex-col md:flex-row gap-6 items-center md:items-stretch relative z-10">
               <div className="w-full md:w-[55%] md:h-[520px] flex flex-col gap-4 md:gap-5">
