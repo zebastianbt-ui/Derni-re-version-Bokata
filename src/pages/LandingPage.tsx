@@ -211,43 +211,56 @@ export default function Page() {
               viewBox="0 0 1000 520"
               preserveAspectRatio="none"
             >
-              <line x1="440" y1="260" x2="700" y2="260" className="bokata-line" />
-              <line x1="440" y1="90" x2="700" y2="260" className="bokata-line" />
-              <line x1="440" y1="430" x2="700" y2="260" className="bokata-line" />
+              <defs>
+                <marker
+                  id="bokata-arrow"
+                  markerWidth="10"
+                  markerHeight="10"
+                  refX="9"
+                  refY="3"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <path d="M0,0 L9,3 L0,6 Z" fill="#ff5da2" />
+                </marker>
+              </defs>
+              <path d="M440 90 C560 110, 620 140, 720 180" className="bokata-line" markerEnd="url(#bokata-arrow)" />
+              <path d="M440 260 C560 260, 620 260, 720 260" className="bokata-line" markerEnd="url(#bokata-arrow)" />
+              <path d="M440 430 C560 410, 620 380, 720 340" className="bokata-line" markerEnd="url(#bokata-arrow)" />
             </svg>
             <div className="flex flex-col md:flex-row gap-6 items-center md:items-stretch relative z-10">
               <div className="w-full md:w-[55%] md:h-[520px] flex flex-col gap-4 md:gap-5">
                 <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center md:flex-1">
-                  <h4 className="text-xl md:text-2xl font-extrabold mb-2 text-pink-300">1️⃣  Aldrig fler missade bokningar 📅</h4>
-                  <p className="text-lg font-semibold text-white">
-                    Bokäta tar emot reservationer 24/7 och placerar gäster automatiskt vid rätt bord.
-                    Du förlorar inga bokningar även när du inte hinner svara.
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center md:flex-1">
-                  <h4 className="text-xl md:text-2xl font-extrabold mb-2 text-pink-300">2️⃣  Slipp svara på samma frågor hela tiden 💬</h4>
-                  <p className="text-lg font-semibold text-white">
-                    Menyer, parkering, barnstol, hundar…
-                    Bokäta svarar direkt åt dig, dygnet runt. Mindre avbrott. Mer fokus på service.
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center md:flex-1">
-                  <h4 className="text-xl md:text-2xl font-extrabold mb-2 text-pink-300">3️⃣  Få gäster att komma tillbaka 🔁</h4>
-                  <p className="text-lg font-semibold text-white">
-                    Efter besöket följer Bokäta upp automatiskt.
-                    Omdömen, återkoppling och erbjudanden: helt enligt dina inställningar.
-                  </p>
-                </div>
+                <h4 className="text-xl md:text-2xl font-extrabold mb-2 text-pink-300">1️⃣   Aldrig fler missade bokningar 📅</h4>
+                <p className="text-lg font-semibold text-white">
+                  Bokäta tar emot reservationer 24/7 och placerar gäster automatiskt vid rätt bord.
+                  Du missar inga bokningar, även när du inte är tillgänglig.
+                </p>
               </div>
-              <div className="w-full md:w-[45%] flex justify-center md:justify-end">
-                <img
-                  src={bokataPhoto}
-                  alt="Bokäta på mobil"
-                  className="w-full max-w-[360px] md:max-w-none md:h-[520px] object-contain drop-shadow-xl"
-                />
+              <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center md:flex-1">
+                <h4 className="text-xl md:text-2xl font-extrabold mb-2 text-pink-300">2️⃣   Slipp svara på samma frågor hela tiden 💬</h4>
+                <p className="text-lg font-semibold text-white">
+                  Menyer, parkering, barnstol, hundar…
+                  Bokäta svarar direkt åt dig, dygnet runt. Mindre avbrott. Mer fokus på service.
+                </p>
+              </div>
+              <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center md:flex-1">
+                <h4 className="text-xl md:text-2xl font-extrabold mb-2 text-pink-300">3️⃣   Få gäster att komma tillbaka 🔁</h4>
+                <p className="text-lg font-semibold text-white">
+                  Efter besöket följer Bokäta upp automatiskt.
+                  Omdömen, återkoppling och erbjudanden: helt enligt dina inställningar.
+                </p>
               </div>
             </div>
-            <style>{`
+            <div className="w-full md:w-[45%] flex justify-center md:justify-end">
+              <img
+                src={bokataPhoto}
+                alt="Bokäta på mobil"
+                className="w-full max-w-[360px] md:max-w-none md:h-[520px] md:translate-x-6 object-contain drop-shadow-xl"
+              />
+            </div>
+          </div>
+          <style>{`
               .bokata-line {
                 stroke: #ff5da2;
                 stroke-width: 3;
