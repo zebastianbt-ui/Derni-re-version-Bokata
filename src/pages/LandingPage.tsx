@@ -211,9 +211,9 @@ export default function Page() {
               viewBox="0 0 1000 520"
               preserveAspectRatio="none"
             >
-              <line x1="440" y1="90" x2="700" y2="90" className="bokata-line" />
               <line x1="440" y1="260" x2="700" y2="260" className="bokata-line" />
-              <line x1="440" y1="430" x2="700" y2="430" className="bokata-line" />
+              <line x1="440" y1="90" x2="700" y2="260" className="bokata-line" />
+              <line x1="440" y1="430" x2="700" y2="260" className="bokata-line" />
             </svg>
             <div className="flex flex-col md:flex-row gap-6 items-center md:items-stretch relative z-10">
               <div className="w-full md:w-[55%] md:h-[520px] flex flex-col gap-4 md:gap-5">
@@ -252,13 +252,7 @@ export default function Page() {
                 stroke: #ff5da2;
                 stroke-width: 3;
                 stroke-linecap: round;
-                stroke-dasharray: 6 10;
-                animation: bokata-dash 5s linear infinite;
                 opacity: 0.9;
-              }
-              @keyframes bokata-dash {
-                from { stroke-dashoffset: 0; }
-                to { stroke-dashoffset: -64; }
               }
             `}</style>
           </div>
