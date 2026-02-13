@@ -203,37 +203,39 @@ export default function Page() {
         </div>
       </section>
 
-      {/* Problem Section */}
-      <section className="bg-white px-6 py-10 text-center">
-        <div className="max-w-6xl mx-auto">
-          <h3 className="text-2xl md:text-3xl font-semibold text-violet-700 mb-4 md:whitespace-nowrap uppercase tracking-wide">
-            Hinner du inte svara på mejl, hantera bokningar eller följa upp gäster?
-          </h3>
-        </div>
-      </section>
-
-      {/* Solution Section removed */}
-
       <section className="bg-white px-6 py-10">
-        <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-3 items-center">
-          <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
-            <h4 className="text-lg font-semibold mb-2 text-pink-100">Tänk dig en assistent som hjälper dig 24/7 💬</h4>
-            <p className="text-lg font-semibold text-white">
-              Gästen får svar direkt, med förslag och bekräftelse.
-            </p>
-          </div>
-          <div className="w-full flex justify-center">
-            <img
-              src={bokataPhoto}
-              alt="Bokäta på mobil"
-              className="w-full max-w-[320px] md:max-w-[360px] h-auto drop-shadow-xl"
-            />
-          </div>
-          <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
-            <h4 className="text-lg font-semibold mb-2 text-pink-100">Få fler återbesök 💵</h4>
-            <p className="text-lg font-semibold text-white">
-              Efter besöket ber Bokäta om omdömen och lockar gästen tillbaka.
-            </p>
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col md:flex-row gap-6 items-center md:items-stretch">
+            <div className="w-full md:w-[55%] md:h-[520px] flex flex-col gap-4 md:gap-5">
+              <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center md:flex-1">
+                <h4 className="text-lg font-semibold mb-2 text-pink-100">1️⃣ Aldrig fler missade bokningar 📅</h4>
+                <p className="text-lg font-semibold text-white">
+                  Bokäta tar emot reservationer 24/7 och placerar gäster automatiskt vid rätt bord.
+                  Du förlorar inga bokningar även när du inte hinner svara.
+                </p>
+              </div>
+              <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center md:flex-1">
+                <h4 className="text-lg font-semibold mb-2 text-pink-100">2️⃣ Slipp svara på samma frågor hela tiden 💬</h4>
+                <p className="text-lg font-semibold text-white">
+                  Menyer, parkering, barnstol, hundar…
+                  Bokäta svarar direkt åt dig, dygnet runt. Mindre avbrott. Mer fokus på service.
+                </p>
+              </div>
+              <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center md:flex-1">
+                <h4 className="text-lg font-semibold mb-2 text-pink-100">3️⃣ Få gäster att komma tillbaka 🔁</h4>
+                <p className="text-lg font-semibold text-white">
+                  Efter besöket följer Bokäta upp automatiskt.
+                  Omdömen, återkoppling och erbjudanden: helt enligt dina inställningar.
+                </p>
+              </div>
+            </div>
+            <div className="w-full md:w-[45%] flex justify-center md:justify-end">
+              <img
+                src={bokataPhoto}
+                alt="Bokäta på mobil"
+                className="w-full max-w-[360px] md:max-w-none md:h-[520px] object-contain drop-shadow-xl"
+              />
+            </div>
           </div>
         </div>
       </section>
