@@ -208,21 +208,21 @@ export default function Page() {
           <div className="flex flex-col md:flex-row gap-6 items-center md:items-stretch">
             <div className="w-full md:w-[55%] md:h-[520px] flex flex-col gap-4 md:gap-5">
               <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center md:flex-1">
-                <h4 className="text-xl md:text-2xl font-extrabold mb-2 text-pink-200">1️⃣ Aldrig fler missade bokningar 📅</h4>
+                <h4 className="text-xl md:text-2xl font-extrabold mb-2 text-pink-300">1️⃣  Aldrig fler missade bokningar 📅</h4>
                 <p className="text-lg font-semibold text-white">
                   Bokäta tar emot reservationer 24/7 och placerar gäster automatiskt vid rätt bord.
                   Du förlorar inga bokningar även när du inte hinner svara.
                 </p>
               </div>
               <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center md:flex-1">
-                <h4 className="text-xl md:text-2xl font-extrabold mb-2 text-pink-200">2️⃣ Slipp svara på samma frågor hela tiden 💬</h4>
+                <h4 className="text-xl md:text-2xl font-extrabold mb-2 text-pink-300">2️⃣  Slipp svara på samma frågor hela tiden 💬</h4>
                 <p className="text-lg font-semibold text-white">
                   Menyer, parkering, barnstol, hundar…
                   Bokäta svarar direkt åt dig, dygnet runt. Mindre avbrott. Mer fokus på service.
                 </p>
               </div>
               <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center md:flex-1">
-                <h4 className="text-xl md:text-2xl font-extrabold mb-2 text-pink-200">3️⃣ Få gäster att komma tillbaka 🔁</h4>
+                <h4 className="text-xl md:text-2xl font-extrabold mb-2 text-pink-300">3️⃣  Få gäster att komma tillbaka 🔁</h4>
                 <p className="text-lg font-semibold text-white">
                   Efter besöket följer Bokäta upp automatiskt.
                   Omdömen, återkoppling och erbjudanden: helt enligt dina inställningar.
