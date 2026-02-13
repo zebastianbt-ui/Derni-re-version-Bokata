@@ -224,9 +224,9 @@ export default function Page() {
                   <path d="M0,0 L9,3 L0,6 Z" fill="#ff5da2" />
                 </marker>
               </defs>
-              <path d="M440 90 C560 110, 620 140, 720 180" className="bokata-line" markerEnd="url(#bokata-arrow)" />
-              <path d="M440 260 C560 260, 620 260, 720 260" className="bokata-line" markerEnd="url(#bokata-arrow)" />
-              <path d="M440 430 C560 410, 620 380, 720 340" className="bokata-line" markerEnd="url(#bokata-arrow)" />
+              <path d="M440 90 C520 110, 580 150, 630 190 C655 210, 655 240, 630 260 C600 285, 560 280, 520 260 C600 260, 660 260, 720 260" className="bokata-line bokata-line-1" markerEnd="url(#bokata-arrow)" />
+              <path d="M440 260 C520 260, 580 260, 630 260 C655 260, 660 265, 670 275 C680 290, 675 305, 660 312 C630 325, 580 315, 540 290 C600 290, 660 285, 720 260" className="bokata-line bokata-line-2" markerEnd="url(#bokata-arrow)" />
+              <path d="M440 430 C520 410, 580 380, 630 340 C655 320, 655 300, 630 280 C600 255, 560 260, 520 280 C600 280, 660 270, 720 260" className="bokata-line bokata-line-3" markerEnd="url(#bokata-arrow)" />
             </svg>
             <div className="flex flex-col md:flex-row gap-6 items-center md:items-stretch relative z-10">
               <div className="w-full md:w-[55%] md:h-[520px] flex flex-col gap-4 md:gap-5">
@@ -256,7 +256,7 @@ export default function Page() {
               <img
                 src={bokataPhoto}
                 alt="Bokäta på mobil"
-                className="w-full max-w-[360px] md:max-w-none md:h-[520px] md:translate-x-6 object-contain drop-shadow-xl"
+                className="w-full max-w-[360px] md:max-w-none md:h-[520px] md:translate-x-8 object-contain drop-shadow-xl"
               />
             </div>
           </div>
@@ -266,6 +266,17 @@ export default function Page() {
                 stroke-width: 3;
                 stroke-linecap: round;
                 opacity: 0.9;
+                fill: none;
+                stroke-dasharray: 240;
+                stroke-dashoffset: 240;
+                animation: bokata-draw 5.5s ease-in-out infinite;
+              }
+              .bokata-line-2 { animation-delay: 0.4s; }
+              .bokata-line-3 { animation-delay: 0.8s; }
+              @keyframes bokata-draw {
+                0% { stroke-dashoffset: 240; }
+                45% { stroke-dashoffset: 0; }
+                100% { stroke-dashoffset: -240; }
               }
             `}</style>
           </div>
