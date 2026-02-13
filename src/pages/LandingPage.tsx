@@ -1,6 +1,7 @@
 import React from "react";
 import { useLocation } from "react-router-dom";
 import forkTransparent from "../assets/fork-transparent.png";
+import bokataPhoto from "../assets/bokata-photo.png";
 
 const COOKIE_DEFAULT = { necessary: true, analytics: false, marketing: false, version: 1 };
 type CookiePrefs = typeof COOKIE_DEFAULT;
@@ -184,22 +185,28 @@ export default function Page() {
             <br />
             och fyller dina bord utan krångel.
           </p>
-          
-          <div className="mt-6 mb-6 flex flex-col sm:flex-row gap-3 justify-center">
-            <a href="#pricing" onClick={(e)=>onAnchorClick(e,'#pricing')} className="inline-flex justify-center items-center px-6 py-3 rounded-full bg-pink-600 text-white font-semibold text-lg md:text-xl hover:bg-pink-700">
-              Kom igång nu
-            </a>
+
+          <div className="mt-10 md:mt-12">
+            <div className="mb-6 flex flex-col sm:flex-row gap-3 justify-center">
+              <a
+                href="#pricing"
+                onClick={(e) => onAnchorClick(e, "#pricing")}
+                className="inline-flex justify-center items-center px-6 py-3 rounded-full bg-pink-600 text-white font-semibold text-lg md:text-xl hover:bg-pink-700"
+              >
+                Kom igång nu
+              </a>
+            </div>
+            <p className="mt-6 text-lg md:text-xl opacity-90">
+              🌟 14 dagar gratis. Inget kort krävs.
+            </p>
           </div>
-          <p className="mt-8 text-lg md:text-xl opacity-90">
-            🌟 14 dagar gratis. Inget kort krävs.
-          </p>
         </div>
       </section>
 
       {/* Problem Section */}
       <section className="bg-white px-6 py-10 text-center">
         <div className="max-w-6xl mx-auto">
-          <h3 className="text-2xl md:text-3xl font-semibold text-gray-900 mb-4 md:whitespace-nowrap">
+          <h3 className="text-2xl md:text-3xl font-semibold text-violet-700 mb-4 md:whitespace-nowrap uppercase tracking-wide">
             Hinner du inte svara på mejl, hantera bokningar eller följa upp gäster?
           </h3>
         </div>
@@ -208,39 +215,25 @@ export default function Page() {
       {/* Solution Section removed */}
 
       <section className="bg-white px-6 py-10">
-        <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-3">
-          <div className="space-y-4">
-            <p className="text-gray-700 text-lg md:text-xl font-semibold text-center md:text-left">
-              Tänk dig en assistent som svarar på gästernas frågor 24/7.
+        <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-3 items-center">
+          <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
+            <h4 className="text-lg font-semibold mb-2 text-pink-100">Tänk dig en assistent som hjälper dig 24/7 💬</h4>
+            <p className="text-lg font-semibold text-white">
+              Gästen får svar direkt, med förslag och bekräftelse.
             </p>
-            <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
-              <h4 className="text-lg font-semibold mb-2 text-pink-600 uppercase">Ställ in kapacitet & tider</h4>
-              <p className="text-lg font-semibold text-white">
-                Du bestämmer öppettider, sittningar och bord. Bokäta sköter resten.
-              </p>
-            </div>
           </div>
-          <div className="space-y-4">
-            <div className="w-full flex justify-center">
-              {/* Foto: lägg till bilden på handen som skriver på iPhone här. */}
-            </div>
-            <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
-              <h4 className="text-lg font-semibold mb-2 text-pink-600 uppercase">Bokningar utan stress</h4>
-              <p className="text-lg font-semibold text-white">
-                Gästen får svar direkt, med förslag och bekräftelse även när du inte hinner.
-              </p>
-            </div>
+          <div className="w-full flex justify-center">
+            <img
+              src={bokataPhoto}
+              alt="Bokäta på mobil"
+              className="w-full max-w-[320px] md:max-w-[360px] h-auto drop-shadow-xl"
+            />
           </div>
-          <div className="space-y-4">
-            <p className="text-gray-700 text-lg md:text-xl font-semibold text-center md:text-right">
-              BOKÄTA tar hand om det där åt dig. Mindre stress. Fler bokningar.
+          <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
+            <h4 className="text-lg font-semibold mb-2 text-pink-100">Få fler återbesök 💵</h4>
+            <p className="text-lg font-semibold text-white">
+              Efter besöket ber Bokäta om omdömen och lockar gästen tillbaka.
             </p>
-            <div className="rounded-2xl bg-gradient-to-br from-[#2b0a4f] via-[#4b0c73] to-[#c0167a] text-white p-6 shadow-lg border-[3px] border-pink-400 text-center">
-              <h4 className="text-lg font-semibold mb-2 text-pink-600 uppercase">Få fler återbesök</h4>
-              <p className="text-lg font-semibold text-white">
-                Efter besöket ber Bokäta om omdömen och lockar gästen tillbaka.
-              </p>
-            </div>
           </div>
         </div>
       </section>
