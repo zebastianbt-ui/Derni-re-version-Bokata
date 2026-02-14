@@ -33,7 +33,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const price2Year = getEnv("STRIPE_PRICE_2YEAR");
   const priceIdDirect = getEnv("STRIPE_PRICE_ID");
   const siteUrl = getEnv("SITE_URL") || "https://www.bokata.se";
-  const successUrl = getEnv("STRIPE_SUCCESS_URL") || `${siteUrl}/?checkout=success`;
+  const successUrl =
+    getEnv("STRIPE_SUCCESS_URL") || `${siteUrl}/api/checkout-complete?session_id={CHECKOUT_SESSION_ID}`;
   const cancelUrl = getEnv("STRIPE_CANCEL_URL") || `${siteUrl}/?checkout=cancel`;
 
   if (!secretKey) {
@@ -75,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       custom_text: {
         submit: {
-          message: "14 dagar gratis · Inget kort krävs · Avsluta när du vill",
+          message: "30 dagar gratis · Inget kort krävs · Avsluta när du vill",
         },
       },
       success_url: successUrl,
