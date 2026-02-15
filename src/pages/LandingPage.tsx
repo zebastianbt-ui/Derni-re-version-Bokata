@@ -643,6 +643,18 @@ function DashboardMock() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="px-4 sm:px-6 md:px-8 pt-4">
+        <div className="flex flex-wrap gap-2">
+          <span className="px-3 py-1.5 rounded-full text-xs font-semibold border bg-white text-pink-700 border-pink-300">
+            Översikt
+          </span>
+          <span className="px-3 py-1.5 rounded-full text-xs font-semibold border bg-pink-100 text-pink-700 border-pink-200">
+            Tableplan
+          </span>
+        </div>
+      </div>
+
       {/* Stat cards */}
       <div className="px-4 sm:px-6 md:px-8 py-4 grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         {stats.map((s) => (
