@@ -638,7 +638,15 @@ function DashboardMock() {
           <h2 className="text-4xl sm:text-5xl font-extrabold text-white drop-shadow">Dashboard</h2>
           <p className="text-white/90 text-sm sm:text-base">Övervaka bokningar, gäster och AI‑svar i realtid.</p>
           <div className="mt-4 flex items-center justify-center gap-3">
-            <button className="px-4 py-2 rounded-full bg-pink-600 text-white text-sm font-semibold shadow hover:bg-pink-700">Ny bokning</button>
+            <button className="rounded-full px-5 py-2 text-sm font-semibold text-white bg-pink-600 hover:bg-pink-700 shadow-md ring-1 ring-pink-300">
+              Ny bokning
+            </button>
+            <button className="rounded-full px-5 py-2 text-sm font-semibold text-white/90 bg-white/10 border border-white/20 hover:bg-white/15">
+              Inställningar
+            </button>
+            <button className="rounded-full px-5 py-2 text-sm font-semibold text-white/90 bg-white/10 border border-white/20 hover:bg-white/15">
+              Logga ut
+            </button>
           </div>
         </div>
       </div>
