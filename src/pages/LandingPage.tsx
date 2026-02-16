@@ -181,9 +181,9 @@ export default function Page() {
             <span className="block sm:inline">Den lagar allt annat.</span>
           </h2>
           <p className="text-lg md:text-xl leading-relaxed max-w-2xl mx-auto mb-6">
-            Bokningssystem med AI‑assistenten som sköter bokningar, svarar gäster automatiskt
+            Bokningssystem med AI‑assistenten som sköter bokningar,
             <br />
-            och fyller dina bord utan krångel 24/7.
+            svarar gäster automatiskt och fyller dina bord utan krångel 24/7.
           </p>
 
           <div className="mt-10 md:mt-12">
