@@ -181,9 +181,9 @@ export default function Page() {
             <span className="block sm:inline">Den lagar allt annat.</span>
           </h2>
           <p className="text-lg md:text-xl leading-relaxed max-w-2xl mx-auto mb-6">
-            AI‑assistenten som sköter bokningar, svarar gäster automatiskt
+            Bokningssystem med AI‑assistenten som sköter bokningar, svarar gäster automatiskt
             <br />
-            och fyller dina bord utan krångel.
+            och fyller dina bord utan krångel 24/7.
           </p>
 
           <div className="mt-10 md:mt-12">
@@ -284,19 +284,18 @@ export default function Page() {
       </section>
 
       {/* Dashboard Preview (mock) */}
-      <section className="bg-white px-6 pt-6 pb-10 md:pt-8 md:pb-10">
+      <section className="bg-white px-6 pt-6 pb-6 md:pt-8 md:pb-8">
         <div className="max-w-6xl mx-auto">
           <div className="rounded-2xl overflow-hidden shadow-lg ring-1 ring-pink-100">
             <DashboardMock />
           </div>
-          <p className="text-sm font-semibold text-pink-700 mt-3 text-center tracking-wide">Exempel på dashboard: bokningar, gäster och AI‑svar i realtid.</p>
         </div>
       </section>
 
       {/* Funktioner section removed */}
 
       {/* Pricing Section */}
-      <section className="px-6 py-10" id="pricing">
+      <section className="px-6 pt-6 pb-10 md:pt-8" id="pricing">
         <div className="max-w-6xl mx-auto rounded-3xl overflow-hidden border border-pink-100 shadow-[0_14px_40px_rgba(236,72,153,0.15)]">
           <div className="bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-700 text-white text-center px-6 py-10">
             <h2 className="text-3xl md:text-4xl font-extrabold">Priser</h2>
