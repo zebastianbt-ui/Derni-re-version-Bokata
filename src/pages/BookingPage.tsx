@@ -664,7 +664,7 @@ export default function BookingPage() {
       <main className={`max-w-6xl mx-auto px-4 pt-2 md:pt-8 ${created ? "pb-8" : "pb-12 md:pb-12"}`}>
         {!created ? (
           <section id="booking">
-            <form ref={formRef} onSubmit={submit} className="space-y-10">
+            <form ref={formRef} onSubmit={submit} className="space-y-4 md:space-y-8">
               <div className={`relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen rounded-3xl bg-gradient-to-br from-[#3d015f] via-[#2a0044] to-pink-600 text-white ${SECTION_PAD_Y} ${SECTION_PAD_X} overflow-hidden shadow-lg`}>
                 <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
                   <div className="rounded-3xl border border-violet-200 bg-white p-6 h-full min-h-[440px] flex flex-col">
@@ -729,12 +729,12 @@ export default function BookingPage() {
                       })}
                     </div>
                     <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
-                      <div className="mb-3 flex items-end justify-between gap-3">
+                      <div className="mb-3 flex items-center justify-between gap-3">
                         <div>
                           <div className="text-sm font-semibold text-violet-800">Välj tid</div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <label htmlFor="guests-inline" className="text-sm font-semibold text-gray-600 pr-1">
+                        <div className="flex items-center gap-4">
+                          <label htmlFor="guests-inline" className="text-sm font-semibold text-gray-600 whitespace-nowrap">
                             Gäster
                           </label>
                           <input
@@ -807,7 +807,7 @@ export default function BookingPage() {
                   </div>
 
                   <div>
-                    <div className="rounded-3xl bg-white border border-violet-100 p-6 md:p-8 h-full min-h-[440px] flex flex-col">
+                    <div className="rounded-3xl bg-white border border-violet-100 p-6 md:p-8 flex flex-col">
                       <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4 space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <label className="block">
