@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { createClient } from "@supabase/supabase-js";
 import { rateLimit } from "./_rateLimit";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -22,11 +21,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { message, knowledge, context, history, turnstileToken } = (req.body ?? {}) as {
+  const { message, knowledge, context, history } = (req.body ?? {}) as {
     message?: string;
     knowledge?: string;
     history?: { role: "user" | "assistant"; content: string }[];
-    turnstileToken?: string;
       context?: {
         baseDate?: string;
         nowTime?: string;
@@ -63,50 +61,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const FORCE_OPENAI = true;
-
-  const verifyTurnstile = async (token: string, ip: string) => {
-    const secret = process.env.TURNSTILE_SECRET_KEY;
-    if (!secret) return { ok: false };
-    const body = new URLSearchParams({ secret, response: token });
-    if (ip) body.set("remoteip", ip);
-    const resp = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-    });
-    const data = (await resp.json()) as { success?: boolean };
-    return { ok: !!data?.success };
-  };
-
-  const authHeader = req.headers.authorization || "";
-  const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  let authOk = false;
-  if (bearer) {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-    if (supabaseUrl && anonKey) {
-      const authClient = createClient(supabaseUrl, anonKey, { auth: { persistSession: false } });
-      const { data } = await authClient.auth.getUser(bearer);
-      authOk = !!data?.user;
-    }
-  }
-
-  if (!authOk) {
-    if (!turnstileToken) {
-      res.status(403).json({ error: "Turnstile verification required." });
-      return;
-    }
-    const ip = (() => {
-      const xfwd = req.headers["x-forwarded-for"];
-      const val = Array.isArray(xfwd) ? xfwd[0] : xfwd;
-      return (val || req.socket.remoteAddress || "unknown").split(",")[0].trim();
-    })();
-    const check = await verifyTurnstile(turnstileToken, ip);
-    if (!check.ok) {
-      res.status(403).json({ error: "Turnstile verification failed." });
-      return;
-    }
-  }
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -2150,20 +2104,28 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
     const when = round30(args.time);
     const s = timeToMin(when);
     const e = s + args.durationMin;
-    for (let i = 0; i < args.tables.length; i++) {
-      const id = i + 1;
-      const cap = args.tables[i];
-      if (cap < args.guests) continue;
-      const conflict = args.bookings.some((b) => {
-        if (b.date !== args.date) return false;
-        if (b.tableId !== id) return false;
-        const bs = timeToMin(round30(b.time));
-        const bd = b.durationMin ?? args.durationMin;
-        const be = bs + bd;
-        return overlap(s, e, bs, be);
-      });
-      if (!conflict) return id;
+    const occupied = new Set<number>();
+
+    for (const booking of args.bookings) {
+      if (booking.date !== args.date || booking.tableId == null) continue;
+      const bs = timeToMin(round30(booking.time));
+      const bd = booking.durationMin ?? args.durationMin;
+      const be = bs + bd;
+      if (overlap(s, e, bs, be)) occupied.add(booking.tableId);
     }
+
+    const available = args.tables
+      .map((cap, idx) => ({ id: idx + 1, cap }))
+      .filter((table) => !occupied.has(table.id));
+
+    const single = available.find((table) => table.cap >= args.guests);
+    if (single) return single.id;
+
+    const combinedCapacity = available.reduce((sum, table) => sum + table.cap, 0);
+    if (combinedCapacity >= args.guests) {
+      return available[0]?.id ?? null;
+    }
+
     return null;
   };
 

@@ -2,15 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import forkTransparent from "../assets/fork-transparent.png";
 
-declare global {
-  interface Window {
-    turnstile?: {
-      render: (el: HTMLElement, options: { sitekey: string; callback: (token: string) => void; "expired-callback"?: () => void; "error-callback"?: () => void }) => string | number;
-      reset: (widgetId?: string | number) => void;
-    };
-  }
-}
-
 /**
  * Bokäta – Bokningssida (v2, rosa+lila)
  * Komplett bokningsflöde på svenska.
@@ -333,7 +324,6 @@ export default function BookingPage() {
   const [restaurantSlug, setRestaurantSlug] = useState("demo");
   const [missingRestaurant, setMissingRestaurant] = useState(false);
   const [restaurantName, setRestaurantName] = useState<string | null>(null);
-  const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -384,60 +374,6 @@ export default function BookingPage() {
   const [qaAnswer, setQaAnswer] = useState<string | null>(null);
   const [qaLoading, setQaLoading] = useState(false);
   const [qaHistory, setQaHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
-  const [turnstileToken, setTurnstileToken] = useState("");
-  const [turnstileError, setTurnstileError] = useState<string | null>(null);
-  const turnstileRef = useRef<HTMLDivElement | null>(null);
-  const turnstileWidgetId = useRef<string | number | null>(null);
-  const turnstileLang = "sv";
-
-  useEffect(() => {
-    if (!turnstileSiteKey || typeof window === "undefined") return;
-    if (!turnstileRef.current) return;
-
-    const ensureScript = () =>
-      new Promise<void>((resolve) => {
-        if (window.turnstile) return resolve();
-        const existing = document.querySelector('script[src^="https://challenges.cloudflare.com/turnstile/"]');
-        if (existing) {
-          existing.addEventListener("load", () => resolve(), { once: true });
-          return;
-        }
-        const script = document.createElement("script");
-        script.src = `https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&language=${turnstileLang}`;
-        script.async = true;
-        script.defer = true;
-        script.onload = () => resolve();
-        document.head.appendChild(script);
-      });
-
-    let cancelled = false;
-    ensureScript().then(() => {
-      if (cancelled || !window.turnstile || !turnstileRef.current) return;
-      if (turnstileWidgetId.current != null) return;
-      turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
-        sitekey: turnstileSiteKey,
-        language: turnstileLang,
-        callback: (token) => {
-          setTurnstileToken(token);
-          setTurnstileError(null);
-        },
-        "expired-callback": () => setTurnstileToken(""),
-        "error-callback": () => setTurnstileError("Kunde inte verifiera. Försök igen."),
-      });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [turnstileSiteKey]);
-
-  const consumeTurnstileToken = () => {
-    const token = turnstileToken;
-    setTurnstileToken("");
-    if (window.turnstile && turnstileWidgetId.current != null) {
-      window.turnstile.reset(turnstileWidgetId.current);
-    }
-    return token;
-  };
 
   useEffect(() => {
     let active = true;
@@ -580,7 +516,19 @@ export default function BookingPage() {
     if (isClosedDate(date)) return { capacity: 0, booked: 0, available: 0, canFit: false };
     return mockAvailability(date, time, guests);
   }, [date, time, guests, normalizedHours]);
-  const formReady = Boolean(date && time && guests && name && email);
+  const hasName = name.trim().length > 0;
+  const hasEmail = email.trim().length > 0;
+  const formReady = Boolean(date && time && guests && hasName && hasEmail);
+  const mobileCtaDisabledReason = (() => {
+    if (submitting) return "Skickar bokningen…";
+    if (!date) return "Välj ett datum.";
+    if (!time) return "Välj en tid.";
+    if (!guests || guests < 1) return "Ange antal gäster.";
+    if (!hasName) return "Ange ditt namn.";
+    if (!hasEmail) return "Ange din e‑post.";
+    if (!avail.canFit) return "Tyvärr finns det inte plats för det antalet vid den tiden.";
+    return null;
+  })();
   const [viewMonth, setViewMonth] = useState(() => Number(date.split("-")[1]) - 1);
   const [viewYear, setViewYear] = useState(() => Number(date.split("-")[0]));
 
@@ -598,11 +546,7 @@ export default function BookingPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!date || !time || !guests || !name || !email) return;
-    if (turnstileSiteKey && !turnstileToken) {
-      setSubmitError("Bekräfta att du inte är en robot.");
-      return;
-    }
+    if (!date || !time || !guests || !name.trim() || !email.trim()) return;
     setSubmitting(true);
     setSubmitError(null);
     const resv: Reservation = {
@@ -627,7 +571,6 @@ export default function BookingPage() {
       return;
     }
     try {
-      const token = turnstileSiteKey ? consumeTurnstileToken() : "";
       const r = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -640,7 +583,6 @@ export default function BookingPage() {
           email: email.trim(),
           phone: phone.trim() || null,
           notes: notes.trim() || null,
-          turnstileToken: token || undefined,
         }),
       });
       const data = await r.json();
@@ -658,15 +600,10 @@ export default function BookingPage() {
   const askAi = async () => {
     const text = qaQuestion.trim();
     if (!text) return;
-    if (turnstileSiteKey && !turnstileToken) {
-      setQaAnswer("Bekräfta att du inte är en robot.");
-      return;
-    }
     setQaLoading(true);
     setQaAnswer(null);
     try {
       const nextHistory = [...qaHistory, { role: "user", content: text }];
-      const token = turnstileSiteKey ? consumeTurnstileToken() : "";
       const r = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -674,7 +611,6 @@ export default function BookingPage() {
           message: text,
           knowledge: publicSettings?.knowledge_public ?? "",
           history: nextHistory,
-          turnstileToken: token || undefined,
           context: {
             baseDate: toISODateInputValue(),
             nowTime: `${new Date().getHours().toString().padStart(2, "0")}:${new Date().getMinutes().toString().padStart(2, "0")}`,
@@ -793,19 +729,11 @@ export default function BookingPage() {
                     </div>
                     <button
                       type="submit"
-                      disabled={!date || !time || !guests || !name || !email || submitting || !avail.canFit || (turnstileSiteKey ? !turnstileToken : false)}
-                      className="mt-4 w-full px-5 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-700 via-purple-600 to-fuchsia-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
+                      disabled={!formReady || submitting || !avail.canFit}
+                      className="mt-4 hidden md:block w-full px-5 py-3 rounded-2xl font-semibold text-white bg-gradient-to-r from-violet-700 via-purple-600 to-fuchsia-600 disabled:opacity-50 shadow-md hover:shadow-lg transition"
                     >
                       {submitting ? "Skickar…" : "BOKA"}
                     </button>
-                    {turnstileSiteKey ? (
-                      <div className="mt-4 flex flex-col items-center justify-center rounded-2xl border border-violet-200 bg-white/80 px-4 py-3">
-                        <div ref={turnstileRef} className="min-h-[65px]" />
-                        {turnstileError ? (
-                          <div className="mt-2 text-xs text-rose-600">{turnstileError}</div>
-                        ) : null}
-                      </div>
-                    ) : null}
                     {submitError ? (
                       <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 text-center">
                         {submitError}
@@ -856,7 +784,7 @@ export default function BookingPage() {
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 placeholder="För- och efternamn"
-                                className="mt-1.5 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2.5 text-sm font-semibold text-gray-900 placeholder:text-gray-400"
+                                className="mt-1.5 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2.5 text-base font-semibold text-gray-900 placeholder:text-gray-400"
                               />
                             </label>
                             <label className="block">
@@ -867,7 +795,7 @@ export default function BookingPage() {
                                 max={16}
                                 value={guests}
                                 onChange={(e) => setGuests(Number(e.target.value))}
-                                className="mt-1.5 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2.5 text-sm font-semibold text-gray-900"
+                                className="mt-1.5 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2.5 text-base font-semibold text-gray-900"
                               />
                             </label>
                           </div>
@@ -878,7 +806,7 @@ export default function BookingPage() {
                               value={email}
                               onChange={(e) => setEmail(e.target.value)}
                               placeholder="namn@example.com"
-                              className="mt-1.5 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2.5 text-sm font-semibold text-gray-900 placeholder:text-gray-400"
+                              className="mt-1.5 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2.5 text-base font-semibold text-gray-900 placeholder:text-gray-400"
                             />
                           </label>
                           <label className="block">
@@ -888,7 +816,7 @@ export default function BookingPage() {
                               value={notes}
                               onChange={(e) => setNotes(e.target.value)}
                               placeholder="Allergier, barnvagn…"
-                              className="mt-1.5 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2.5 text-sm font-semibold text-gray-900 placeholder:text-gray-400"
+                              className="mt-1.5 w-full rounded-xl border-gray-300 focus:border-violet-400 focus:ring-violet-400 px-4 py-2.5 text-base font-semibold text-gray-900 placeholder:text-gray-400"
                             />
                           </label>
                           {bookingMessage ? (
@@ -1008,11 +936,17 @@ export default function BookingPage() {
 
       {!created && (
         <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden">
-          <div className="mx-auto max-w-5xl px-4 pb-4">
+          <div
+            className="mx-auto max-w-5xl px-4"
+            style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
+          >
             <div className="rounded-2xl border border-white/10 bg-white/90 backdrop-blur shadow-lg p-3 flex items-center justify-between">
               <div className="text-sm">
                 <div className="font-semibold text-gray-800">Din bokning</div>
                 <div className="text-xs text-gray-600">{date} • {time || "välj tid"} • {guests} gäster</div>
+                {mobileCtaDisabledReason ? (
+                  <div className="mt-1 text-[11px] text-rose-600">{mobileCtaDisabledReason}</div>
+                ) : null}
               </div>
               <button
                 type="button"

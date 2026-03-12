@@ -55,18 +55,257 @@ const pickPeriodForDate = (periods: any[], iso: string) => {
 };
 const normalizeTime = (t: string) => (t?.length >= 5 ? t.slice(0, 5) : t);
 
-const verifyTurnstile = async (token: string, ip: string) => {
-  const secret = getEnv("TURNSTILE_SECRET_KEY");
-  if (!secret) return { ok: false, error: "Missing TURNSTILE_SECRET_KEY" };
-  const body = new URLSearchParams({ secret, response: token });
-  if (ip) body.set("remoteip", ip);
-  const resp = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
+type FloorplanTable = {
+  id: number;
+  seats: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  neighbors: number[];
+};
+
+type AssignedTableBlock = {
+  tableIds: number[];
+  startMin: number;
+  endMin: number;
+};
+
+const parseTableNumber = (label?: string | null) => {
+  if (!label) return null;
+  const match = label.match(/\d+/);
+  if (!match) return null;
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const defaultSizeForSeats = (seats: number) => {
+  if (seats <= 2) return { w: 80, h: 60 };
+  if (seats <= 4) return { w: 90, h: 60 };
+  if (seats <= 6) return { w: 110, h: 70 };
+  if (seats <= 8) return { w: 130, h: 80 };
+  return { w: 150, h: 90 };
+};
+
+const asFiniteNumber = (value: unknown, fallback: number) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const tableCenter = (table: Pick<FloorplanTable, "x" | "y" | "w" | "h">) => ({
+  x: table.x + table.w / 2,
+  y: table.y + table.h / 2,
+});
+
+const centerDistance = (a: Pick<FloorplanTable, "x" | "y" | "w" | "h">, b: Pick<FloorplanTable, "x" | "y" | "w" | "h">) => {
+  const ac = tableCenter(a);
+  const bc = tableCenter(b);
+  return Math.hypot(ac.x - bc.x, ac.y - bc.y);
+};
+
+const areTablesAdjacent = (a: FloorplanTable, b: FloorplanTable) => {
+  const horizontalGap = Math.min(Math.abs(a.x + a.w - b.x), Math.abs(b.x + b.w - a.x));
+  const verticalGap = Math.min(Math.abs(a.y + a.h - b.y), Math.abs(b.y + b.h - a.y));
+  const horizontalOverlap = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+  const verticalOverlap = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  const edgeGap = 42;
+  const overlapTolerance = 14;
+  const nearHorizontally = horizontalGap <= edgeGap && verticalOverlap >= -overlapTolerance;
+  const nearVertically = verticalGap <= edgeGap && horizontalOverlap >= -overlapTolerance;
+  const distanceLimit = Math.max(a.w, a.h, b.w, b.h) * 1.8;
+  const nearCenter = centerDistance(a, b) <= distanceLimit;
+  return nearHorizontally || nearVertically || nearCenter;
+};
+
+const buildPlanTables = (planTables: Array<{ seats?: number; x?: number; y?: number; w?: number; h?: number; label?: string }> | undefined) => {
+  if (!Array.isArray(planTables) || !planTables.length) return [] as FloorplanTable[];
+
+  const byId = new Map<number, FloorplanTable>();
+  planTables.forEach((table, idx) => {
+    const id = parseTableNumber(table.label) ?? idx + 1;
+    if (byId.has(id)) return;
+    const seats = Math.max(0, Number(table.seats) || 0);
+    if (!seats) return;
+    const defaults = defaultSizeForSeats(seats);
+    byId.set(id, {
+      id,
+      seats,
+      x: asFiniteNumber(table.x, idx * (defaults.w + 20)),
+      y: asFiniteNumber(table.y, 0),
+      w: Math.max(40, asFiniteNumber(table.w, defaults.w)),
+      h: Math.max(40, asFiniteNumber(table.h, defaults.h)),
+      neighbors: [],
+    });
   });
-  const data = (await resp.json()) as { success?: boolean };
-  return { ok: !!data?.success, error: data?.success ? null : "Turnstile failed" };
+
+  const tables = Array.from(byId.values()).sort((a, b) => a.id - b.id);
+  if (tables.length <= 1) return tables;
+
+  const links = new Map<number, Set<number>>();
+  tables.forEach((table) => links.set(table.id, new Set<number>()));
+
+  for (let i = 0; i < tables.length; i += 1) {
+    for (let j = i + 1; j < tables.length; j += 1) {
+      const a = tables[i];
+      const b = tables[j];
+      if (!areTablesAdjacent(a, b)) continue;
+      links.get(a.id)?.add(b.id);
+      links.get(b.id)?.add(a.id);
+    }
+  }
+
+  tables.forEach((table) => {
+    const neighbors = links.get(table.id);
+    if (!neighbors || neighbors.size || tables.length <= 1) return;
+    let nearest: FloorplanTable | null = null;
+    let nearestDist = Number.POSITIVE_INFINITY;
+    for (const other of tables) {
+      if (other.id === table.id) continue;
+      const d = centerDistance(table, other);
+      if (d < nearestDist) {
+        nearest = other;
+        nearestDist = d;
+      }
+    }
+    if (nearest) {
+      neighbors.add(nearest.id);
+      links.get(nearest.id)?.add(table.id);
+    }
+  });
+
+  return tables.map((table) => ({
+    ...table,
+    neighbors: Array.from(links.get(table.id) ?? []).sort((a, b) => a - b),
+  }));
+};
+
+const chooseBestTableGroup = (args: {
+  tables: FloorplanTable[];
+  guests: number;
+  preferredTableId?: number | null;
+  startMin: number;
+  endMin: number;
+  assigned: AssignedTableBlock[];
+}) => {
+  if (!args.tables.length) return null;
+
+  const conflictingTableIds = new Set<number>();
+  for (const block of args.assigned) {
+    if (!overlap(args.startMin, args.endMin, block.startMin, block.endMin)) continue;
+    block.tableIds.forEach((id) => conflictingTableIds.add(id));
+  }
+
+  const available = args.tables.filter((table) => !conflictingTableIds.has(table.id));
+  if (!available.length) return null;
+
+  const availableById = new Map<number, FloorplanTable>();
+  available.forEach((table) => availableById.set(table.id, table));
+
+  const sortedCaps = available.map((table) => table.seats).sort((a, b) => b - a);
+  let maxCapacity = 0;
+  let minNeeded = 0;
+  for (const cap of sortedCaps) {
+    maxCapacity += cap;
+    minNeeded += 1;
+    if (maxCapacity >= args.guests) break;
+  }
+  if (maxCapacity < args.guests) return null;
+
+  const maxGroupSize = Math.min(8, available.length, Math.max(minNeeded + 1, 2));
+
+  const tableSpread = (ids: number[]) => {
+    const points = ids.map((id) => availableById.get(id)).filter(Boolean) as FloorplanTable[];
+    if (points.length <= 1) return 0;
+    const minX = Math.min(...points.map((table) => table.x));
+    const maxX = Math.max(...points.map((table) => table.x + table.w));
+    const minY = Math.min(...points.map((table) => table.y));
+    const maxY = Math.max(...points.map((table) => table.y + table.h));
+    return (maxX - minX) + (maxY - minY);
+  };
+
+  const candidateScore = (ids: number[]) => {
+    const seats = ids.reduce((sum, id) => sum + (availableById.get(id)?.seats ?? 0), 0);
+    const overflow = seats - args.guests;
+    const missesPreferred =
+      args.preferredTableId == null ? 0 : ids.includes(args.preferredTableId) ? 0 : 1;
+    return {
+      missesPreferred,
+      overflow,
+      size: ids.length,
+      spread: tableSpread(ids),
+    };
+  };
+
+  const isBetter = (a: number[], b: number[] | null) => {
+    if (!b) return true;
+    const sa = candidateScore(a);
+    const sb = candidateScore(b);
+    if (sa.missesPreferred !== sb.missesPreferred) return sa.missesPreferred < sb.missesPreferred;
+    if (sa.overflow !== sb.overflow) return sa.overflow < sb.overflow;
+    if (sa.size !== sb.size) return sa.size < sb.size;
+    if (sa.spread !== sb.spread) return sa.spread < sb.spread;
+    return a.join(",") < b.join(",");
+  };
+
+  let bestGroup: number[] | null = null;
+  const seen = new Set<string>();
+  const explored = new Set<string>();
+
+  const evaluateCandidate = (ids: number[], seats: number) => {
+    if (seats < args.guests) return;
+    const sorted = [...ids].sort((a, b) => a - b);
+    const key = sorted.join(",");
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (isBetter(sorted, bestGroup)) bestGroup = sorted;
+  };
+
+  const sortedStarts = [...available].sort((a, b) => {
+    const aPref = args.preferredTableId != null && a.id === args.preferredTableId ? 0 : 1;
+    const bPref = args.preferredTableId != null && b.id === args.preferredTableId ? 0 : 1;
+    if (aPref !== bPref) return aPref - bPref;
+    if (a.seats !== b.seats) return b.seats - a.seats;
+    return a.id - b.id;
+  });
+
+  const dfs = (group: number[], seats: number, frontier: Set<number>) => {
+    const groupKey = [...group].sort((a, b) => a - b).join(",");
+    if (explored.has(groupKey)) return;
+    explored.add(groupKey);
+
+    evaluateCandidate(group, seats);
+    if (group.length >= maxGroupSize) return;
+
+    const nextCandidates = Array.from(frontier)
+      .map((id) => availableById.get(id))
+      .filter(Boolean)
+      .sort((a, b) => {
+        const aPref = args.preferredTableId != null && a.id === args.preferredTableId ? 0 : 1;
+        const bPref = args.preferredTableId != null && b.id === args.preferredTableId ? 0 : 1;
+        if (aPref !== bPref) return aPref - bPref;
+        if (a.seats !== b.seats) return b.seats - a.seats;
+        return a.id - b.id;
+      }) as FloorplanTable[];
+
+    for (const next of nextCandidates) {
+      if (group.includes(next.id)) continue;
+      const nextGroup = [...group, next.id];
+      const nextFrontier = new Set<number>(frontier);
+      nextFrontier.delete(next.id);
+      for (const neighborId of next.neighbors) {
+        if (!availableById.has(neighborId) || nextGroup.includes(neighborId)) continue;
+        nextFrontier.add(neighborId);
+      }
+      dfs(nextGroup, seats + next.seats, nextFrontier);
+    }
+  };
+
+  for (const start of sortedStarts) {
+    const frontier = new Set<number>(start.neighbors.filter((id) => availableById.has(id)));
+    dfs([start.id], start.seats, frontier);
+  }
+
+  return bestGroup;
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -112,25 +351,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     email?: string;
     phone?: string | null;
     notes?: string | null;
-    turnstileToken?: string;
   };
-  const turnstileToken = (req.body as { turnstileToken?: string })?.turnstileToken ?? "";
 
   if (!restaurantId || !date || !time || !guests || !name || !email) {
     res.status(400).json({ error: "Missing booking fields" });
     return;
   }
   const normalizedEmail = email.trim().toLowerCase();
-
-  if (!turnstileToken) {
-    res.status(403).json({ error: "Turnstile verification required." });
-    return;
-  }
-  const turnstile = await verifyTurnstile(turnstileToken, ip);
-  if (!turnstile.ok) {
-    res.status(403).json({ error: "Turnstile verification failed." });
-    return;
-  }
 
   const { data: settings } = await supabase
     .from("booking_public_settings")
@@ -239,11 +466,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .eq("restaurant_id", restaurantId)
     .maybeSingle();
 
-  const planTables = (floorplanRow as any)?.layout?.tables as Array<{ seats?: number }> | undefined;
-  const tables =
-    Array.isArray(planTables) && planTables.length
-      ? planTables.map((t, i) => ({ id: i + 1, seats: Number(t.seats) || 0 })).filter((t) => t.seats > 0)
-      : [];
+  const planTables = (floorplanRow as any)?.layout?.tables as
+    | Array<{ seats?: number; x?: number; y?: number; w?: number; h?: number; label?: string }>
+    | undefined;
+  const tables = buildPlanTables(planTables);
 
   if (tables.length) {
     const existing = (sameDayBookings ?? []).map((b: any) => ({
@@ -253,52 +479,72 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       tableId: b.table_id ?? null,
     }));
 
-    const assigned: Array<{ tableId: number; time: string; guests: number; durationMin: number }> = [];
+    const tableMap = new Map<number, FloorplanTable>();
+    tables.forEach((table) => tableMap.set(table.id, table));
 
-    for (const b of existing) {
-      if (b.tableId) {
-        assigned.push({ tableId: b.tableId, time: b.time, guests: b.guests, durationMin: b.durationMin });
+    const assigned: AssignedTableBlock[] = [];
+    const needsAssign: Array<{ time: string; guests: number; durationMin: number; tableId: number | null }> = [];
+
+    for (const booking of existing) {
+      const bs = timeToMin(booking.time);
+      if (!Number.isFinite(bs)) {
+        needsAssign.push(booking);
+        continue;
       }
+      const be = bs + booking.durationMin;
+      if (booking.tableId != null) {
+        const fixedTableId = booking.tableId;
+        const fixedTable = tableMap.get(fixedTableId);
+        const canStayFixed =
+          !!fixedTable &&
+          fixedTable.seats >= booking.guests &&
+          !assigned.some((block) =>
+            overlap(bs, be, block.startMin, block.endMin) && block.tableIds.includes(fixedTableId)
+          );
+        if (canStayFixed) {
+          assigned.push({ tableIds: [fixedTableId], startMin: bs, endMin: be });
+          continue;
+        }
+      }
+      needsAssign.push(booking);
     }
 
-    const needsAssign = existing
-      .filter((b) => !b.tableId)
-      .sort((a, b) => b.guests - a.guests || timeToMin(a.time) - timeToMin(b.time));
+    needsAssign.sort((a, b) => b.guests - a.guests || timeToMin(a.time) - timeToMin(b.time));
 
-    let overbooked = false;
-    const canUseTable = (tableId: number, t: string, dur: number) => {
-      const s = timeToMin(t);
-      const e = s + dur;
-      return !assigned.some((x) => {
-        if (x.tableId !== tableId) return false;
-        const xs = timeToMin(x.time);
-        const xe = xs + x.durationMin;
-        return overlap(s, e, xs, xe);
+    for (const booking of needsAssign) {
+      const bs = timeToMin(booking.time);
+      if (!Number.isFinite(bs)) {
+        res.status(400).json({ error: "Tyvärr finns det inga lediga bord vid den tiden." });
+        return;
+      }
+      const be = bs + booking.durationMin;
+      const group = chooseBestTableGroup({
+        tables,
+        guests: booking.guests,
+        preferredTableId: booking.tableId,
+        startMin: bs,
+        endMin: be,
+        assigned,
       });
-    };
-
-    for (const b of needsAssign) {
-      const eligible = tables.filter((t) => t.seats >= b.guests).sort((a, b) => a.seats - b.seats);
-      const chosen = eligible.find((t) => canUseTable(t.id, b.time, b.durationMin));
-      if (chosen) {
-        assigned.push({ tableId: chosen.id, time: b.time, guests: b.guests, durationMin: b.durationMin });
-      } else {
-        overbooked = true;
+      if (!group?.length) {
+        res.status(400).json({ error: "Tyvärr finns det inga lediga bord vid den tiden." });
+        return;
       }
+      assigned.push({ tableIds: group, startMin: bs, endMin: be });
     }
 
-    if (overbooked) {
+    const requestedGroup = chooseBestTableGroup({
+      tables,
+      guests,
+      startMin,
+      endMin,
+      assigned,
+    });
+    if (!requestedGroup?.length) {
       res.status(400).json({ error: "Tyvärr finns det inga lediga bord vid den tiden." });
       return;
     }
-
-    const eligible = tables.filter((t) => t.seats >= guests).sort((a, b) => a.seats - b.seats);
-    const chosen = eligible.find((t) => canUseTable(t.id, normalizeTime(time), durationMin));
-    if (!chosen) {
-      res.status(400).json({ error: "Tyvärr finns det inga lediga bord vid den tiden." });
-      return;
-    }
-    assignedTableId = chosen.id;
+    assignedTableId = requestedGroup[0] ?? null;
   } else {
     const overlapTables =
       (sameDayBookings ?? []).reduce((sum, b: any) => {
