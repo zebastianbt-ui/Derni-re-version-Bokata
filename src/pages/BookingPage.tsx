@@ -732,11 +732,13 @@ export default function BookingPage() {
                       <div className="mb-3 flex items-end justify-between gap-3">
                         <div>
                           <div className="text-sm font-semibold text-violet-800">Välj tid</div>
-                          <div className="text-xs text-violet-600">och antal gäster</div>
                         </div>
-                        <label className="block text-right">
-                          <span className="text-xs font-semibold text-gray-600">Gäster</span>
+                        <div className="flex items-center gap-3">
+                          <label htmlFor="guests-inline" className="text-sm font-semibold text-gray-600 pr-1">
+                            Gäster
+                          </label>
                           <input
+                            id="guests-inline"
                             type="number"
                             inputMode="numeric"
                             min={1}
@@ -753,10 +755,10 @@ export default function BookingPage() {
                               const normalized = Math.max(1, Math.min(16, Math.floor(parsed)));
                               setGuests(normalized);
                             }}
-                            className="mt-1 w-24 rounded-xl border-gray-300 bg-white px-3 py-2 text-base font-semibold text-gray-900 focus:border-violet-400 focus:ring-violet-400"
+                            className="w-24 rounded-xl border-gray-300 bg-white px-3 py-2 text-base font-semibold text-gray-900 focus:border-violet-400 focus:ring-violet-400"
                             placeholder="2"
                           />
-                        </label>
+                        </div>
                       </div>
                       <div className="grid grid-cols-3 gap-2 max-h-[280px] min-h-[180px] overflow-auto pr-1">
                         {times.map((t) => {
@@ -810,7 +812,7 @@ export default function BookingPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <label className="block">
                             <span className="text-lg md:text-xl font-semibold text-gray-700">
-                              Namn <span className="ml-1 text-xs font-semibold text-rose-500 align-middle">oblig.</span>
+                              Namn <span className="ml-1 text-xs font-semibold text-rose-500 align-middle">(obligatoriskt)</span>
                             </span>
                             <input
                               value={name}
@@ -821,7 +823,7 @@ export default function BookingPage() {
                           </label>
                           <label className="block">
                             <span className="text-lg md:text-xl font-semibold text-gray-700">
-                              E‑post <span className="ml-1 text-xs font-semibold text-rose-500 align-middle">oblig.</span>
+                              E‑post <span className="ml-1 text-xs font-semibold text-rose-500 align-middle">(obligatoriskt)</span>
                             </span>
                             <input
                               type="email"
