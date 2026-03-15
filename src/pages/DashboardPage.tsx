@@ -138,7 +138,15 @@ type Floorplan = {
   zones: FloorplanZone[];
 };
 
-type TableCap = { id: number; cap: number; label?: string };
+type TableCap = {
+  id: number;
+  cap: number;
+  label?: string;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+};
 
 const KNOWLEDGE_LABELS = [
   "Namn",
@@ -550,10 +558,223 @@ function buildTableCaps(plan?: Floorplan | null): TableCap[] {
         id,
         cap: Math.max(1, t.seats || 0),
         label: t.label?.trim() || `Bord ${id}`,
+        x: t.x,
+        y: t.y,
+        w: t.w,
+        h: t.h,
       });
     }
   });
   return Array.from(byId.values()).sort((a, b) => a.id - b.id);
+}
+
+type TableReservationBlock = {
+  tableIds: number[];
+  startMin: number;
+  endMin: number;
+};
+
+const getTableCenter = (table: TableCap) => {
+  const fallbackX = table.id * 140;
+  const fallbackY = 0;
+  const x = Number.isFinite(table.x as number) ? (table.x as number) : fallbackX;
+  const y = Number.isFinite(table.y as number) ? (table.y as number) : fallbackY;
+  const w = Number.isFinite(table.w as number) ? Math.max(40, table.w as number) : 100;
+  const h = Number.isFinite(table.h as number) ? Math.max(40, table.h as number) : 70;
+  return { x: x + w / 2, y: y + h / 2 };
+};
+
+const tableDistance = (a: TableCap, b: TableCap) => {
+  const ac = getTableCenter(a);
+  const bc = getTableCenter(b);
+  return Math.hypot(ac.x - bc.x, ac.y - bc.y);
+};
+
+const buildTableNeighbors = (tables: TableCap[]) => {
+  const links = new Map<number, Set<number>>();
+  tables.forEach((table) => links.set(table.id, new Set<number>()));
+
+  for (let i = 0; i < tables.length; i += 1) {
+    for (let j = i + 1; j < tables.length; j += 1) {
+      const a = tables[i];
+      const b = tables[j];
+      const ax = Number.isFinite(a.x as number) ? (a.x as number) : a.id * 140;
+      const ay = Number.isFinite(a.y as number) ? (a.y as number) : 0;
+      const aw = Number.isFinite(a.w as number) ? Math.max(40, a.w as number) : 100;
+      const ah = Number.isFinite(a.h as number) ? Math.max(40, a.h as number) : 70;
+      const bx = Number.isFinite(b.x as number) ? (b.x as number) : b.id * 140;
+      const by = Number.isFinite(b.y as number) ? (b.y as number) : 0;
+      const bw = Number.isFinite(b.w as number) ? Math.max(40, b.w as number) : 100;
+      const bh = Number.isFinite(b.h as number) ? Math.max(40, b.h as number) : 70;
+      const horizontalGap = Math.min(Math.abs(ax + aw - bx), Math.abs(bx + bw - ax));
+      const verticalGap = Math.min(Math.abs(ay + ah - by), Math.abs(by + bh - ay));
+      const horizontalOverlap = Math.min(ax + aw, bx + bw) - Math.max(ax, bx);
+      const verticalOverlap = Math.min(ay + ah, by + bh) - Math.max(ay, by);
+      const edgeGap = 42;
+      const overlapTolerance = 14;
+      const nearHorizontally = horizontalGap <= edgeGap && verticalOverlap >= -overlapTolerance;
+      const nearVertically = verticalGap <= edgeGap && horizontalOverlap >= -overlapTolerance;
+      const distanceLimit = Math.max(aw, ah, bw, bh) * 1.8;
+      const nearCenter = tableDistance(a, b) <= distanceLimit;
+      if (!nearHorizontally && !nearVertically && !nearCenter) continue;
+      links.get(a.id)?.add(b.id);
+      links.get(b.id)?.add(a.id);
+    }
+  }
+
+  for (const table of tables) {
+    const set = links.get(table.id);
+    if (!set || set.size || tables.length <= 1) continue;
+    let nearest: TableCap | null = null;
+    let nearestDist = Number.POSITIVE_INFINITY;
+    for (const other of tables) {
+      if (other.id === table.id) continue;
+      const d = tableDistance(table, other);
+      if (d < nearestDist) {
+        nearest = other;
+        nearestDist = d;
+      }
+    }
+    if (nearest) {
+      set.add(nearest.id);
+      links.get(nearest.id)?.add(table.id);
+    }
+  }
+
+  return links;
+};
+
+function chooseTableGroup(args: {
+  tables: TableCap[];
+  guests: number;
+  startMin: number;
+  endMin: number;
+  assignedBlocks: TableReservationBlock[];
+  preferredTableId?: number | null;
+}): number[] | null {
+  if (!args.tables.length || args.guests < 1) return null;
+
+  const unavailable = new Set<number>();
+  for (const block of args.assignedBlocks) {
+    if (!overlap(args.startMin, args.endMin, block.startMin, block.endMin)) continue;
+    block.tableIds.forEach((id) => unavailable.add(id));
+  }
+
+  const available = args.tables.filter((table) => !unavailable.has(table.id));
+  if (!available.length) return null;
+  const availableById = new Map<number, TableCap>();
+  available.forEach((table) => availableById.set(table.id, table));
+
+  const sortedCaps = available.map((table) => table.cap).sort((a, b) => b - a);
+  let maxCapacity = 0;
+  let minNeeded = 0;
+  for (const cap of sortedCaps) {
+    maxCapacity += cap;
+    minNeeded += 1;
+    if (maxCapacity >= args.guests) break;
+  }
+  if (maxCapacity < args.guests) return null;
+
+  const neighbors = buildTableNeighbors(available);
+  const maxGroupSize = Math.min(8, available.length, Math.max(minNeeded + 1, 2));
+
+  const tableSpread = (ids: number[]) => {
+    if (ids.length <= 1) return 0;
+    const points = ids
+      .map((id) => availableById.get(id))
+      .filter(Boolean)
+      .map((table) => getTableCenter(table as TableCap));
+    if (points.length <= 1) return 0;
+    const minX = Math.min(...points.map((p) => p.x));
+    const maxX = Math.max(...points.map((p) => p.x));
+    const minY = Math.min(...points.map((p) => p.y));
+    const maxY = Math.max(...points.map((p) => p.y));
+    return (maxX - minX) + (maxY - minY);
+  };
+
+  const scoreGroup = (ids: number[]) => {
+    const seats = ids.reduce((sum, id) => sum + (availableById.get(id)?.cap ?? 0), 0);
+    const overflow = seats - args.guests;
+    const missesPreferred =
+      args.preferredTableId == null ? 0 : ids.includes(args.preferredTableId) ? 0 : 1;
+    return {
+      missesPreferred,
+      overflow,
+      size: ids.length,
+      spread: tableSpread(ids),
+    };
+  };
+
+  const isBetter = (next: number[], current: number[] | null) => {
+    if (!current) return true;
+    const a = scoreGroup(next);
+    const b = scoreGroup(current);
+    if (a.missesPreferred !== b.missesPreferred) return a.missesPreferred < b.missesPreferred;
+    if (a.overflow !== b.overflow) return a.overflow < b.overflow;
+    if (a.size !== b.size) return a.size < b.size;
+    if (a.spread !== b.spread) return a.spread < b.spread;
+    return next.join(",") < current.join(",");
+  };
+
+  let best: number[] | null = null;
+  const seen = new Set<string>();
+  const explored = new Set<string>();
+
+  const evaluate = (ids: number[], seats: number) => {
+    if (seats < args.guests) return;
+    const sorted = [...ids].sort((a, b) => a - b);
+    const key = sorted.join(",");
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (isBetter(sorted, best)) best = sorted;
+  };
+
+  const starts = [...available].sort((a, b) => {
+    const aPref = args.preferredTableId != null && a.id === args.preferredTableId ? 0 : 1;
+    const bPref = args.preferredTableId != null && b.id === args.preferredTableId ? 0 : 1;
+    if (aPref !== bPref) return aPref - bPref;
+    if (a.cap !== b.cap) return b.cap - a.cap;
+    return a.id - b.id;
+  });
+
+  const dfs = (group: number[], seats: number, frontier: Set<number>) => {
+    const key = [...group].sort((a, b) => a - b).join(",");
+    if (explored.has(key)) return;
+    explored.add(key);
+
+    evaluate(group, seats);
+    if (group.length >= maxGroupSize) return;
+
+    const nextCandidates = Array.from(frontier)
+      .map((id) => availableById.get(id))
+      .filter(Boolean)
+      .sort((a, b) => {
+        const aPref = args.preferredTableId != null && a!.id === args.preferredTableId ? 0 : 1;
+        const bPref = args.preferredTableId != null && b!.id === args.preferredTableId ? 0 : 1;
+        if (aPref !== bPref) return aPref - bPref;
+        if (a!.cap !== b!.cap) return b!.cap - a!.cap;
+        return a!.id - b!.id;
+      }) as TableCap[];
+
+    for (const next of nextCandidates) {
+      if (group.includes(next.id)) continue;
+      const nextGroup = [...group, next.id];
+      const nextFrontier = new Set<number>(frontier);
+      nextFrontier.delete(next.id);
+      for (const neighborId of neighbors.get(next.id) ?? []) {
+        if (!availableById.has(neighborId) || nextGroup.includes(neighborId)) continue;
+        nextFrontier.add(neighborId);
+      }
+      dfs(nextGroup, seats + next.cap, nextFrontier);
+    }
+  };
+
+  for (const start of starts) {
+    const frontier = new Set<number>((neighbors.get(start.id) ?? []).filter((id) => availableById.has(id)));
+    dfs([start.id], start.cap, frontier);
+  }
+
+  return best;
 }
 
 function assignTablesForDateWithTables(
@@ -569,6 +790,7 @@ function assignTablesForDateWithTables(
     .sort((a, b) => b.guests - a.guests || timeToMin(a.time) - timeToMin(b.time));
 
   const out: Booking[] = [];
+  const assignedBlocks: TableReservationBlock[] = [];
 
   for (const b of day) {
     const meal = mealForWithRanges(b.time, mealRanges);
@@ -576,43 +798,21 @@ function assignTablesForDateWithTables(
     const s = timeToMin(round30(b.time));
     const e = s + dur;
 
-    let chosen: number | null = null;
-
-    if (b.tableId) {
-      const pref = tableList.find((t) => t.id === b.tableId);
-      if (pref && pref.cap >= b.guests) {
-        const conflict = out.some((x) => {
-        if (x.tableId !== pref.id) return false;
-        const xs = timeToMin(round30(x.time));
-        const xd =
-          x.durationMin ??
-          (mealForWithRanges(x.time, mealRanges) in ENGINE.durations
-            ? ENGINE.durations[mealForWithRanges(x.time, mealRanges) as keyof typeof ENGINE.durations]
-            : 90);
-        const xe = xs + xd;
-        return overlap(s, e, xs, xe);
-      });
-        if (!conflict) chosen = pref.id;
-      }
-    }
-
-    for (const t of tableList.filter((t) => t.cap >= b.guests).sort((a, b) => a.cap - b.cap)) {
-      if (chosen != null) break;
-      const conflict = out.some((x) => {
-        if (x.tableId !== t.id) return false;
-        const xs = timeToMin(round30(x.time));
-        const xd =
-          x.durationMin ??
-          (mealForWithRanges(x.time, mealRanges) in ENGINE.durations
-            ? ENGINE.durations[mealForWithRanges(x.time, mealRanges) as keyof typeof ENGINE.durations]
-            : 90);
-        const xe = xs + xd;
-        return overlap(s, e, xs, xe);
-      });
-      if (!conflict) {
-        chosen = t.id;
-        break;
-      }
+    const group = chooseTableGroup({
+      tables: tableList,
+      guests: b.guests,
+      preferredTableId: b.tableId ?? null,
+      startMin: s,
+      endMin: e,
+      assignedBlocks,
+    });
+    const chosen = group?.length
+      ? b.tableId != null && group.includes(b.tableId)
+        ? b.tableId
+        : group[0]
+      : null;
+    if (group?.length) {
+      assignedBlocks.push({ tableIds: group, startMin: s, endMin: e });
     }
 
     out.push({ ...b, tableId: chosen, durationMin: dur, time: round30(b.time) });
@@ -630,36 +830,28 @@ function findAvailableTable(args: {
   tables: TableCap[];
   mealRanges?: MealRangeMap;
 }): number | null {
-  const mealRanges = args.mealRanges ?? DEFAULT_MEAL_RANGES;
-  const when = round30(args.time);
-  const dur = args.durationMin;
-  const s = timeToMin(when);
-  const e = s + dur;
+  const draftId = `draft-${uid()}`;
+  const draft: Booking = {
+    id: draftId,
+    date: args.date,
+    time: round30(args.time),
+    name: "Availability check",
+    guests: args.guests,
+    notes: "",
+    note: false,
+    tableId: null,
+    durationMin: args.durationMin,
+    status: "confirmed",
+    source: "walkin",
+  };
 
-  const tableList = args.tables.length ? args.tables : ENGINE.tables.map((cap, i) => ({ id: i + 1, cap }));
-
-  for (const t of tableList) {
-    const id = t.id;
-    const cap = t.cap;
-    if (cap < args.guests) continue;
-
-    const conflict = args.bookings.some((b) => {
-      if (b.date !== args.date) return false;
-      if (b.tableId !== id) return false;
-      const bs = timeToMin(round30(b.time));
-      const bd =
-        b.durationMin ??
-        (mealForWithRanges(b.time, mealRanges) in ENGINE.durations
-          ? ENGINE.durations[mealForWithRanges(b.time, mealRanges) as keyof typeof ENGINE.durations]
-          : 90);
-      const be = bs + bd;
-      return overlap(s, e, bs, be);
-    });
-
-    if (!conflict) return id;
-  }
-
-  return null;
+  const simulated = assignTablesForDateWithTables(
+    args.date,
+    [...args.bookings, draft],
+    args.tables,
+    args.mealRanges ?? DEFAULT_MEAL_RANGES
+  );
+  return simulated.find((booking) => booking.id === draftId)?.tableId ?? null;
 }
 
 function isTableAvailable(args: {
@@ -2116,7 +2308,7 @@ function ReservationDashboardInner() {
   const [formDate, setFormDate] = useState<string>(dateSel);
   const [formTime, setFormTime] = useState<string>("12:00");
   const [formName, setFormName] = useState<string>("");
-  const [formGuests, setFormGuests] = useState<number>(2);
+  const [formGuestsInput, setFormGuestsInput] = useState<string>("2");
   const [formNotes, setFormNotes] = useState<string>("");
   const [formTableId, setFormTableId] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -2126,7 +2318,7 @@ function ReservationDashboardInner() {
       setFormDate(dateSel);
       setFormTime("12:00");
       setFormName("");
-      setFormGuests(2);
+      setFormGuestsInput("2");
       setFormNotes("");
       setFormTableId(null);
       setFormError(null);
@@ -2148,17 +2340,29 @@ function ReservationDashboardInner() {
 
     const when = round30(d.time);
     const durationMin = bookingDurationMin;
-    let tableId = d.tableId ?? null;
-    if (tableId != null) {
-      const table = tableCaps.find((t) => t.id === tableId);
-      if (!table) return { ok: false, error: "Valt bord finns inte." };
-      if (table.cap < d.guests) return { ok: false, error: `Valt bord har bara ${table.cap} platser.` };
-      if (!isTableAvailable({ date: d.date, time: when, tableId, bookings, durationMin, mealRanges })) {
-        return { ok: false, error: "Valt bord är redan upptaget vid den tiden." };
-      }
-    } else {
-      tableId = findAvailableTable({ date: d.date, time: when, guests: d.guests, bookings, durationMin, tables: tableCaps, mealRanges });
-      if (tableId == null) return { ok: false, error: "Ingen ledig passande bord i detta tidsintervall." };
+    const draftId = `draft-${uid()}`;
+    const draftBooking: Booking = {
+      id: draftId,
+      date: d.date,
+      time: when,
+      name: d.name.trim(),
+      guests: d.guests,
+      notes: d.notes,
+      note: !!d.notes,
+      tableId: d.tableId ?? null,
+      durationMin,
+      status: "confirmed",
+      source: "walkin",
+    };
+
+    const simulated = assignTablesForDateWithTables(d.date, [...bookings, draftBooking], tableCaps, mealRanges);
+    const simulatedDraft = simulated.find((b) => b.id === draftId);
+    const tableId = simulatedDraft?.tableId ?? null;
+    if (tableId == null) {
+      return { ok: false, error: "Ingen ledig passande bord i detta tidsintervall." };
+    }
+    if (d.tableId != null && tableId !== d.tableId) {
+      return { ok: false, error: "Valt bord är redan upptaget eller saknar tillräcklig gruppkapacitet vid den tiden." };
     }
 
     const colors = ["bg-green-200", "bg-blue-200", "bg-yellow-200", "bg-pink-200", "bg-purple-200"];
@@ -2213,11 +2417,13 @@ function ReservationDashboardInner() {
   }
 
   const handleCreate = () => {
+    const parsedGuests = formGuestsInput.trim() === "" ? 0 : Number(formGuestsInput);
+    const guests = Number.isFinite(parsedGuests) ? Math.floor(parsedGuests) : 0;
     const res = createReservation({
       date: formDate,
       time: formTime,
       name: formName,
-      guests: formGuests,
+      guests,
       notes: formNotes,
       tableId: formTableId,
     });
@@ -3263,8 +3469,28 @@ function ReservationDashboardInner() {
                 type="number"
                 min={1}
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                value={formGuests}
-                onChange={(e) => setFormGuests(Math.max(1, Number(e.target.value) || 1))}
+                value={formGuestsInput}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/[^\d]/g, "");
+                  if (!digits) {
+                    setFormGuestsInput("");
+                    return;
+                  }
+                  const parsed = Number(digits);
+                  if (!Number.isFinite(parsed)) return;
+                  const normalized = Math.max(0, Math.min(999, Math.floor(parsed)));
+                  setFormGuestsInput(String(normalized));
+                }}
+                onBlur={() => {
+                  if (!formGuestsInput.trim()) return;
+                  const parsed = Number(formGuestsInput);
+                  if (!Number.isFinite(parsed)) {
+                    setFormGuestsInput("");
+                    return;
+                  }
+                  const normalized = Math.max(1, Math.min(999, Math.floor(parsed)));
+                  setFormGuestsInput(String(normalized));
+                }}
               />
             </Field>
 
