@@ -770,7 +770,9 @@ function chooseTableGroup(args: {
   };
 
   for (const start of starts) {
-    const frontier = new Set<number>((neighbors.get(start.id) ?? []).filter((id) => availableById.has(id)));
+    const frontier = new Set<number>(
+      Array.from(neighbors.get(start.id) ?? []).filter((id) => availableById.has(id))
+    );
     dfs([start.id], start.cap, frontier);
   }
 
