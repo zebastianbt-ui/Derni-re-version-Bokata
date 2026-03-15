@@ -3369,13 +3369,27 @@ function ReservationDashboardInner() {
           <div className="mt-5 flex flex-wrap justify-between gap-2">
             <button
               className="px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
-              onClick={() => {
+              onClick={async () => {
+                if (!openBooking) return;
                 if (!window.confirm("Ta bort bokningen?")) return;
-                setBookings((prev) => prev.filter((b) => b.id !== openBooking.id));
+                const target = openBooking;
                 if (restaurantId && settingsReady) {
-                  supabase.from("bookings").delete().eq("id", openBooking.id).eq("restaurant_id", restaurantId);
+                  const { error } = await supabase
+                    .from("bookings")
+                    .delete()
+                    .eq("id", target.id)
+                    .eq("restaurant_id", restaurantId);
+                  if (error) {
+                    window.alert(`Kunde inte ta bort bokningen. ${error.message}`);
+                    return;
+                  }
                 }
+                setBookings((prev) => prev.filter((b) => String(b.id) !== String(target.id)));
+                setEditBookingDraft(null);
                 setOpenBooking(null);
+                if (restaurantId && settingsReady) {
+                  void fetchBookings({ silent: true });
+                }
               }}
             >
               Ta bort
@@ -3392,19 +3406,12 @@ function ReservationDashboardInner() {
               </button>
               <button
                 className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
-                onClick={() => {
-                  const next = editBookingDraft ?? openBooking;
-                  setBookings((prev) => {
-                    const updated = prev.map((b) =>
-                      b.id === openBooking.id ? { ...b, ...next, note: !!next.notes } : b
-                    );
-                    const dates = Array.from(new Set<string>(updated.map((b) => b.date)));
-                    let out = updated;
-                    for (const d of dates) out = assignTablesForDateWithTables(d, out, tableCaps, mealRanges);
-                    return out;
-                  });
+                onClick={async () => {
+                  if (!openBooking) return;
+                  const target = openBooking;
+                  const next = editBookingDraft ?? target;
                   if (restaurantId && settingsReady) {
-                    supabase
+                    const { error } = await supabase
                       .from("bookings")
                       .update({
                         date: next.date,
@@ -3415,11 +3422,27 @@ function ReservationDashboardInner() {
                         table_id: next.tableId ?? null,
                         duration_min: next.durationMin ?? bookingDurationMin,
                       })
-                      .eq("id", openBooking.id)
+                      .eq("id", target.id)
                       .eq("restaurant_id", restaurantId);
+                    if (error) {
+                      window.alert(`Kunde inte spara ändring. ${error.message}`);
+                      return;
+                    }
                   }
+                  setBookings((prev) => {
+                    const updated = prev.map((b) =>
+                      String(b.id) === String(target.id) ? { ...b, ...next, note: !!next.notes } : b
+                    );
+                    const dates = Array.from(new Set<string>(updated.map((b) => b.date)));
+                    let out = updated;
+                    for (const d of dates) out = assignTablesForDateWithTables(d, out, tableCaps, mealRanges);
+                    return out;
+                  });
                   setEditBookingDraft(null);
                   setOpenBooking(null);
+                  if (restaurantId && settingsReady) {
+                    void fetchBookings({ silent: true });
+                  }
                 }}
               >
                 Spara ändring
