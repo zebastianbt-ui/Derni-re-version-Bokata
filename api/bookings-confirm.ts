@@ -61,6 +61,23 @@ const bookingMessageToHtml = (message: string) => {
     .join("<br/>");
 };
 
+const stripRepeatedConfirmationIntro = (message: string) => {
+  const lines = message
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line, idx, arr) => !(idx === 0 && !line) && !(idx === arr.length - 1 && !line));
+  const patterns = [
+    /^(bonjour|hej|hello)\b/i,
+    /^tack för (din|er) bokning/i,
+    /^här är (din|dina) bokningsdetaljer/i,
+    /^\(?\d{4}-\d{2}-\d{2}\s+kl\s+\d{2}:\d{2}\s*•\s*\d+\s+gäster\)?$/i,
+  ];
+  while (lines.length && patterns.some((pattern) => pattern.test(lines[0]))) {
+    lines.shift();
+  }
+  return lines.join("\n").trim();
+};
+
 const extractFirstName = (fullName: string | null | undefined) => {
   const normalized = (fullName ?? "").trim();
   if (!normalized) return "";
@@ -119,9 +136,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq("public_id", booking.restaurant_id)
       .maybeSingle();
     bookingMessageHtml = bookingMessageToHtml(
-      extractMultilineLabelValue(
-        (bookingSettings as { knowledge_public?: string | null } | null)?.knowledge_public,
-        BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL
+      stripRepeatedConfirmationIntro(
+        extractMultilineLabelValue(
+          (bookingSettings as { knowledge_public?: string | null } | null)?.knowledge_public,
+          BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL
+        )
       )
     );
   }
