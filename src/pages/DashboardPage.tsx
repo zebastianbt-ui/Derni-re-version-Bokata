@@ -183,9 +183,13 @@ const KNOWLEDGE_LABELS = [
   "Facebook",
   "Instagram",
   "Bokningsmeddelande",
+  "Bekräftelsemail (automatisk)",
+  "Bekräftelsemail (manuell)",
 ];
 
 const BOOKING_MESSAGE_LABEL = "Bokningsmeddelande";
+const BOOKING_CONFIRMATION_EMAIL_AUTO_LABEL = "Bekräftelsemail (automatisk)";
+const BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL = "Bekräftelsemail (manuell)";
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -308,6 +312,8 @@ const cloneDays = (days: Record<DayName, { closed: boolean; open: string; close:
 type Settings = {
   info: { email: string };
   publicMessage: string;
+  confirmationEmailMessageAuto: string;
+  confirmationEmailMessageManual: string;
   seating: {
     groupThreshold: number;
     highChairs: number;
@@ -949,6 +955,8 @@ function ReservationDashboardInner() {
     () => ({
       info: { email: "bookings@example.se" },
       publicMessage: "",
+      confirmationEmailMessageAuto: "",
+      confirmationEmailMessageManual: "",
       seating: {
         groupThreshold: 0,
         highChairs: 0,
@@ -1286,6 +1294,7 @@ function ReservationDashboardInner() {
       }
 
       if (bookingSettings) {
+        const knowledgePublic = bookingSettings.knowledge_public ?? "";
         setConfig((prev) => ({
           ...prev,
           hours: normalizeHours(bookingSettings.hours ?? prev.hours),
@@ -1315,8 +1324,15 @@ function ReservationDashboardInner() {
             notifyOnNewBooking: bookingSettings.notify_enabled ?? prev.notifications.notifyOnNewBooking,
             requireManualConfirmation: bookingSettings.require_manual_confirmation ?? prev.notifications.requireManualConfirmation,
           },
-          publicMessage:
-            extractMultilineLabelValue(bookingSettings.knowledge_public ?? "", BOOKING_MESSAGE_LABEL) || prev.publicMessage,
+          publicMessage: extractMultilineLabelValue(knowledgePublic, BOOKING_MESSAGE_LABEL),
+          confirmationEmailMessageAuto: extractMultilineLabelValue(
+            knowledgePublic,
+            BOOKING_CONFIRMATION_EMAIL_AUTO_LABEL
+          ),
+          confirmationEmailMessageManual: extractMultilineLabelValue(
+            knowledgePublic,
+            BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL
+          ),
         }));
       }
 
@@ -1526,7 +1542,13 @@ function ReservationDashboardInner() {
             notify_email: config.info.email || config.notifications.to || null,
             notify_enabled: config.notifications.notifyOnNewBooking,
             require_manual_confirmation: config.notifications.requireManualConfirmation,
-            knowledge_public: buildPublicKnowledge(config.ai.knowledge, config.ai.webSearch, config.publicMessage),
+            knowledge_public: buildPublicKnowledge(
+              config.ai.knowledge,
+              config.ai.webSearch,
+              config.publicMessage,
+              config.confirmationEmailMessageAuto,
+              config.confirmationEmailMessageManual
+            ),
           }),
         });
         if (!resp.ok) {
@@ -1555,6 +1577,8 @@ function ReservationDashboardInner() {
     config.notifications.notifyOnNewBooking,
     config.notifications.requireManualConfirmation,
     config.publicMessage,
+    config.confirmationEmailMessageAuto,
+    config.confirmationEmailMessageManual,
     restaurantId,
     settingsReady,
   ]);
@@ -1944,7 +1968,9 @@ function ReservationDashboardInner() {
   const buildPublicKnowledge = (
     base: string,
     webSearch: Settings["ai"]["webSearch"],
-    publicMessage?: string
+    publicMessage?: string,
+    confirmationEmailMessageAuto?: string,
+    confirmationEmailMessageManual?: string
   ) => {
     const normalized = normalizeKnowledgeLabels(base || "");
     let lines = normalized.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -2009,11 +2035,20 @@ function ReservationDashboardInner() {
         `Vid ${maxPer} gäster eller fler, kontakta oss på ${contactEmail}.`
       );
     }
-    const resolvedMessage =
-      (publicMessage ?? "").trim() || extractMultilineLabelValue(base || "", BOOKING_MESSAGE_LABEL);
+    const resolvedMessage = (publicMessage ?? "").trim();
+    const resolvedAutoEmailMessage = (confirmationEmailMessageAuto ?? "").trim();
+    const resolvedManualEmailMessage = (confirmationEmailMessageManual ?? "").trim();
+    lines = stripLabelBlock(lines, BOOKING_MESSAGE_LABEL);
+    lines = stripLabelBlock(lines, BOOKING_CONFIRMATION_EMAIL_AUTO_LABEL);
+    lines = stripLabelBlock(lines, BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL);
     if (resolvedMessage) {
-      lines = stripLabelBlock(lines, BOOKING_MESSAGE_LABEL);
       appendMultiline(BOOKING_MESSAGE_LABEL, resolvedMessage);
+    }
+    if (resolvedAutoEmailMessage) {
+      appendMultiline(BOOKING_CONFIRMATION_EMAIL_AUTO_LABEL, resolvedAutoEmailMessage);
+    }
+    if (resolvedManualEmailMessage) {
+      appendMultiline(BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL, resolvedManualEmailMessage);
     }
     lines = dedupeKnowledgeLines(lines);
     return lines.filter(Boolean).join("\n").trim();
@@ -3609,6 +3644,28 @@ function ReservationDashboardInner() {
                   <div className="mt-2 text-xs text-gray-500">
                     Visas under kommentarsfältet på bokningssidan.
                   </div>
+                </Field>
+              </div>
+              <div className="mt-4">
+                <Field label="Bekräftelsemail till kund – automatisk (valfritt)">
+                  <textarea
+                    rows={4}
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    placeholder="Text som visas i kundens bekräftelsemail när bokningen bekräftas automatiskt."
+                    value={config.confirmationEmailMessageAuto}
+                    onChange={(e) => setConfig({ ...config, confirmationEmailMessageAuto: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <div className="mt-4">
+                <Field label="Bekräftelsemail till kund – manuell (valfritt)">
+                  <textarea
+                    rows={4}
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    placeholder="Text som visas i kundens bekräftelsemail efter manuell bekräftelse."
+                    value={config.confirmationEmailMessageManual}
+                    onChange={(e) => setConfig({ ...config, confirmationEmailMessageManual: e.target.value })}
+                  />
                 </Field>
               </div>
               <div className="mt-3 grid grid-cols-1 gap-2 text-sm">

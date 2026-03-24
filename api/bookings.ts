@@ -29,6 +29,13 @@ const buildBookingCancelUrl = (origin: string, secret: string, bookingId: string
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 20;
 const BOOKING_MESSAGE_LABEL = "Bokningsmeddelande";
+const BOOKING_CONFIRMATION_EMAIL_AUTO_LABEL = "Bekräftelsemail (automatisk)";
+const BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL = "Bekräftelsemail (manuell)";
+const KNOWLEDGE_MESSAGE_LABELS = [
+  BOOKING_MESSAGE_LABEL,
+  BOOKING_CONFIRMATION_EMAIL_AUTO_LABEL,
+  BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL,
+];
 
 const getClientIp = (req: VercelRequest) => {
   const xfwd = req.headers["x-forwarded-for"];
@@ -44,16 +51,27 @@ const escapeHtml = (value: string) =>
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#039;");
 
-const extractBookingMessage = (knowledge?: string | null) => {
+const extractMultilineLabelValue = (knowledge: string | null | undefined, label: string) => {
   if (!knowledge) return "";
-  const normalized = String(knowledge).replace(/\r/g, "");
-  const lines = normalized.split("\n");
-  const labelLower = `${BOOKING_MESSAGE_LABEL.toLowerCase()}:`;
+  const lines = String(knowledge).replace(/\r/g, "").split("\n").map((line) => line.trimEnd());
+  const labelLower = `${label.toLowerCase()}:`;
   const startIdx = lines.findIndex((line) => line.trimStart().toLowerCase().startsWith(labelLower));
   if (startIdx === -1) return "";
-  const firstLine = lines[startIdx].split(":").slice(1).join(":").trim();
-  const continuation = lines.slice(startIdx + 1).map((line) => line.trimEnd());
-  return [firstLine, ...continuation].join("\n").trim();
+  const first = lines[startIdx].split(":").slice(1).join(":").trim();
+  const collected: string[] = [];
+  if (first) collected.push(first);
+  for (let i = startIdx + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line) {
+      if (collected.length) collected.push("");
+      continue;
+    }
+    const lower = line.trimStart().toLowerCase();
+    if (lower === "infos:" || lower.startsWith("fråga:") || lower.startsWith("svar:")) break;
+    if (KNOWLEDGE_MESSAGE_LABELS.some((item) => lower.startsWith(`${item.toLowerCase()}:`))) break;
+    collected.push(line.trim());
+  }
+  return collected.join("\n").trim();
 };
 
 const bookingMessageToHtml = (message: string) => {
@@ -408,7 +426,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const requireManual = !!s.require_manual_confirmation;
   const notifyEnabled = !!s.notify_enabled;
   const notifyEmail = s.notify_email || null;
-  const bookingMessageHtml = bookingMessageToHtml(extractBookingMessage(s.knowledge_public));
+  const bookingMessageHtml = bookingMessageToHtml(
+    extractMultilineLabelValue(s.knowledge_public, BOOKING_CONFIRMATION_EMAIL_AUTO_LABEL)
+  );
   const rawDuration = s.seating?.maxBookingDurationMin ?? 90;
   const durationMin = rawDuration && rawDuration > 0 ? rawDuration : 90;
   const maxGuests = s.seating?.maxGuests ?? 60;

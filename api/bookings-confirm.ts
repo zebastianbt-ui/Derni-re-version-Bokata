@@ -5,6 +5,13 @@ import crypto from "crypto";
 const getEnv = (key: string) => process.env[key] ?? "";
 const getSiteUrl = () => getEnv("SITE_URL") || "https://www.bokata.se";
 const BOOKING_MESSAGE_LABEL = "Bokningsmeddelande";
+const BOOKING_CONFIRMATION_EMAIL_AUTO_LABEL = "Bekräftelsemail (automatisk)";
+const BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL = "Bekräftelsemail (manuell)";
+const KNOWLEDGE_MESSAGE_LABELS = [
+  BOOKING_MESSAGE_LABEL,
+  BOOKING_CONFIRMATION_EMAIL_AUTO_LABEL,
+  BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL,
+];
 const getBookingCancelSecret = (serviceKey: string) => getEnv("BOOKING_CANCEL_SECRET") || serviceKey;
 const signBookingCancel = (secret: string, bookingId: string, email: string) =>
   crypto.createHmac("sha256", secret).update(`${bookingId}:${email.toLowerCase().trim()}`).digest("hex");
@@ -22,16 +29,27 @@ const escapeHtml = (value: string) =>
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#039;");
 
-const extractBookingMessage = (knowledge?: string | null) => {
+const extractMultilineLabelValue = (knowledge: string | null | undefined, label: string) => {
   if (!knowledge) return "";
-  const normalized = String(knowledge).replace(/\r/g, "");
-  const lines = normalized.split("\n");
-  const labelLower = `${BOOKING_MESSAGE_LABEL.toLowerCase()}:`;
+  const lines = String(knowledge).replace(/\r/g, "").split("\n").map((line) => line.trimEnd());
+  const labelLower = `${label.toLowerCase()}:`;
   const startIdx = lines.findIndex((line) => line.trimStart().toLowerCase().startsWith(labelLower));
   if (startIdx === -1) return "";
-  const firstLine = lines[startIdx].split(":").slice(1).join(":").trim();
-  const continuation = lines.slice(startIdx + 1).map((line) => line.trimEnd());
-  return [firstLine, ...continuation].join("\n").trim();
+  const first = lines[startIdx].split(":").slice(1).join(":").trim();
+  const collected: string[] = [];
+  if (first) collected.push(first);
+  for (let i = startIdx + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line) {
+      if (collected.length) collected.push("");
+      continue;
+    }
+    const lower = line.trimStart().toLowerCase();
+    if (lower === "infos:" || lower.startsWith("fråga:") || lower.startsWith("svar:")) break;
+    if (KNOWLEDGE_MESSAGE_LABELS.some((item) => lower.startsWith(`${item.toLowerCase()}:`))) break;
+    collected.push(line.trim());
+  }
+  return collected.join("\n").trim();
 };
 
 const bookingMessageToHtml = (message: string) => {
@@ -94,7 +112,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select("knowledge_public")
       .eq("public_id", booking.restaurant_id)
       .maybeSingle();
-    bookingMessageHtml = bookingMessageToHtml(extractBookingMessage((bookingSettings as { knowledge_public?: string | null } | null)?.knowledge_public));
+    bookingMessageHtml = bookingMessageToHtml(
+      extractMultilineLabelValue(
+        (bookingSettings as { knowledge_public?: string | null } | null)?.knowledge_public,
+        BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL
+      )
+    );
   }
 
   const sendEmail = async (to: string, subject: string, html: string) => {

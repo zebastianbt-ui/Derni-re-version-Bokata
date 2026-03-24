@@ -136,6 +136,8 @@ const KNOWLEDGE_LABELS = [
   "Facebook",
   "Instagram",
   "Bokningsmeddelande",
+  "Bekräftelsemail (automatisk)",
+  "Bekräftelsemail (manuell)",
 ];
 
 const BOOKING_MESSAGE_LABEL = "Bokningsmeddelande";
