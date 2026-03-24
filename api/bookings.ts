@@ -754,11 +754,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const bookingMessageHtml = bookingMessageToHtml(stripRepeatedConfirmationIntro(body));
     await sendEmail(
       email,
-      "Din bokning är bekräftad",
+      "Din bokning är bekräftad!",
       `
         <p>${greetingHtml}</p>
-        <p>Tack för er bokning (${summary})</p>
+        <p>Tack för er bokning!</p>
         ${bookingMessageHtml ? `<p>${bookingMessageHtml}</p>` : "<p>Vi ser fram emot att välkomna er!</p>"}
+        <p>(${summary})</p>
         ${cancelUrl ? `<p>Kan du inte komma? <a href="${cancelUrl}">Avboka din reservation här</a>.</p>` : ""}
       `
     );
