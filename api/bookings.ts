@@ -13,17 +13,56 @@ type BookingSettings = {
   notify_email?: string | null;
   notify_enabled?: boolean | null;
   require_manual_confirmation?: boolean | null;
+  knowledge_public?: string | null;
 };
 
 const getEnv = (key: string) => process.env[key] ?? "";
 const getSiteUrl = () => getEnv("SITE_URL") || "https://www.bokata.se";
+const getBookingCancelSecret = (serviceKey: string) => getEnv("BOOKING_CANCEL_SECRET") || serviceKey;
+const signBookingCancel = (secret: string, bookingId: string, email: string) =>
+  crypto.createHmac("sha256", secret).update(`${bookingId}:${email.toLowerCase().trim()}`).digest("hex");
+const buildBookingCancelUrl = (origin: string, secret: string, bookingId: string, email: string) => {
+  const normalizedEmail = email.toLowerCase().trim();
+  const sig = signBookingCancel(secret, bookingId, normalizedEmail);
+  return `${origin}/api/bookings-cancel?bid=${encodeURIComponent(bookingId)}&email=${encodeURIComponent(normalizedEmail)}&sig=${encodeURIComponent(sig)}`;
+};
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 20;
+const BOOKING_MESSAGE_LABEL = "Bokningsmeddelande";
 
 const getClientIp = (req: VercelRequest) => {
   const xfwd = req.headers["x-forwarded-for"];
   const ip = Array.isArray(xfwd) ? xfwd[0] : xfwd;
   return (ip || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+};
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+const extractBookingMessage = (knowledge?: string | null) => {
+  if (!knowledge) return "";
+  const normalized = String(knowledge).replace(/\r/g, "");
+  const lines = normalized.split("\n");
+  const labelLower = `${BOOKING_MESSAGE_LABEL.toLowerCase()}:`;
+  const startIdx = lines.findIndex((line) => line.trimStart().toLowerCase().startsWith(labelLower));
+  if (startIdx === -1) return "";
+  const firstLine = lines[startIdx].split(":").slice(1).join(":").trim();
+  const continuation = lines.slice(startIdx + 1).map((line) => line.trimEnd());
+  return [firstLine, ...continuation].join("\n").trim();
+};
+
+const bookingMessageToHtml = (message: string) => {
+  const trimmed = message.trim();
+  if (!trimmed) return "";
+  return trimmed
+    .split(/\r?\n/)
+    .map((line) => escapeHtml(line))
+    .join("<br/>");
 };
 
 
@@ -361,7 +400,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data: settings } = await supabase
     .from("booking_public_settings")
-    .select("seating,hours,notify_email,notify_enabled,require_manual_confirmation")
+    .select("seating,hours,notify_email,notify_enabled,require_manual_confirmation,knowledge_public")
     .eq("public_id", restaurantId)
     .maybeSingle();
 
@@ -369,6 +408,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const requireManual = !!s.require_manual_confirmation;
   const notifyEnabled = !!s.notify_enabled;
   const notifyEmail = s.notify_email || null;
+  const bookingMessageHtml = bookingMessageToHtml(extractBookingMessage(s.knowledge_public));
   const rawDuration = s.seating?.maxBookingDurationMin ?? 90;
   const durationMin = rawDuration && rawDuration > 0 ? rawDuration : 90;
   const maxGuests = s.seating?.maxGuests ?? 60;
@@ -596,6 +636,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const origin = getSiteUrl();
   const summary = `${date} kl ${time} • ${guests} gäster`;
+  const bookingId = inserted?.id ? String(inserted.id) : "";
+  const cancelUrl =
+    bookingId && normalizedEmail
+      ? buildBookingCancelUrl(origin, getBookingCancelSecret(serviceKey), bookingId, normalizedEmail)
+      : null;
 
   const sendEmail = async (to: string, subject: string, html: string) => {
     if (!resendKey) return { ok: false, status: 0, text: "Missing RESEND_API_KEY" };
@@ -644,6 +689,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         <p>Hej ${name}!</p>
         <p>Här är dina bokningsdetaljer:</p>
         <p><strong>${summary}</strong></p>
+        ${bookingMessageHtml ? `<p><strong>Meddelande från restaurangen:</strong><br/>${bookingMessageHtml}</p>` : ""}
+        ${cancelUrl ? `<p>Kan du inte komma? <a href="${cancelUrl}">Avboka din reservation här</a>.</p>` : ""}
         <p>Vi ser fram emot att välkomna dig.</p>
       `
     );

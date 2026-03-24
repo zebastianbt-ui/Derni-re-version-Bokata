@@ -561,7 +561,7 @@ export default function Page() {
 }
 
 function DashboardMock() {
-  const [viewDate, setViewDate] = React.useState(new Date(2025, 8, 5)); // Sep 2025
+  const [viewDate, setViewDate] = React.useState(new Date(2026, 8, 5)); // Sep 2026
   const monthLabel = viewDate.toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' });
   const monthLabelCap = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
 
@@ -574,7 +574,7 @@ function DashboardMock() {
     const dayNum = idx - startOffset + 1;
     return dayNum >= 1 && dayNum <= daysInMonth ? dayNum : null;
   });
-  const isActiveDay = (day) => viewDate.getFullYear() === 2025 && viewDate.getMonth() === 8 && day === 5;
+  const isActiveDay = (day) => viewDate.getFullYear() === 2026 && viewDate.getMonth() === 8 && day === 5;
 
   const prevMonth = () => setViewDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
   const nextMonth = () => setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));

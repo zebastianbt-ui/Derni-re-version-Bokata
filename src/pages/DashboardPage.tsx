@@ -2332,13 +2332,6 @@ function ReservationDashboardInner() {
     if (!d.date) return { ok: false, error: "Datum krävs." };
     if (!d.time) return { ok: false, error: "Tid krävs." };
     if (d.guests < 1) return { ok: false, error: "Ogiltigt antal gäster." };
-    if (config.escalation.maxGuestsPerReservation > 0 && d.guests >= config.escalation.maxGuestsPerReservation) {
-      const contactEmail = config.info.email || config.notifications.to || "";
-      return {
-        ok: false,
-        error: `För ${d.guests} gäster behöver ni kontakta oss direkt${contactEmail ? ` på ${contactEmail}` : ""}.`,
-      };
-    }
 
     const when = round30(d.time);
     const durationMin = bookingDurationMin;
@@ -2360,9 +2353,6 @@ function ReservationDashboardInner() {
     const simulated = assignTablesForDateWithTables(d.date, [...bookings, draftBooking], tableCaps, mealRanges);
     const simulatedDraft = simulated.find((b) => b.id === draftId);
     const tableId = simulatedDraft?.tableId ?? null;
-    if (tableId == null) {
-      return { ok: false, error: "Ingen ledig passande bord i detta tidsintervall." };
-    }
     if (d.tableId != null && tableId !== d.tableId) {
       return { ok: false, error: "Valt bord är redan upptaget eller saknar tillräcklig gruppkapacitet vid den tiden." };
     }

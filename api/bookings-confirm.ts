@@ -1,8 +1,47 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 
 const getEnv = (key: string) => process.env[key] ?? "";
 const getSiteUrl = () => getEnv("SITE_URL") || "https://www.bokata.se";
+const BOOKING_MESSAGE_LABEL = "Bokningsmeddelande";
+const getBookingCancelSecret = (serviceKey: string) => getEnv("BOOKING_CANCEL_SECRET") || serviceKey;
+const signBookingCancel = (secret: string, bookingId: string, email: string) =>
+  crypto.createHmac("sha256", secret).update(`${bookingId}:${email.toLowerCase().trim()}`).digest("hex");
+const buildBookingCancelUrl = (origin: string, secret: string, bookingId: string, email: string) => {
+  const normalizedEmail = email.toLowerCase().trim();
+  const sig = signBookingCancel(secret, bookingId, normalizedEmail);
+  return `${origin}/api/bookings-cancel?bid=${encodeURIComponent(bookingId)}&email=${encodeURIComponent(normalizedEmail)}&sig=${encodeURIComponent(sig)}`;
+};
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+const extractBookingMessage = (knowledge?: string | null) => {
+  if (!knowledge) return "";
+  const normalized = String(knowledge).replace(/\r/g, "");
+  const lines = normalized.split("\n");
+  const labelLower = `${BOOKING_MESSAGE_LABEL.toLowerCase()}:`;
+  const startIdx = lines.findIndex((line) => line.trimStart().toLowerCase().startsWith(labelLower));
+  if (startIdx === -1) return "";
+  const firstLine = lines[startIdx].split(":").slice(1).join(":").trim();
+  const continuation = lines.slice(startIdx + 1).map((line) => line.trimEnd());
+  return [firstLine, ...continuation].join("\n").trim();
+};
+
+const bookingMessageToHtml = (message: string) => {
+  const trimmed = message.trim();
+  if (!trimmed) return "";
+  return trimmed
+    .split(/\r?\n/)
+    .map((line) => escapeHtml(line))
+    .join("<br/>");
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = String(req.query.token || "");
@@ -26,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data: booking } = await supabase
     .from("bookings")
-    .select("id,name,date,time,guests,client_email,confirm_token,status,confirm_expires_at")
+    .select("id,restaurant_id,name,date,time,guests,client_email,confirm_token,status,confirm_expires_at")
     .eq("confirm_token", token)
     .maybeSingle();
 
@@ -48,6 +87,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .update({ status: nextStatus, confirm_token: null })
     .eq("id", booking.id);
 
+  let bookingMessageHtml = "";
+  if (booking.restaurant_id) {
+    const { data: bookingSettings } = await supabase
+      .from("booking_public_settings")
+      .select("knowledge_public")
+      .eq("public_id", booking.restaurant_id)
+      .maybeSingle();
+    bookingMessageHtml = bookingMessageToHtml(extractBookingMessage((bookingSettings as { knowledge_public?: string | null } | null)?.knowledge_public));
+  }
+
   const sendEmail = async (to: string, subject: string, html: string) => {
     if (!resendKey) return { ok: false, status: 0, text: "Missing RESEND_API_KEY" };
     const resp = await fetch("https://api.resend.com/emails", {
@@ -66,6 +115,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
 
   if (booking.client_email && action === "confirm") {
+    const cancelUrl = buildBookingCancelUrl(getSiteUrl(), getBookingCancelSecret(serviceKey), String(booking.id), booking.client_email);
     await sendEmail(
       booking.client_email,
       "Din bokning är bekräftad",
@@ -74,6 +124,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         <p>Hej ${booking.name}!</p>
         <p>Här är dina bokningsdetaljer:</p>
         <p><strong>${booking.date} kl ${booking.time} • ${booking.guests} gäster.</strong></p>
+        ${bookingMessageHtml ? `<p><strong>Meddelande från restaurangen:</strong><br/>${bookingMessageHtml}</p>` : ""}
+        <p>Kan du inte komma? <a href="${cancelUrl}">Avboka din reservation här</a>.</p>
         <p>Vi ser fram emot att välkomna dig.</p>
       `
     );

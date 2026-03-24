@@ -59,12 +59,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const serviceClient = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
   const userId = userData.user.id;
-  const { data: membership, error: membershipError } = await serviceClient
+  const { data: memberships, error: membershipError } = await serviceClient
     .from("memberships")
     .select("restaurant_id, role")
     .eq("user_id", userId)
     .eq("restaurant_id", restaurantId)
-    .maybeSingle();
+    .limit(1);
+
+  const membership = memberships?.[0] ?? null;
 
   if (membershipError) {
     res.status(500).json({ error: membershipError.message });
@@ -88,7 +90,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    await serviceClient.from("memberships").insert({ restaurant_id: restaurantId, user_id: userId, role: "owner" });
+    const { error: insertMembershipError } = await serviceClient
+      .from("memberships")
+      .insert({ restaurant_id: restaurantId, user_id: userId, role: "owner" });
+    if (insertMembershipError && insertMembershipError.code !== "23505") {
+      res.status(500).json({ error: insertMembershipError.message });
+      return;
+    }
   }
 
   const { error } = await serviceClient.from("booking_public_settings").upsert(
