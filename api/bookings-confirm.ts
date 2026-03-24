@@ -61,6 +61,12 @@ const bookingMessageToHtml = (message: string) => {
     .join("<br/>");
 };
 
+const extractFirstName = (fullName: string | null | undefined) => {
+  const normalized = (fullName ?? "").trim();
+  if (!normalized) return "";
+  return normalized.split(/\s+/)[0] ?? "";
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = String(req.query.token || "");
   const action = String(req.query.action || "");
@@ -139,17 +145,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (booking.client_email && action === "confirm") {
     const cancelUrl = buildBookingCancelUrl(getSiteUrl(), getBookingCancelSecret(serviceKey), String(booking.id), booking.client_email);
+    const firstName = extractFirstName(booking.name);
+    const greeting = firstName ? `Bonjour ${escapeHtml(firstName)}!` : "Bonjour!";
     await sendEmail(
       booking.client_email,
       "Din bokning är bekräftad",
       `
-        <h2>Tack för din bokning!</h2>
-        <p>Hej ${booking.name}!</p>
-        <p>Här är dina bokningsdetaljer:</p>
-        <p><strong>${booking.date} kl ${booking.time} • ${booking.guests} gäster.</strong></p>
-        ${bookingMessageHtml ? `<p><strong>Meddelande från restaurangen:</strong><br/>${bookingMessageHtml}</p>` : ""}
+        <p>${greeting}</p>
+        <p>Tack för er bokning (${booking.date} kl ${booking.time} • ${booking.guests} gäster)</p>
+        ${bookingMessageHtml ? `<p>${bookingMessageHtml}</p>` : "<p>Vi ser fram emot att välkomna er!</p>"}
         <p>Kan du inte komma? <a href="${cancelUrl}">Avboka din reservation här</a>.</p>
-        <p>Vi ser fram emot att välkomna dig.</p>
       `
     );
   }

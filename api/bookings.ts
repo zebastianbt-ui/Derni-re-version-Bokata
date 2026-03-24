@@ -83,6 +83,12 @@ const bookingMessageToHtml = (message: string) => {
     .join("<br/>");
 };
 
+const extractFirstName = (fullName: string | null | undefined) => {
+  const normalized = (fullName ?? "").trim();
+  if (!normalized) return "";
+  return normalized.split(/\s+/)[0] ?? "";
+};
+
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const timeToMin = (t: string) => {
@@ -701,17 +707,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (!requireManual && resendKey) {
+    const firstName = extractFirstName(name);
+    const greeting = firstName ? `Bonjour ${escapeHtml(firstName)}!` : "Bonjour!";
     await sendEmail(
       email,
       "Din bokning är bekräftad",
       `
-        <h2>Tack för din bokning!</h2>
-        <p>Hej ${name}!</p>
-        <p>Här är dina bokningsdetaljer:</p>
-        <p><strong>${summary}</strong></p>
-        ${bookingMessageHtml ? `<p><strong>Meddelande från restaurangen:</strong><br/>${bookingMessageHtml}</p>` : ""}
+        <p>${greeting}</p>
+        <p>Tack för er bokning (${summary})</p>
+        ${bookingMessageHtml ? `<p>${bookingMessageHtml}</p>` : "<p>Vi ser fram emot att välkomna er!</p>"}
         ${cancelUrl ? `<p>Kan du inte komma? <a href="${cancelUrl}">Avboka din reservation här</a>.</p>` : ""}
-        <p>Vi ser fram emot att välkomna dig.</p>
       `
     );
   }
