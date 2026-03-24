@@ -89,7 +89,6 @@ const stripRepeatedConfirmationIntro = (message: string) => {
     .map((line) => line.trim())
     .filter((line, idx, arr) => !(idx === 0 && !line) && !(idx === arr.length - 1 && !line));
   const patterns = [
-    /^(bonjour|hej|hello)\b/i,
     /^tack för (din|er) bokning/i,
     /^här är (din|dina) bokningsdetaljer/i,
     /^\(?\d{4}-\d{2}-\d{2}\s+kl\s+\d{2}:\d{2}\s*•\s*\d+\s+gäster\)?$/i,
@@ -104,6 +103,30 @@ const extractFirstName = (fullName: string | null | undefined) => {
   const normalized = (fullName ?? "").trim();
   if (!normalized) return "";
   return normalized.split(/\s+/)[0] ?? "";
+};
+
+const capitalizeWord = (value: string) => value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+
+const resolveGreetingAndMessageBody = (message: string, firstName: string) => {
+  const defaultGreeting = firstName ? `Hej ${firstName}!` : "Hej!";
+  const lines = message
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return { greeting: defaultGreeting, body: "" };
+
+  const firstLine = lines[0];
+  const greetingPrefixMatch = firstLine.match(/^(bonjour|hej|hello)\b/i);
+  if (!greetingPrefixMatch) {
+    return { greeting: defaultGreeting, body: lines.join("\n") };
+  }
+
+  const simpleGreetingMatch = firstLine.match(/^(bonjour|hej|hello)[!\.\s]*$/i);
+  const greeting = simpleGreetingMatch
+    ? `${capitalizeWord(simpleGreetingMatch[1])}${firstName ? ` ${firstName}` : ""}!`
+    : firstLine;
+
+  return { greeting, body: lines.slice(1).join("\n").trim() };
 };
 
 
@@ -449,10 +472,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const requireManual = !!s.require_manual_confirmation;
   const notifyEnabled = !!s.notify_enabled;
   const notifyEmail = s.notify_email || null;
-  const bookingMessageHtml = bookingMessageToHtml(
-    stripRepeatedConfirmationIntro(
-      extractMultilineLabelValue(s.knowledge_public, BOOKING_CONFIRMATION_EMAIL_AUTO_LABEL)
-    )
+  const bookingMessageRaw = extractMultilineLabelValue(
+    s.knowledge_public,
+    BOOKING_CONFIRMATION_EMAIL_AUTO_LABEL
   );
   const rawDuration = s.seating?.maxBookingDurationMin ?? 90;
   const durationMin = rawDuration && rawDuration > 0 ? rawDuration : 90;
@@ -727,12 +749,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!requireManual && resendKey) {
     const firstName = extractFirstName(name);
-    const greeting = firstName ? `Bonjour ${escapeHtml(firstName)}!` : "Bonjour!";
+    const { greeting, body } = resolveGreetingAndMessageBody(bookingMessageRaw, firstName);
+    const greetingHtml = escapeHtml(greeting);
+    const bookingMessageHtml = bookingMessageToHtml(stripRepeatedConfirmationIntro(body));
     await sendEmail(
       email,
       "Din bokning är bekräftad",
       `
-        <p>${greeting}</p>
+        <p>${greetingHtml}</p>
         <p>Tack för er bokning (${summary})</p>
         ${bookingMessageHtml ? `<p>${bookingMessageHtml}</p>` : "<p>Vi ser fram emot att välkomna er!</p>"}
         ${cancelUrl ? `<p>Kan du inte komma? <a href="${cancelUrl}">Avboka din reservation här</a>.</p>` : ""}

@@ -67,7 +67,6 @@ const stripRepeatedConfirmationIntro = (message: string) => {
     .map((line) => line.trim())
     .filter((line, idx, arr) => !(idx === 0 && !line) && !(idx === arr.length - 1 && !line));
   const patterns = [
-    /^(bonjour|hej|hello)\b/i,
     /^tack för (din|er) bokning/i,
     /^här är (din|dina) bokningsdetaljer/i,
     /^\(?\d{4}-\d{2}-\d{2}\s+kl\s+\d{2}:\d{2}\s*•\s*\d+\s+gäster\)?$/i,
@@ -82,6 +81,30 @@ const extractFirstName = (fullName: string | null | undefined) => {
   const normalized = (fullName ?? "").trim();
   if (!normalized) return "";
   return normalized.split(/\s+/)[0] ?? "";
+};
+
+const capitalizeWord = (value: string) => value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+
+const resolveGreetingAndMessageBody = (message: string, firstName: string) => {
+  const defaultGreeting = firstName ? `Hej ${firstName}!` : "Hej!";
+  const lines = message
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return { greeting: defaultGreeting, body: "" };
+
+  const firstLine = lines[0];
+  const greetingPrefixMatch = firstLine.match(/^(bonjour|hej|hello)\b/i);
+  if (!greetingPrefixMatch) {
+    return { greeting: defaultGreeting, body: lines.join("\n") };
+  }
+
+  const simpleGreetingMatch = firstLine.match(/^(bonjour|hej|hello)[!\.\s]*$/i);
+  const greeting = simpleGreetingMatch
+    ? `${capitalizeWord(simpleGreetingMatch[1])}${firstName ? ` ${firstName}` : ""}!`
+    : firstLine;
+
+  return { greeting, body: lines.slice(1).join("\n").trim() };
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -128,20 +151,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .update({ status: nextStatus, confirm_token: null })
     .eq("id", booking.id);
 
-  let bookingMessageHtml = "";
+  let bookingMessageRaw = "";
   if (booking.restaurant_id) {
     const { data: bookingSettings } = await supabase
       .from("booking_public_settings")
       .select("knowledge_public")
       .eq("public_id", booking.restaurant_id)
       .maybeSingle();
-    bookingMessageHtml = bookingMessageToHtml(
-      stripRepeatedConfirmationIntro(
-        extractMultilineLabelValue(
-          (bookingSettings as { knowledge_public?: string | null } | null)?.knowledge_public,
-          BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL
-        )
-      )
+    bookingMessageRaw = extractMultilineLabelValue(
+      (bookingSettings as { knowledge_public?: string | null } | null)?.knowledge_public,
+      BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL
     );
   }
 
@@ -165,12 +184,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (booking.client_email && action === "confirm") {
     const cancelUrl = buildBookingCancelUrl(getSiteUrl(), getBookingCancelSecret(serviceKey), String(booking.id), booking.client_email);
     const firstName = extractFirstName(booking.name);
-    const greeting = firstName ? `Bonjour ${escapeHtml(firstName)}!` : "Bonjour!";
+    const { greeting, body } = resolveGreetingAndMessageBody(bookingMessageRaw, firstName);
+    const greetingHtml = escapeHtml(greeting);
+    const bookingMessageHtml = bookingMessageToHtml(stripRepeatedConfirmationIntro(body));
     await sendEmail(
       booking.client_email,
       "Din bokning är bekräftad",
       `
-        <p>${greeting}</p>
+        <p>${greetingHtml}</p>
         <p>Tack för er bokning (${booking.date} kl ${booking.time} • ${booking.guests} gäster)</p>
         ${bookingMessageHtml ? `<p>${bookingMessageHtml}</p>` : "<p>Vi ser fram emot att välkomna er!</p>"}
         <p>Kan du inte komma? <a href="${cancelUrl}">Avboka din reservation här</a>.</p>
