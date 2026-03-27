@@ -804,8 +804,7 @@ export default function BookingPage() {
                             }`}
                           >
                             <span>{c.day}</span>
-                            {closed ? <span className="text-[10px] mt-0.5">Stängt</span> : null}
-                            {!closed && passed ? <span className="text-[10px] mt-0.5">Passerat</span> : null}
+                            {closed && !passed ? <span className="text-[10px] mt-0.5">Stängt</span> : null}
                           </button>
                         );
                       })}
