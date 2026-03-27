@@ -363,6 +363,12 @@ type Settings = {
   };
 };
 
+type OnboardingFaq = {
+  id: string;
+  q: string;
+  a: string;
+};
+
 const DEFAULT_MEAL_RANGES: MealRangeMap = {
   Frukost: ["08:00", "10:59"],
   Lunch: ["11:00", "14:30"],
@@ -1406,21 +1412,23 @@ function ReservationDashboardInner() {
         .eq("restaurant_id", restaurantId);
       if (error) return;
       const rows = (data ?? []) as BookingRow[];
-      const mapped = rows.map((r) => ({
-        id: r.id,
-        date: r.date,
-        time: r.time,
-        name: r.name,
-        guests: r.guests,
-        notes: r.notes ?? "",
-        note: !!r.notes,
-        tableId: r.table_id ?? null,
-        durationMin: r.duration_min ?? bookingDurationMin,
-        status: (r.status as BookingStatus) ?? "confirmed",
-        source: (r.source as Booking["source"]) ?? "walkin",
-        createdAt: r.created_at ?? undefined,
-        color: "bg-pink-100",
-      }));
+      const mapped = rows
+        .map((r) => ({
+          id: r.id,
+          date: r.date,
+          time: r.time,
+          name: r.name,
+          guests: r.guests,
+          notes: r.notes ?? "",
+          note: !!r.notes,
+          tableId: r.table_id ?? null,
+          durationMin: r.duration_min ?? bookingDurationMin,
+          status: (r.status as BookingStatus) ?? "confirmed",
+          source: (r.source as Booking["source"]) ?? "walkin",
+          createdAt: r.created_at ?? undefined,
+          color: "bg-pink-100",
+        }))
+        .filter((booking) => booking.status !== "cancelled");
 
       const incomingIds = new Set(mapped.map((b) => b.id));
       if (lastBookingIdsRef.current.size) {
@@ -1754,6 +1762,7 @@ function ReservationDashboardInner() {
   const [newFaq, setNewFaq] = useState<string>("");
   const [faqSuccess, setFaqSuccess] = useState(false);
   const faqTimeoutRef = useRef<number | null>(null);
+  const [faqDraftAnswers, setFaqDraftAnswers] = useState<Record<string, string>>({});
   const [testRunning, setTestRunning] = useState(false);
   const [testResults, setTestResults] = useState<{ q: string; reply: string; ok: boolean }[]>([]);
   const currentYear = new Date().getFullYear();
@@ -1783,7 +1792,7 @@ function ReservationDashboardInner() {
     parking: "",
     transport: "",
   });
-  const [onboardingFaqs, setOnboardingFaqs] = useState<{ q: string; a: string }[]>([]);
+  const [onboardingFaqs, setOnboardingFaqs] = useState<OnboardingFaq[]>([]);
   const [showTemplate, setShowTemplate] = useState(false);
   const onboardInitRef = useRef(false);
 
@@ -1898,12 +1907,14 @@ function ReservationDashboardInner() {
     return lines.join("\n").trim();
   }, []);
 
+  const createOnboardingFaq = (q: string, a = ""): OnboardingFaq => ({ id: uid(), q, a });
+
   const addOnboardingFaq = (q: string) => {
     const trimmed = q.trim();
     if (!trimmed) return;
     setOnboardingFaqs((prev) => {
       if (prev.some((x) => x.q.toLowerCase() === trimmed.toLowerCase())) return prev;
-      return [...prev, { q: trimmed, a: "" }];
+      return [...prev, createOnboardingFaq(trimmed)];
     });
     setOnboardingDirty(true);
   };
@@ -2140,7 +2151,7 @@ function ReservationDashboardInner() {
     data.parking = mapField("Parkering");
     data.transport = mapField("Kollektivtrafik");
 
-    const faqs: { q: string; a: string }[] = [];
+    const faqs: OnboardingFaq[] = [];
     let curQ: string | null = null;
     for (const l of lines) {
       if (l.toLowerCase().startsWith("fråga:")) {
@@ -2149,12 +2160,13 @@ function ReservationDashboardInner() {
       }
       if (l.toLowerCase().startsWith("svar:") && curQ) {
         const ans = l.slice(5).trim();
-        faqs.push({ q: curQ, a: ans });
+        faqs.push(createOnboardingFaq(curQ, ans));
         curQ = null;
       }
     }
     setOnboarding(data);
     setOnboardingFaqs(faqs);
+    setFaqDraftAnswers({});
     onboardInitRef.current = true;
     if (!/barnstol:/i.test(k) || !/barnmeny:/i.test(k)) {
       setOnboardingDirty(true);
@@ -2193,7 +2205,15 @@ function ReservationDashboardInner() {
     return { score, missing };
   }, [config.ai.knowledge, config.hours, config.seating]);
 
-  const draftFaqs = useMemo(() => onboardingFaqs.filter((f) => !f.a?.trim()), [onboardingFaqs]);
+  const savedFaqs = useMemo(
+    () => onboardingFaqs.filter((f) => f.a?.trim() && faqDraftAnswers[f.id] == null),
+    [onboardingFaqs, faqDraftAnswers]
+  );
+
+  const draftFaqs = useMemo(
+    () => onboardingFaqs.filter((f) => !f.a?.trim() || faqDraftAnswers[f.id] != null),
+    [onboardingFaqs, faqDraftAnswers]
+  );
 
   const callAi = async (text: string) => {
     const r = await fetch("/api/ai", {
@@ -2306,6 +2326,45 @@ function ReservationDashboardInner() {
     faqTimeoutRef.current = window.setTimeout(() => {
       setFaqSuccess(false);
     }, 1000);
+  };
+
+  const getFaqInputValue = (faqId: string, committedAnswer: string) => {
+    return faqDraftAnswers[faqId] ?? committedAnswer;
+  };
+
+  const hasFaqPendingChanges = (faqId: string, committedAnswer: string) => {
+    const draftAnswer = faqDraftAnswers[faqId];
+    if (draftAnswer == null) return false;
+    return draftAnswer.trim() !== committedAnswer;
+  };
+
+  const updateFaqDraftAnswer = (faqId: string, value: string) => {
+    setFaqDraftAnswers((prev) => ({ ...prev, [faqId]: value }));
+  };
+
+  const clearFaqDraftAnswer = (faqId: string) => {
+    setFaqDraftAnswers((prev) => {
+      if (!(faqId in prev)) return prev;
+      const { [faqId]: _removed, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  const removeFaq = (faqId: string) => {
+    setOnboardingFaqs((prev) => prev.filter((x) => x.id !== faqId));
+    clearFaqDraftAnswer(faqId);
+    setOnboardingDirty(true);
+  };
+
+  const commitFaqAnswer = (faqId: string, committedAnswer: string) => {
+    const nextAnswer = (faqDraftAnswers[faqId] ?? committedAnswer).trim();
+    if (nextAnswer === committedAnswer) {
+      clearFaqDraftAnswer(faqId);
+      return;
+    }
+    setOnboardingFaqs((prev) => prev.map((x) => (x.id === faqId ? { ...x, a: nextAnswer } : x)));
+    clearFaqDraftAnswer(faqId);
+    setOnboardingDirty(true);
   };
 
   function isBookingIntent(txt: string) {
@@ -4476,37 +4535,38 @@ function ReservationDashboardInner() {
 
                 <div className="mt-3">
                   <div className="text-sm font-semibold text-gray-700 mb-2">Sparade frågor (kunskapsbas)</div>
-                  {onboardingFaqs.filter((f) => f.a?.trim()).length ? (
+                  {savedFaqs.length ? (
                     <div className="space-y-2">
-                      {onboardingFaqs
-                        .filter((f) => f.a?.trim())
-                        .map((f, i) => (
-                        <div key={`${f.q}-${i}`} className="rounded-lg border border-gray-200 bg-white p-2">
+                      {savedFaqs.map((f) => (
+                        <div key={f.id} className="rounded-lg border border-gray-200 bg-white p-2">
                           <div className="flex items-center justify-between gap-2">
                             <div className="text-sm font-semibold text-gray-800">{f.q}</div>
                             <button
                               type="button"
                               className="text-xs text-pink-700 hover:text-pink-800"
-                              onClick={() => {
-                                setOnboardingFaqs((prev) => prev.filter((x) => x.q !== f.q));
-                                setOnboardingDirty(true);
-                              }}
+                              onClick={() => removeFaq(f.id)}
                             >
                               Ta bort fråga
                             </button>
                           </div>
-                          <input
-                            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1 text-sm"
-                            placeholder="Skriv svar..."
-                            value={f.a}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setOnboardingFaqs((prev) =>
-                                prev.map((x) => (x.q === f.q ? { ...x, a: v } : x))
-                              );
-                              setOnboardingDirty(true);
-                            }}
-                          />
+                          <div className="mt-1 flex items-center gap-2">
+                            <input
+                              className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm"
+                              placeholder="Skriv svar..."
+                              value={getFaqInputValue(f.id, f.a)}
+                              onChange={(e) => updateFaqDraftAnswer(f.id, e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              className="h-8 w-8 rounded-md border border-emerald-300 bg-emerald-50 text-sm text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              onClick={() => commitFaqAnswer(f.id, f.a)}
+                              disabled={!hasFaqPendingChanges(f.id, f.a)}
+                              aria-label="Validera svar"
+                              title="Validera svar"
+                            >
+                              ✅
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -4569,33 +4629,36 @@ function ReservationDashboardInner() {
                   </div>
                   {showDrafts ? (
                     <div className="space-y-2">
-                      {draftFaqs.map((f, i) => (
-                        <div key={`${f.q}-${i}`} className="rounded-lg border border-gray-200 bg-white p-2">
+                      {draftFaqs.map((f) => (
+                        <div key={f.id} className="rounded-lg border border-gray-200 bg-white p-2">
                           <div className="flex items-center justify-between gap-2">
                             <div className="text-sm font-semibold text-gray-800">{f.q}</div>
                             <button
                               type="button"
                               className="text-xs text-pink-700 hover:text-pink-800"
-                              onClick={() => {
-                                setOnboardingFaqs((prev) => prev.filter((x) => x.q !== f.q));
-                                setOnboardingDirty(true);
-                              }}
+                              onClick={() => removeFaq(f.id)}
                             >
                               Ta bort fråga
                             </button>
                           </div>
-                          <input
-                            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1 text-sm"
-                            placeholder="Skriv svar..."
-                            value={f.a}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setOnboardingFaqs((prev) =>
-                                prev.map((x) => (x.q === f.q ? { ...x, a: v } : x))
-                              );
-                              setOnboardingDirty(true);
-                            }}
-                          />
+                          <div className="mt-1 flex items-center gap-2">
+                            <input
+                              className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm"
+                              placeholder="Skriv svar..."
+                              value={getFaqInputValue(f.id, f.a)}
+                              onChange={(e) => updateFaqDraftAnswer(f.id, e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              className="h-8 w-8 rounded-md border border-emerald-300 bg-emerald-50 text-sm text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              onClick={() => commitFaqAnswer(f.id, f.a)}
+                              disabled={!hasFaqPendingChanges(f.id, f.a)}
+                              aria-label="Validera svar"
+                              title="Validera svar"
+                            >
+                              ✅
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>

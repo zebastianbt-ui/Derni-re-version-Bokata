@@ -282,6 +282,49 @@ function genTimeSlots(start = "11:00", end = "21:00", stepMin = 30, lastBookingB
   return out;
 }
 
+const BOOKING_TIME_ZONE = "Europe/Stockholm";
+const MANUAL_FULLY_BOOKED_SLOTS: Record<string, string[]> = {
+  "2026-04-03": ["13:00", "13:30", "14:00", "14:30"],
+};
+
+function normalizeSlotTime(value: string) {
+  return value?.length >= 5 ? value.slice(0, 5) : value;
+}
+
+function getNowInBookingTimeZone() {
+  const formatter = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: BOOKING_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = formatter.formatToParts(new Date());
+  const lookup = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const year = lookup("year");
+  const month = lookup("month");
+  const day = lookup("day");
+  const hour = lookup("hour");
+  const minute = lookup("minute");
+  return {
+    date: `${year}-${month}-${day}`,
+    time: `${hour}:${minute}`,
+  };
+}
+
+function isPastBookingSlot(dateIso: string, timeValue: string | undefined, now: { date: string; time: string }) {
+  if (dateIso < now.date) return true;
+  if (!timeValue || dateIso > now.date) return false;
+  return normalizeSlotTime(timeValue) < now.time;
+}
+
+function isManuallyFullBookedSlot(dateIso: string, timeValue: string) {
+  const slots = MANUAL_FULLY_BOOKED_SLOTS[dateIso] ?? [];
+  return slots.includes(normalizeSlotTime(timeValue));
+}
+
 const weekdaySv: DayName[] = ["söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag"];
 const toDayName = (iso: string): DayName | null => {
   const d = new Date(iso + "T00:00:00");
@@ -376,6 +419,12 @@ export default function BookingPage() {
   const [qaAnswer, setQaAnswer] = useState<string | null>(null);
   const [qaLoading, setQaLoading] = useState(false);
   const [qaHistory, setQaHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [clockTick, setClockTick] = useState(0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setClockTick((prev) => prev + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -465,6 +514,10 @@ export default function BookingPage() {
     : { public_id: restaurantSlug, hours: EMPTY_HOURS, seating: DEFAULT_SEATING };
   const normalizedHours = useMemo(() => normalizeHours(effectiveSettings.hours), [effectiveSettings.hours]);
   const settingsMissing = settingsLoaded && !publicSettings && restaurantSlug !== "demo";
+  const bookingNow = useMemo(() => getNowInBookingTimeZone(), [clockTick]);
+
+  const isDateInPast = (iso: string) => isPastBookingSlot(iso, undefined, bookingNow);
+  const isTimeSlotInPast = (iso: string, value: string) => isPastBookingSlot(iso, value, bookingNow);
 
   const isClosedDate = (iso: string) => {
     const special = normalizedHours.special.find((s) => s.date === iso);
@@ -493,16 +546,17 @@ export default function BookingPage() {
   }, [date, normalizedHours]);
 
   const findNextOpenDate = (startIso: string) => {
-    if (dayHours(startIso)) return startIso;
-    const start = new Date(startIso + "T00:00:00");
+    const baselineIso = startIso < bookingNow.date ? bookingNow.date : startIso;
+    if (dayHours(baselineIso) && !isDateInPast(baselineIso)) return baselineIso;
+    const start = new Date(baselineIso + "T00:00:00");
     if (Number.isNaN(start.getTime())) return startIso;
     for (let i = 1; i <= 366; i += 1) {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
       const iso = toISODateInputValue(d);
-      if (dayHours(iso)) return iso;
+      if (dayHours(iso) && !isDateInPast(iso)) return iso;
     }
-    return startIso;
+    return baselineIso;
   };
 
   useEffect(() => {
@@ -512,12 +566,24 @@ export default function BookingPage() {
       setViewMonth(Number(next.split("-")[1]) - 1);
       setViewYear(Number(next.split("-")[0]));
     }
-  }, [normalizedHours, date]);
+  }, [normalizedHours, date, bookingNow.date]);
 
   const avail = useMemo(() => {
-    if (isClosedDate(date)) return { capacity: 0, booked: 0, available: 0, canFit: false };
+    const blockedByPast = time ? isTimeSlotInPast(date, time) : isDateInPast(date);
+    const blockedByManualFull = time ? isManuallyFullBookedSlot(date, time) : false;
+    if (isClosedDate(date) || blockedByPast || blockedByManualFull) {
+      return { capacity: 0, booked: 0, available: 0, canFit: false };
+    }
     return mockAvailability(date, time, guests);
-  }, [date, time, guests, normalizedHours]);
+  }, [date, time, guests, normalizedHours, bookingNow]);
+
+  useEffect(() => {
+    if (!time) return;
+    if (!times.includes(time) || isTimeSlotInPast(date, time) || isManuallyFullBookedSlot(date, time)) {
+      setTime("");
+    }
+  }, [date, time, times, bookingNow]);
+
   const hasName = name.trim().length > 0;
   const hasEmail = email.trim().length > 0;
   const formReady = Boolean(date && time && guests && hasName && hasEmail);
@@ -525,7 +591,10 @@ export default function BookingPage() {
   const mobileCtaDisabledReason = (() => {
     if (submitting) return "Skickar bokningen…";
     if (!date) return "Välj ett datum.";
+    if (isDateInPast(date)) return "Det går inte att boka passerade datum.";
     if (!time) return "Välj en tid.";
+    if (isTimeSlotInPast(date, time)) return "Det går inte att boka en passerad tid.";
+    if (isManuallyFullBookedSlot(date, time)) return "Den tiden är fullbokad.";
     if (!guests || guests < 1) return "Ange antal gäster.";
     if (!hasName) return "Ange ditt namn.";
     if (!hasEmail) return "Ange din e‑post.";
@@ -550,6 +619,14 @@ export default function BookingPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!date || !time || !guests || !name.trim() || !email.trim()) return;
+    if (isTimeSlotInPast(date, time)) {
+      setSubmitError("Det går inte att boka en passerad tid.");
+      return;
+    }
+    if (isManuallyFullBookedSlot(date, time)) {
+      setSubmitError("Den tiden är fullbokad.");
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     const resv: Reservation = {
@@ -710,14 +787,16 @@ export default function BookingPage() {
                         const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(c.day).padStart(2, "0")}`;
                         const isSel = iso === date;
                         const closed = isClosedDate(iso);
+                        const passed = isDateInPast(iso);
+                        const blocked = closed || passed;
                         return (
                           <button
                             key={c.key}
                             type="button"
-                            onClick={() => !closed && setDate(iso)}
-                            disabled={closed}
+                            onClick={() => !blocked && setDate(iso)}
+                            disabled={blocked}
                             className={`h-12 rounded-2xl text-sm font-semibold flex flex-col items-center justify-center leading-tight ${
-                              closed
+                              blocked
                                 ? "bg-gray-100 text-gray-400 border border-gray-200"
                                 : isSel
                                 ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white"
@@ -725,7 +804,8 @@ export default function BookingPage() {
                             }`}
                           >
                             <span>{c.day}</span>
-                            {closed && <span className="text-[10px] mt-0.5">Stängt</span>}
+                            {closed ? <span className="text-[10px] mt-0.5">Stängt</span> : null}
+                            {!closed && passed ? <span className="text-[10px] mt-0.5">Passerat</span> : null}
                           </button>
                         );
                       })}
@@ -764,16 +844,32 @@ export default function BookingPage() {
                       </div>
                       <div className="grid grid-cols-3 gap-2 max-h-[280px] min-h-[180px] overflow-auto pr-1">
                         {times.map((t) => {
-                          const a = mockAvailability(date, t, guests || 1);
+                          const passed = isTimeSlotInPast(date, t);
+                          const manualFull = isManuallyFullBookedSlot(date, t);
+                          const a = passed || manualFull
+                            ? { capacity: 0, booked: 0, available: 0, canFit: false }
+                            : mockAvailability(date, t, guests || 1);
                           const isSel = t === time;
-                          const tag = a.canFit ? (a.available <= 2 ? "Snart full" : a.available <= 6 ? "Populär" : "") : "";
+                          const blocked = passed || manualFull || !a.canFit;
+                          const tag = manualFull
+                            ? "Fullbokat"
+                            : passed
+                            ? "Passerad"
+                            : a.canFit
+                            ? a.available <= 2
+                              ? "Snart full"
+                              : a.available <= 6
+                              ? "Populär"
+                              : ""
+                            : "";
                           return (
                             <button
                               key={t}
                               type="button"
-                              onClick={() => setTime(t)}
+                              onClick={() => !blocked && setTime(t)}
+                              disabled={blocked}
                               className={`text-sm font-semibold rounded-md px-1.5 py-1 border transition ${
-                                a.canFit
+                                !blocked
                                   ? isSel
                                     ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white border-violet-600"
                                     : "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"

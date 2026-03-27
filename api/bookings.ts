@@ -158,6 +158,46 @@ const pickPeriodForDate = (periods: any[], iso: string) => {
 };
 const normalizeTime = (t: string) => (t?.length >= 5 ? t.slice(0, 5) : t);
 
+const BOOKING_TIME_ZONE = "Europe/Stockholm";
+const MANUAL_FULLY_BOOKED_SLOTS: Record<string, string[]> = {
+  "2026-04-03": ["13:00", "13:30", "14:00", "14:30"],
+};
+
+const getNowInBookingTimeZone = () => {
+  const formatter = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: BOOKING_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = formatter.formatToParts(new Date());
+  const lookup = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const year = lookup("year");
+  const month = lookup("month");
+  const day = lookup("day");
+  const hour = lookup("hour");
+  const minute = lookup("minute");
+  return {
+    date: `${year}-${month}-${day}`,
+    time: `${hour}:${minute}`,
+  };
+};
+
+const isPastBookingSlot = (dateIso: string, timeValue: string) => {
+  const now = getNowInBookingTimeZone();
+  if (dateIso < now.date) return true;
+  if (dateIso > now.date) return false;
+  return normalizeTime(timeValue) < now.time;
+};
+
+const isManuallyFullBookedSlot = (dateIso: string, timeValue: string) => {
+  const slots = MANUAL_FULLY_BOOKED_SLOTS[dateIso] ?? [];
+  return slots.includes(normalizeTime(timeValue));
+};
+
 type FloorplanTable = {
   id: number;
   seats: number;
@@ -460,6 +500,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(400).json({ error: "Missing booking fields" });
     return;
   }
+
+  if (isPastBookingSlot(date, time)) {
+    res.status(400).json({ error: "Det går inte att boka en passerad tid." });
+    return;
+  }
+
+  if (isManuallyFullBookedSlot(date, time)) {
+    res.status(400).json({ error: "Tyvärr är den tiden fullbokad." });
+    return;
+  }
+
   const normalizedEmail = email.trim().toLowerCase();
 
   const { data: settings } = await supabase
