@@ -80,6 +80,8 @@ type Booking = {
   color?: string;
 };
 
+const isCancelledBooking = (booking: Pick<Booking, "status">) => booking.status === "cancelled";
+
 type BookingRow = {
   id: string;
   restaurant_id: string;
@@ -800,13 +802,16 @@ function assignTablesForDateWithTables(
   const tableList = tables.length ? tables : ENGINE.tables.map((cap, i) => ({ id: i + 1, cap }));
   const day = input
     .filter((b) => b.date === date)
-    .map((b) => ({ ...b }))
+    .map((b) => ({ ...b, time: round30(b.time) }));
+  const cancelled = day.filter((b) => isCancelledBooking(b));
+  const active = day
+    .filter((b) => !isCancelledBooking(b))
     .sort((a, b) => b.guests - a.guests || timeToMin(a.time) - timeToMin(b.time));
 
-  const out: Booking[] = [];
+  const out: Booking[] = [...cancelled];
   const assignedBlocks: TableReservationBlock[] = [];
 
-  for (const b of day) {
+  for (const b of active) {
     const meal = mealForWithRanges(b.time, mealRanges);
     const dur = b.durationMin ?? (meal in ENGINE.durations ? ENGINE.durations[meal as keyof typeof ENGINE.durations] : 90);
     const s = timeToMin(round30(b.time));
@@ -882,6 +887,7 @@ function isTableAvailable(args: {
   const e = s + args.durationMin;
   return !args.bookings.some((b) => {
     if (b.date !== args.date) return false;
+    if (isCancelledBooking(b)) return false;
     if (b.tableId !== args.tableId) return false;
     const bs = timeToMin(round30(b.time));
     const bd =
@@ -1412,23 +1418,21 @@ function ReservationDashboardInner() {
         .eq("restaurant_id", restaurantId);
       if (error) return;
       const rows = (data ?? []) as BookingRow[];
-      const mapped = rows
-        .map((r) => ({
-          id: r.id,
-          date: r.date,
-          time: r.time,
-          name: r.name,
-          guests: r.guests,
-          notes: r.notes ?? "",
-          note: !!r.notes,
-          tableId: r.table_id ?? null,
-          durationMin: r.duration_min ?? bookingDurationMin,
-          status: (r.status as BookingStatus) ?? "confirmed",
-          source: (r.source as Booking["source"]) ?? "walkin",
-          createdAt: r.created_at ?? undefined,
-          color: "bg-pink-100",
-        }))
-        .filter((booking) => booking.status !== "cancelled");
+      const mapped = rows.map((r) => ({
+        id: r.id,
+        date: r.date,
+        time: r.time,
+        name: r.name,
+        guests: r.guests,
+        notes: r.notes ?? "",
+        note: !!r.notes,
+        tableId: r.table_id ?? null,
+        durationMin: r.duration_min ?? bookingDurationMin,
+        status: (r.status as BookingStatus) ?? "confirmed",
+        source: (r.source as Booking["source"]) ?? "walkin",
+        createdAt: r.created_at ?? undefined,
+        color: "bg-pink-100",
+      }));
 
       const incomingIds = new Set(mapped.map((b) => b.id));
       if (lastBookingIdsRef.current.size) {
@@ -1620,7 +1624,9 @@ function ReservationDashboardInner() {
     return out;
   }, [mealRanges]);
 
+  const activeBookings = useMemo(() => bookings.filter((b) => !isCancelledBooking(b)), [bookings]);
   const dayBookings = useMemo(() => bookings.filter((b) => b.date === dateSel), [bookings, dateSel]);
+  const dayActiveBookings = useMemo(() => dayBookings.filter((b) => !isCancelledBooking(b)), [dayBookings]);
 
   const bookingDates = useMemo(() => {
     const set = new Set<string>();
@@ -1667,14 +1673,14 @@ function ReservationDashboardInner() {
     const prevStart = addDays(start, -7);
     const prevEnd = start;
     const inRange = (iso: string, a: Date, b: Date) => iso >= toISO(a) && iso < toISO(b);
-    const curGuests = bookings.filter((b) => inRange(b.date, start, end)).reduce((s, b) => s + b.guests, 0);
-    const prevGuests = bookings.filter((b) => inRange(b.date, prevStart, prevEnd)).reduce((s, b) => s + b.guests, 0);
+    const curGuests = activeBookings.filter((b) => inRange(b.date, start, end)).reduce((s, b) => s + b.guests, 0);
+    const prevGuests = activeBookings.filter((b) => inRange(b.date, prevStart, prevEnd)).reduce((s, b) => s + b.guests, 0);
     const diff = curGuests - prevGuests;
     const pct = prevGuests > 0 ? Math.round((diff / prevGuests) * 100) : null;
     return { curGuests, prevGuests, diff, pct };
-  }, [bookings, today]);
+  }, [activeBookings, today]);
 
-  const filtered = useMemo(() => {
+  const filteredForDisplay = useMemo(() => {
     const [a, b] = mealRangeFor(activeMeal, mealRanges);
     const s = timeToMin(a),
       e = timeToMin(b);
@@ -1686,24 +1692,29 @@ function ReservationDashboardInner() {
       .sort((x, y) => timeToMin(x.time) - timeToMin(y.time));
   }, [activeMeal, dayBookings, mealRanges]);
 
+  const filteredActive = useMemo(
+    () => filteredForDisplay.filter((b) => !isCancelledBooking(b)),
+    [filteredForDisplay]
+  );
+
   const groupedByTime = useMemo(() => {
     const g: Record<string, Booking[]> = {};
-    for (const b of filtered.map((x) => ({ ...x, time: round30(x.time) }))) {
+    for (const b of filteredForDisplay.map((x) => ({ ...x, time: round30(x.time) }))) {
       (g[b.time] ??= []).push(b);
     }
     return g;
-  }, [filtered]);
+  }, [filteredForDisplay]);
 
-  const totalGuestsDay = useMemo(() => dayBookings.reduce((s, b) => s + b.guests, 0), [dayBookings]);
+  const totalGuestsDay = useMemo(() => dayActiveBookings.reduce((s, b) => s + b.guests, 0), [dayActiveBookings]);
 
   const totals = useMemo(
-    () => filtered.reduce((a, b) => ({ count: a.count + 1, guests: a.guests + b.guests }), { count: 0, guests: 0 }),
-    [filtered]
+    () => filteredActive.reduce((a, b) => ({ count: a.count + 1, guests: a.guests + b.guests }), { count: 0, guests: 0 }),
+    [filteredActive]
   );
 
   const busiestLeast = useMemo(() => {
     const map = new Map<number, number>();
-    dayBookings.forEach((b) => {
+    dayActiveBookings.forEach((b) => {
       const h = Math.floor(timeToMin(b.time) / 60);
       map.set(h, (map.get(h) || 0) + 1);
     });
@@ -1724,17 +1735,17 @@ function ReservationDashboardInner() {
     });
     const hr = (h: number) => `${pad2(h)}:00 – ${pad2((h + 1) % 24)}:00`;
     return { max: hr(maxH), min: hr(minH) };
-  }, [dayBookings]);
+  }, [dayActiveBookings]);
 
   const guestsByMeal = useMemo(() => {
     const m: Record<Meal, number> = { Alla: 0, Frukost: 0, Lunch: 0, Middag: 0 };
-    dayBookings.forEach((b) => {
+    dayActiveBookings.forEach((b) => {
       const mf = mealForWithRanges(b.time, mealRanges);
       m[mf] += b.guests;
       m.Alla += b.guests;
     });
     return m;
-  }, [dayBookings, mealRanges]);
+  }, [dayActiveBookings, mealRanges]);
 
   const updateMealRange = (meal: MealKey, idx: 0 | 1, value: string) => {
     setConfig((prev) => {
@@ -2868,7 +2879,7 @@ function ReservationDashboardInner() {
         <>
           {/* Top stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <Stat icon="📅" label="Bokningar idag" value={String(dayBookings.length)} />
+            <Stat icon="📅" label="Bokningar idag" value={String(dayActiveBookings.length)} />
             <Stat icon="👥" label="Antal gäster idag" value={String(totalGuestsDay)} />
             <Stat icon="🕒" label="Mest bokade tid" value={busiestLeast.max} />
             <Stat icon="🕘" label="Minst bokade tid" value={busiestLeast.min} />
@@ -3035,17 +3046,24 @@ function ReservationDashboardInner() {
                       <div className="flex items-start gap-3">
                         <div className="w-14 shrink-0 text-sm font-semibold text-gray-700 pt-1">{time}</div>
                         <div className="flex flex-wrap gap-2">
-                          {groupedByTime[time].map((b, idx) => (
+                          {groupedByTime[time].map((b) => (
                             <div
-                              key={`${time}-${idx}`}
-                              className={`px-2 py-1 rounded shadow border text-sm text-gray-700 ${b.color ?? "bg-pink-100"} ${
-                                "cursor-pointer hover:brightness-95"
+                              key={b.id}
+                              className={`px-2 py-1 rounded shadow border text-sm ${
+                                isCancelledBooking(b)
+                                  ? "bg-gray-100 border-gray-300 text-gray-500 cursor-pointer"
+                                  : `${b.color ?? "bg-pink-100"} text-gray-700 cursor-pointer hover:brightness-95`
                               }`}
                               onClick={() => setOpenBooking(b)}
                               title={b.note ? "Visa anteckning" : "Redigera bokning"}
                             >
                               <div className="flex items-center gap-2 font-medium">
-                                <span>{b.name}</span>
+                                <span className={isCancelledBooking(b) ? "line-through" : ""}>{b.name}</span>
+                                {isCancelledBooking(b) ? (
+                                  <span className="inline-flex items-center rounded-full bg-gray-200 text-gray-700 text-[10px] px-2 py-0.5 font-semibold">
+                                    Avbokad
+                                  </span>
+                                ) : null}
                                 {b.note && (
                                   <span
                                     className="inline-flex items-center rounded-full bg-pink-200 text-pink-800 text-[10px] px-2 py-0.5 font-semibold"
@@ -3055,7 +3073,9 @@ function ReservationDashboardInner() {
                                   </span>
                                 )}
                               </div>
-                              <div className="text-xs text-gray-600">{b.guests} gäster{b.tableId ? ` • Bord ${b.tableId}` : ""}</div>
+                              <div className={`text-xs ${isCancelledBooking(b) ? "text-gray-500 line-through" : "text-gray-600"}`}>
+                                {b.guests} gäster{b.tableId ? ` • Bord ${b.tableId}` : ""}
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -3379,11 +3399,12 @@ function ReservationDashboardInner() {
       {/* Note modal */}
   {openBooking && (
         <Modal onClose={() => setOpenBooking(null)}>
-          <h4 className="text-lg font-bold text-gray-800">
+          <h4 className={`text-lg font-bold ${isCancelledBooking(openBooking) ? "text-gray-500 line-through" : "text-gray-800"}`}>
             {openBooking.name} – {openBooking.time}
           </h4>
           <p className="text-sm text-gray-500 mb-4">
             {openBooking.guests} gäster{openBooking.tableId ? ` • Bord ${openBooking.tableId}` : ""}
+            {isCancelledBooking(openBooking) ? " • Avbokad" : ""}
           </p>
           <div className="bg-pink-50 border border-pink-200 rounded-lg p-3 text-gray-800 whitespace-pre-wrap">
             {openBooking.notes || "(Ingen anteckning)"}
