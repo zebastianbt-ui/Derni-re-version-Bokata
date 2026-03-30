@@ -284,7 +284,7 @@ function genTimeSlots(start = "11:00", end = "21:00", stepMin = 30, lastBookingB
 
 const BOOKING_TIME_ZONE = "Europe/Stockholm";
 const MANUAL_FULLY_BOOKED_SLOTS: Record<string, string[]> = {
-  "2026-04-03": ["13:00", "13:30", "14:00", "14:30"],
+  "2026-04-03": ["12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00"],
   "2026-04-05": ["13:00"],
 };
 
