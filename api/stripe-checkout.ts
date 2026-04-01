@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Stripe from "stripe";
-import { rateLimit } from "./_rateLimit";
+import { rateLimit } from "../lib/rateLimit";
 
 const getEnv = (key: string) => process.env[key] ?? "";
 const normalizeEmail = (value?: string | null) => (value ?? "").trim().toLowerCase();
