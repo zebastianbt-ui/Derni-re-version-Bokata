@@ -3459,6 +3459,31 @@ function ReservationDashboardInner() {
                 }
               />
             </Field>
+            <Field label="Bord (valfritt)">
+              <select
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                value={
+                  editBookingDraft?.tableId == null
+                    ? (openBooking.tableId == null ? "" : String(openBooking.tableId))
+                    : String(editBookingDraft.tableId)
+                }
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const parsed = raw ? Number(raw) : null;
+                  setEditBookingDraft((prev) => ({
+                    ...(prev ?? openBooking),
+                    tableId: raw && Number.isFinite(parsed) ? parsed : null,
+                  }));
+                }}
+              >
+                <option value="">Auto (välj bord automatiskt)</option>
+                {tableOptions.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label} · {t.cap} platser
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Field label="Kommentar / önskemål">
               <textarea
                 rows={3}
@@ -3515,6 +3540,30 @@ function ReservationDashboardInner() {
                   if (!openBooking) return;
                   const target = openBooking;
                   const next = editBookingDraft ?? target;
+
+                  if (next.tableId != null) {
+                    const draftId = `draft-${uid()}`;
+                    const draftBooking: Booking = {
+                      ...next,
+                      id: draftId,
+                      date: next.date,
+                      time: round30(next.time),
+                      durationMin: next.durationMin ?? bookingDurationMin,
+                      note: !!next.notes,
+                    };
+                    const simulated = assignTablesForDateWithTables(
+                      next.date,
+                      [...bookings.filter((b) => String(b.id) !== String(target.id)), draftBooking],
+                      tableCaps,
+                      mealRanges
+                    );
+                    const simulatedDraft = simulated.find((b) => String(b.id) === draftId);
+                    if (simulatedDraft?.tableId !== next.tableId) {
+                      window.alert("Valt bord är redan upptaget eller saknar tillräcklig gruppkapacitet vid den tiden.");
+                      return;
+                    }
+                  }
+
                   if (restaurantId && settingsReady) {
                     const { error } = await supabase
                       .from("bookings")
