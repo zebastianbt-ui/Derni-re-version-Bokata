@@ -447,22 +447,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const needsWebForMenu = /(meny|menu|à la carte|rätter|mat|vegetar|vegan|gluten|laktos|galett|crêpe|crepe)/i.test(msgLower) && !hasMenuInfo;
   const siteUrl = kbInfo.website;
   let externalHints = "";
-  if (siteUrl && (needsWebForHours || needsWebForMenu)) {
-    if (needsWebForHours) {
-      const webData = await getWebData(siteUrl);
-      if (webData.hoursSummary) {
-        externalHints += `Webbhours (officiell hemsida, ej verifierad): ${webData.hoursSummary}\n`;
-      }
-    }
-    if (needsWebForMenu) {
-      const menuData = await getMenuContent(siteUrl);
-      if (menuData.menuText) {
-        externalHints += `Menu (officiell hemsida, ej verifierad): ${menuData.menuText.slice(0, 4000)}\n`;
-      } else if (menuData.menuUrl) {
-        externalHints += `Menu URL (officiell hemsida): ${menuData.menuUrl}\n`;
-      }
-    }
-  }
 
   const closedRanges = (() => {
     const ranges: { start: string; end: string }[] = [];
@@ -695,6 +679,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return cached;
     };
   })();
+
+  if (siteUrl && (needsWebForHours || needsWebForMenu)) {
+    if (needsWebForHours) {
+      const webData = await getWebData(siteUrl);
+      if (webData.hoursSummary) {
+        externalHints += `Webbhours (officiell hemsida, ej verifierad): ${webData.hoursSummary}\n`;
+      }
+    }
+    if (needsWebForMenu) {
+      const menuData = await getMenuContent(siteUrl);
+      if (menuData.menuText) {
+        externalHints += `Menu (officiell hemsida, ej verifierad): ${menuData.menuText.slice(0, 4000)}\n`;
+      } else if (menuData.menuUrl) {
+        externalHints += `Menu URL (officiell hemsida): ${menuData.menuUrl}\n`;
+      }
+    }
+  }
+
   const kbFaqs = (() => {
     const out: { q: string; a: string }[] = [];
     let q: string | null = null;
@@ -2248,10 +2250,10 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
       return;
     }
     if (open && close) {
-      const t = timeToMin(time);
+      const requestedTimeMin = timeToMin(time);
       const lastBookingBufferMin = 60;
       const latestStart = Math.max(timeToMin(open), timeToMin(close) - lastBookingBufferMin);
-      if (t < timeToMin(open) || t > latestStart) {
+      if (requestedTimeMin < timeToMin(open) || requestedTimeMin > latestStart) {
         sendReply(
           t(
             `Vi har öppet ${open}–${close}. Sista bokningsbara tiden är ${minToTime(latestStart)}. Välj gärna en tidigare tid eller en annan dag.`,
