@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { PRIMARY_RESTAURANT_MISMATCH_CODE, resolveOwnerPrimaryRestaurant } from "./_ownerPrimary";
 
 const getEnv = (key: string) => process.env[key] ?? "";
 
@@ -11,6 +12,104 @@ type BookingSettingsPayload = {
   notify_enabled?: boolean | null;
   require_manual_confirmation?: boolean | null;
   knowledge_public?: string | null;
+  forceOverwrite?: boolean;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+};
+
+const stringLength = (value: unknown) => (typeof value === "string" ? value.trim().length : 0);
+
+const hasHoursData = (hours: unknown) => {
+  if (!isRecord(hours)) return false;
+  const normal = isRecord(hours.normal) ? hours.normal : null;
+  const special = Array.isArray(hours.special) ? hours.special : [];
+  const periods = Array.isArray(hours.periods) ? hours.periods : [];
+
+  const dayHasData = (day: unknown) => {
+    if (!isRecord(day)) return false;
+    const openLen = stringLength(day.open);
+    const closeLen = stringLength(day.close);
+    return day.closed === true || openLen > 0 || closeLen > 0;
+  };
+
+  if (normal && Object.values(normal).some(dayHasData)) return true;
+  if (
+    periods.some(
+      (period) => isRecord(period) && isRecord(period.days) && Object.values(period.days).some(dayHasData)
+    )
+  ) {
+    return true;
+  }
+  if (special.some(dayHasData)) return true;
+  return false;
+};
+
+const hasSeatingData = (seating: unknown) => {
+  if (!isRecord(seating)) return false;
+  const numericKeys = [
+    "maxGuests",
+    "maxGuestsPerReservation",
+    "groupThreshold",
+    "maxBookingDurationMin",
+    "maxTables",
+    "highChairs",
+    "followUpDelayDays",
+  ];
+  const booleanKeys = ["followUpEnabled"];
+  const stringKeys = ["followUpEmail"];
+
+  if (numericKeys.some((key) => typeof seating[key] === "number" && Number.isFinite(seating[key] as number))) {
+    return true;
+  }
+  if (booleanKeys.some((key) => typeof seating[key] === "boolean")) {
+    return true;
+  }
+  if (stringKeys.some((key) => stringLength(seating[key]) > 0)) {
+    return true;
+  }
+
+  if (isRecord(seating.mealRanges)) {
+    const mealRanges = seating.mealRanges as Record<string, unknown>;
+    const meals = ["Frukost", "Lunch", "Middag"];
+    if (
+      meals.some((meal) => {
+        const value = mealRanges[meal];
+        return (
+          Array.isArray(value) &&
+          value.length === 2 &&
+          stringLength(value[0]) > 0 &&
+          stringLength(value[1]) > 0
+        );
+      })
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const isSuspiciousOverwrite = (args: {
+  existingKnowledge: unknown;
+  incomingKnowledge: unknown;
+  existingHours: unknown;
+  incomingHours: unknown;
+  existingSeating: unknown;
+  incomingSeating: unknown;
+}) => {
+  const existingKnowledgeLen = stringLength(args.existingKnowledge);
+  const incomingKnowledgeLen = stringLength(args.incomingKnowledge);
+  const largeKnowledgeDrop =
+    existingKnowledgeLen >= 300 &&
+    incomingKnowledgeLen + 120 < existingKnowledgeLen &&
+    incomingKnowledgeLen < Math.floor(existingKnowledgeLen * 0.9);
+
+  const hoursRemoved = hasHoursData(args.existingHours) && !hasHoursData(args.incomingHours);
+  const seatingRemoved = hasSeatingData(args.existingSeating) && !hasSeatingData(args.incomingSeating);
+
+  return largeKnowledgeDrop || hoursRemoved || seatingRemoved;
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -50,6 +149,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     notify_enabled,
     require_manual_confirmation,
     knowledge_public,
+    forceOverwrite,
   } = (req.body ?? {}) as BookingSettingsPayload;
 
   if (!restaurantId) {
@@ -59,6 +159,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const serviceClient = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
   const userId = userData.user.id;
+
+  const ownerPrimary = await resolveOwnerPrimaryRestaurant(serviceClient, userId);
+  if (ownerPrimary.error) {
+    res.status(500).json({ error: ownerPrimary.error });
+    return;
+  }
+
+  if (
+    ownerPrimary.isOwner &&
+    !ownerPrimary.missingTable &&
+    ownerPrimary.restaurantId &&
+    ownerPrimary.restaurantId !== restaurantId
+  ) {
+    res.status(409).json({
+      error: "Write blocked: this account can only update its primary restaurant settings.",
+      code: PRIMARY_RESTAURANT_MISMATCH_CODE,
+      expectedRestaurantId: ownerPrimary.restaurantId,
+    });
+    return;
+  }
+
   const { data: memberships, error: membershipError } = await serviceClient
     .from("memberships")
     .select("restaurant_id, role")
@@ -97,6 +218,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(500).json({ error: insertMembershipError.message });
       return;
     }
+  }
+
+  const { data: existingSettings, error: existingSettingsError } = await serviceClient
+    .from("booking_public_settings")
+    .select("knowledge_public,hours,seating")
+    .eq("public_id", restaurantId)
+    .maybeSingle();
+
+  if (existingSettingsError) {
+    res.status(500).json({ error: existingSettingsError.message });
+    return;
+  }
+
+  if (
+    !forceOverwrite &&
+    isSuspiciousOverwrite({
+      existingKnowledge: existingSettings?.knowledge_public,
+      incomingKnowledge: knowledge_public,
+      existingHours: existingSettings?.hours,
+      incomingHours: hours,
+      existingSeating: existingSettings?.seating,
+      incomingSeating: seating,
+    })
+  ) {
+    res.status(409).json({
+      error:
+        "Blocked suspicious settings overwrite. Reload the dashboard first, then retry only if this large change is intentional.",
+      code: "SUSPICIOUS_OVERWRITE_BLOCKED",
+    });
+    return;
   }
 
   const { error } = await serviceClient.from("booking_public_settings").upsert(

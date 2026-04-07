@@ -72,6 +72,7 @@ type Booking = {
   guests: number;
   durationMin?: number;
   tableId?: number | null;
+  tableIds?: number[] | null;
   status?: BookingStatus;
   source?: "web" | "phone" | "walkin";
   note?: boolean;
@@ -81,6 +82,62 @@ type Booking = {
 };
 
 const isCancelledBooking = (booking: Pick<Booking, "status">) => booking.status === "cancelled";
+
+const TABLE_IDS_META_PREFIX = "__BOKATA_TABLE_IDS__:";
+
+const normalizeTableIds = (values: Array<number | null | undefined>) => {
+  const unique = new Set<number>();
+  for (const value of values) {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed <= 0) continue;
+    unique.add(parsed);
+  }
+  return Array.from(unique);
+};
+
+const parseBookingNotesMeta = (raw: string | null | undefined) => {
+  const text = raw ?? "";
+  if (!text.trim()) return { notes: "", tableIds: [] as number[] };
+
+  let metaIds: number[] = [];
+  const keptLines: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith(TABLE_IDS_META_PREFIX)) {
+      const rawIds = trimmed.slice(TABLE_IDS_META_PREFIX.length);
+      metaIds = normalizeTableIds(rawIds.split(",").map((part) => Number(part.trim())));
+      continue;
+    }
+    keptLines.push(line);
+  }
+
+  return { notes: keptLines.join("\n").trim(), tableIds: metaIds };
+};
+
+const buildBookingNotesWithMeta = (notes: string | undefined, tableIds: number[]) => {
+  const cleaned = (notes ?? "").trim();
+  const normalizedIds = normalizeTableIds(tableIds);
+  if (normalizedIds.length <= 1) return cleaned || null;
+  const metaLine = `${TABLE_IDS_META_PREFIX}${normalizedIds.join(",")}`;
+  return cleaned ? `${cleaned}\n${metaLine}` : metaLine;
+};
+
+const bookingAssignedTableIds = (booking: Pick<Booking, "tableId" | "tableIds">) => {
+  return normalizeTableIds([...(booking.tableIds ?? []), booking.tableId]);
+};
+
+const formatBookingTableLabel = (booking: Pick<Booking, "tableId" | "tableIds">) => {
+  const ids = bookingAssignedTableIds(booking);
+  if (!ids.length) return "";
+  return `Bord ${ids.join(" + ")}`;
+};
+
+const sameTableSelection = (left: number[], right: number[]) => {
+  const a = normalizeTableIds(left).sort((x, y) => x - y);
+  const b = normalizeTableIds(right).sort((x, y) => x - y);
+  if (a.length !== b.length) return false;
+  return a.every((id, idx) => id === b[idx]);
+};
 
 type BookingRow = {
   id: string;
@@ -810,6 +867,8 @@ function assignTablesForDateWithTables(
 
   const out: Booking[] = [...cancelled];
   const assignedBlocks: TableReservationBlock[] = [];
+  const tableSet = new Set(tableList.map((table) => table.id));
+  const tableCapById = new Map(tableList.map((table) => [table.id, table.cap] as const));
 
   for (const b of active) {
     const meal = mealForWithRanges(b.time, mealRanges);
@@ -817,14 +876,24 @@ function assignTablesForDateWithTables(
     const s = timeToMin(round30(b.time));
     const e = s + dur;
 
-    const group = chooseTableGroup({
-      tables: tableList,
-      guests: b.guests,
-      preferredTableId: b.tableId ?? null,
-      startMin: s,
-      endMin: e,
-      assignedBlocks,
-    });
+    const forcedGroup = bookingAssignedTableIds(b).filter((id) => tableSet.has(id));
+    const forcedSeats = forcedGroup.reduce((sum, id) => sum + (tableCapById.get(id) ?? 0), 0);
+    const forcedOccupied = assignedBlocks.some(
+      (block) => overlap(s, e, block.startMin, block.endMin) && block.tableIds.some((id) => forcedGroup.includes(id))
+    );
+    let group: number[] | null =
+      forcedGroup.length && forcedSeats >= b.guests && !forcedOccupied ? forcedGroup : null;
+
+    if (!group) {
+      group = chooseTableGroup({
+        tables: tableList,
+        guests: b.guests,
+        preferredTableId: forcedGroup[0] ?? b.tableId ?? null,
+        startMin: s,
+        endMin: e,
+        assignedBlocks,
+      });
+    }
     const chosen = group?.length
       ? b.tableId != null && group.includes(b.tableId)
         ? b.tableId
@@ -834,7 +903,7 @@ function assignTablesForDateWithTables(
       assignedBlocks.push({ tableIds: group, startMin: s, endMin: e });
     }
 
-    out.push({ ...b, tableId: chosen, durationMin: dur, time: round30(b.time) });
+    out.push({ ...b, tableId: chosen, tableIds: group?.length ? group : null, durationMin: dur, time: round30(b.time) });
   }
 
   return [...input.filter((b) => b.date !== date), ...out];
@@ -888,7 +957,8 @@ function isTableAvailable(args: {
   return !args.bookings.some((b) => {
     if (b.date !== args.date) return false;
     if (isCancelledBooking(b)) return false;
-    if (b.tableId !== args.tableId) return false;
+    const usedTables = bookingAssignedTableIds(b);
+    if (!usedTables.includes(args.tableId)) return false;
     const bs = timeToMin(round30(b.time));
     const bd =
       b.durationMin ??
@@ -909,6 +979,7 @@ function ReservationDashboardInner() {
   const [authLoading, setAuthLoading] = useState(false);
   const [accessDenied, setAccessDenied] = useState<string | null>(null);
   const [settingsSaveError, setSettingsSaveError] = useState<string | null>(null);
+  const [primaryMismatchNotice, setPrimaryMismatchNotice] = useState<string | null>(null);
   const [profileName, setProfileName] = useState("");
   const [profileEmail, setProfileEmail] = useState("");
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
@@ -921,6 +992,25 @@ function ReservationDashboardInner() {
   const saveTimer = useRef<number | null>(null);
   const profileTimer = useRef<number | null>(null);
   const bookingSaveTimer = useRef<number | null>(null);
+  const aiInitialSyncSkipRef = useRef(true);
+  const bookingInitialSyncSkipRef = useRef(true);
+  const aiLoadSucceededRef = useRef(false);
+  const bookingLoadSucceededRef = useRef(false);
+  const aiDirtyRef = useRef(false);
+  const bookingDirtyRef = useRef(false);
+
+  const markAiDirty = () => {
+    aiDirtyRef.current = true;
+  };
+
+  const markBookingDirty = () => {
+    bookingDirtyRef.current = true;
+  };
+
+  const markSettingsDirty = (_event?: unknown) => {
+    markAiDirty();
+    markBookingDirty();
+  };
 
   const [activeMeal, setActiveMeal] = useState<Meal>("Alla");
   const [openBooking, setOpenBooking] = useState<Booking | null>(null);
@@ -1048,6 +1138,15 @@ function ReservationDashboardInner() {
   const bookingDurationMin = config.seating.maxBookingDurationMin || 90;
 
   useEffect(() => {
+    aiInitialSyncSkipRef.current = true;
+    bookingInitialSyncSkipRef.current = true;
+    aiLoadSucceededRef.current = false;
+    bookingLoadSucceededRef.current = false;
+    aiDirtyRef.current = false;
+    bookingDirtyRef.current = false;
+  }, [session?.user?.id, restaurantId]);
+
+  useEffect(() => {
     const ids = config.hours.periods?.map((p) => p.id) ?? [];
     setOpenPeriods((prev) => {
       const next: Record<string, boolean> = { ...prev };
@@ -1128,6 +1227,11 @@ function ReservationDashboardInner() {
       active = false;
       sub.subscription.unsubscribe();
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem("bokata_restaurant_id");
   }, []);
 
   useEffect(() => {
@@ -1260,9 +1364,11 @@ function ReservationDashboardInner() {
         setRestaurantId(restaurant.restaurantId);
         setRestaurantName(restaurant.name ?? "");
         setRestaurantRole(restaurant.role ?? null);
+        setPrimaryMismatchNotice(null);
       }
 
-      const [{ data: profile }, { data: settings }, { data: bookingSettings }] = await Promise.all([
+      const [{ data: profile }, { data: settings, error: settingsError }, { data: bookingSettings, error: bookingSettingsError }] =
+        await Promise.all([
         supabase.from("profiles").select("full_name,email").eq("user_id", userId).maybeSingle(),
         restaurant?.restaurantId
           ? supabase
@@ -1270,15 +1376,25 @@ function ReservationDashboardInner() {
               .select("knowledge,assistant_name,web_search_enabled,site_url,google_maps_url,facebook_url,instagram_url")
               .eq("restaurant_id", restaurant.restaurantId)
               .maybeSingle()
-          : Promise.resolve({ data: null }),
+          : Promise.resolve({ data: null, error: null }),
         restaurant?.restaurantId
           ? supabase
               .from("booking_public_settings")
               .select("hours,seating,notify_email,notify_enabled,require_manual_confirmation,knowledge_public")
               .eq("public_id", restaurant.restaurantId)
               .maybeSingle()
-          : Promise.resolve({ data: null }),
+          : Promise.resolve({ data: null, error: null }),
       ]);
+
+      aiLoadSucceededRef.current = !settingsError;
+      bookingLoadSucceededRef.current = !bookingSettingsError;
+
+      if (settingsError) {
+        console.error("ai_settings load failed", settingsError.message);
+      }
+      if (bookingSettingsError) {
+        console.error("booking_public_settings load failed", bookingSettingsError.message);
+      }
 
       if (profile) {
         if (profile.full_name) setProfileName(profile.full_name);
@@ -1418,21 +1534,26 @@ function ReservationDashboardInner() {
         .eq("restaurant_id", restaurantId);
       if (error) return;
       const rows = (data ?? []) as BookingRow[];
-      const mapped = rows.map((r) => ({
+      const mapped = rows.map((r) => {
+        const parsedMeta = parseBookingNotesMeta(r.notes ?? "");
+        const tableIds = normalizeTableIds([...(parsedMeta.tableIds ?? []), r.table_id]);
+        return {
         id: r.id,
         date: r.date,
         time: r.time,
         name: r.name,
         guests: r.guests,
-        notes: r.notes ?? "",
-        note: !!r.notes,
-        tableId: r.table_id ?? null,
+        notes: parsedMeta.notes,
+        note: !!parsedMeta.notes,
+        tableId: tableIds[0] ?? null,
+        tableIds: tableIds.length ? tableIds : null,
         durationMin: r.duration_min ?? bookingDurationMin,
         status: (r.status as BookingStatus) ?? "confirmed",
         source: (r.source as Booking["source"]) ?? "walkin",
         createdAt: r.created_at ?? undefined,
         color: "bg-pink-100",
-      }));
+        };
+      });
 
       const incomingIds = new Set(mapped.map((b) => b.id));
       if (lastBookingIdsRef.current.size) {
@@ -1482,31 +1603,52 @@ function ReservationDashboardInner() {
 
   useEffect(() => {
     if (!session?.user?.id || !settingsReady || !restaurantId) return;
+    if (!aiLoadSucceededRef.current) return;
+    if (aiInitialSyncSkipRef.current) {
+      aiInitialSyncSkipRef.current = false;
+      return;
+    }
+    if (!aiDirtyRef.current) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
 
     saveTimer.current = window.setTimeout(async () => {
-      setAiSaveState("saving");
-      setAiSaveMessage("");
-      const { error } = await supabase.from("ai_settings").upsert(
-        {
-          restaurant_id: restaurantId,
-          knowledge: config.ai.knowledge,
-          assistant_name: config.ai.name,
-          web_search_enabled: config.ai.webSearch.enabled,
-          site_url: config.ai.webSearch.siteUrl || null,
-          google_maps_url: config.ai.webSearch.googleMapsUrl || null,
-          facebook_url: config.ai.webSearch.facebookUrl || null,
-          instagram_url: config.ai.webSearch.instagramUrl || null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "restaurant_id" }
-      );
-      if (error) {
-        setAiSaveState("error");
-        setAiSaveMessage(error.message);
-      } else {
+      try {
+        setAiSaveState("saving");
+        setAiSaveMessage("");
+        const token = session?.access_token || "";
+        const resp = await fetch("/api/ai-settings", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            restaurantId,
+            knowledge: config.ai.knowledge,
+            assistant_name: config.ai.name,
+            web_search_enabled: config.ai.webSearch.enabled,
+            site_url: config.ai.webSearch.siteUrl || null,
+            google_maps_url: config.ai.webSearch.googleMapsUrl || null,
+            facebook_url: config.ai.webSearch.facebookUrl || null,
+            instagram_url: config.ai.webSearch.instagramUrl || null,
+          }),
+        });
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          if (resp.status === 409 && data?.code === "PRIMARY_RESTAURANT_MISMATCH") {
+            setPrimaryMismatchNotice("Inställningarna är låsta till din primära restaurang. Ladda om sidan för att synka rätt restaurang.");
+          }
+          const msg = data?.error || `Save failed (${resp.status})`;
+          throw new Error(msg);
+        }
+        aiDirtyRef.current = false;
         setAiSaveState("saved");
         setAiSaveMessage("Sparad");
+        setPrimaryMismatchNotice(null);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Save failed";
+        setAiSaveState("error");
+        setAiSaveMessage(msg);
       }
     }, 600);
 
@@ -1522,6 +1664,7 @@ function ReservationDashboardInner() {
     config.ai.webSearch.facebookUrl,
     config.ai.webSearch.instagramUrl,
     session?.user?.id,
+    session?.access_token,
     settingsReady,
     restaurantId,
   ]);
@@ -1529,6 +1672,12 @@ function ReservationDashboardInner() {
 
   useEffect(() => {
     if (!session?.user?.id || !settingsReady || !restaurantId) return;
+    if (!bookingLoadSucceededRef.current) return;
+    if (bookingInitialSyncSkipRef.current) {
+      bookingInitialSyncSkipRef.current = false;
+      return;
+    }
+    if (!bookingDirtyRef.current) return;
     if (bookingSaveTimer.current) window.clearTimeout(bookingSaveTimer.current);
     bookingSaveTimer.current = window.setTimeout(async () => {
       try {
@@ -1565,12 +1714,17 @@ function ReservationDashboardInner() {
         });
         if (!resp.ok) {
           const data = await resp.json().catch(() => ({}));
+          if (resp.status === 409 && data?.code === "PRIMARY_RESTAURANT_MISMATCH") {
+            setPrimaryMismatchNotice("Inställningarna är låsta till din primära restaurang. Ladda om sidan för att synka rätt restaurang.");
+          }
           const msg = data?.error || `Save failed (${resp.status})`;
           console.error("booking_public_settings save failed", msg);
           setSettingsSaveError(msg);
           return;
         }
+        bookingDirtyRef.current = false;
         setSettingsSaveError(null);
+        setPrimaryMismatchNotice(null);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Save failed";
         console.error("booking_public_settings save failed", msg);
@@ -1588,9 +1742,16 @@ function ReservationDashboardInner() {
     config.notifications.to,
     config.notifications.notifyOnNewBooking,
     config.notifications.requireManualConfirmation,
+    config.ai.knowledge,
+    config.ai.webSearch.enabled,
+    config.ai.webSearch.siteUrl,
+    config.ai.webSearch.googleMapsUrl,
+    config.ai.webSearch.facebookUrl,
+    config.ai.webSearch.instagramUrl,
     config.publicMessage,
     config.confirmationEmailMessageAuto,
     config.confirmationEmailMessageManual,
+    session?.access_token,
     restaurantId,
     settingsReady,
   ]);
@@ -2078,6 +2239,7 @@ function ReservationDashboardInner() {
 
   useEffect(() => {
     if (!onboardingDirty) return;
+    markSettingsDirty();
     const next = buildKnowledge(onboarding, onboardingFaqs, config.ai.webSearch);
     setConfig((prev) => ({ ...prev, ai: { ...prev.ai, knowledge: next } }));
   }, [
@@ -2329,6 +2491,7 @@ function ReservationDashboardInner() {
   const addFaq = () => {
     const q = newFaq.trim();
     if (!q) return;
+    markSettingsDirty();
     addOnboardingFaq(q);
 
     setNewFaq("");
@@ -2362,6 +2525,7 @@ function ReservationDashboardInner() {
   };
 
   const removeFaq = (faqId: string) => {
+    markSettingsDirty();
     setOnboardingFaqs((prev) => prev.filter((x) => x.id !== faqId));
     clearFaqDraftAnswer(faqId);
     setOnboardingDirty(true);
@@ -2373,6 +2537,7 @@ function ReservationDashboardInner() {
       clearFaqDraftAnswer(faqId);
       return;
     }
+    markSettingsDirty();
     setOnboardingFaqs((prev) => prev.map((x) => (x.id === faqId ? { ...x, a: nextAnswer } : x)));
     clearFaqDraftAnswer(faqId);
     setOnboardingDirty(true);
@@ -2418,6 +2583,7 @@ function ReservationDashboardInner() {
   const [formGuestsInput, setFormGuestsInput] = useState<string>("2");
   const [formNotes, setFormNotes] = useState<string>("");
   const [formTableId, setFormTableId] = useState<number | null>(null);
+  const [formTableIdSecondary, setFormTableIdSecondary] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -2428,11 +2594,19 @@ function ReservationDashboardInner() {
       setFormGuestsInput("2");
       setFormNotes("");
       setFormTableId(null);
+      setFormTableIdSecondary(null);
       setFormError(null);
     }
   }, [createOpen, dateSel]);
 
-  function createReservation(d: { date: string; time: string; name: string; guests: number; notes?: string; tableId?: number | null }) {
+  function createReservation(d: {
+    date: string;
+    time: string;
+    name: string;
+    guests: number;
+    notes?: string;
+    tableIds?: number[] | null;
+  }) {
     if (!d.name.trim()) return { ok: false, error: "Namn krävs." };
     if (!d.date) return { ok: false, error: "Datum krävs." };
     if (!d.time) return { ok: false, error: "Tid krävs." };
@@ -2440,6 +2614,7 @@ function ReservationDashboardInner() {
 
     const when = round30(d.time);
     const durationMin = bookingDurationMin;
+    const requestedTableIds = normalizeTableIds(d.tableIds ?? []);
     const draftId = `draft-${uid()}`;
     const draftBooking: Booking = {
       id: draftId,
@@ -2449,7 +2624,8 @@ function ReservationDashboardInner() {
       guests: d.guests,
       notes: d.notes,
       note: !!d.notes,
-      tableId: d.tableId ?? null,
+      tableId: requestedTableIds[0] ?? null,
+      tableIds: requestedTableIds.length ? requestedTableIds : null,
       durationMin,
       status: "confirmed",
       source: "walkin",
@@ -2457,9 +2633,10 @@ function ReservationDashboardInner() {
 
     const simulated = assignTablesForDateWithTables(d.date, [...bookings, draftBooking], tableCaps, mealRanges);
     const simulatedDraft = simulated.find((b) => b.id === draftId);
-    const tableId = simulatedDraft?.tableId ?? null;
-    if (d.tableId != null && tableId !== d.tableId) {
-      return { ok: false, error: "Valt bord är redan upptaget eller saknar tillräcklig gruppkapacitet vid den tiden." };
+    const assignedTableIds = simulatedDraft ? bookingAssignedTableIds(simulatedDraft) : [];
+    const tableId = assignedTableIds[0] ?? null;
+    if (requestedTableIds.length && !sameTableSelection(assignedTableIds, requestedTableIds)) {
+      return { ok: false, error: "Valda bord är upptagna eller saknar tillräcklig gruppkapacitet vid den tiden." };
     }
 
     const colors = ["bg-green-200", "bg-blue-200", "bg-yellow-200", "bg-pink-200", "bg-purple-200"];
@@ -2474,12 +2651,14 @@ function ReservationDashboardInner() {
       note: !!d.notes,
       color: colors[Math.floor(Math.random() * colors.length)],
       tableId,
+      tableIds: assignedTableIds.length ? assignedTableIds : null,
       durationMin,
       status: "confirmed",
       source: "web",
     };
     if (restaurantId && settingsReady) {
       (async () => {
+        const persistedNotes = buildBookingNotesWithMeta(b.notes, bookingAssignedTableIds(b));
         const { data } = await supabase
           .from("bookings")
           .insert({
@@ -2488,7 +2667,7 @@ function ReservationDashboardInner() {
             time: b.time,
             name: b.name,
             guests: b.guests,
-            notes: b.notes || null,
+            notes: persistedNotes,
             table_id: b.tableId ?? null,
             duration_min: b.durationMin ?? bookingDurationMin,
             status: b.status ?? "confirmed",
@@ -2522,7 +2701,7 @@ function ReservationDashboardInner() {
       name: formName,
       guests,
       notes: formNotes,
-      tableId: formTableId,
+      tableIds: normalizeTableIds([formTableId, formTableIdSecondary]),
     });
     if (!res.ok) {
       setFormError(res.error || "Kunde inte spara.");
@@ -2541,6 +2720,7 @@ function ReservationDashboardInner() {
   };
 
   const upsertSpecialByDate = (date: string, patch: Partial<{ closed: boolean; open: string; close: string }>) => {
+    markBookingDirty();
     setConfig((prev) => {
       const arr = prev.hours.special.slice();
       const idx = arr.findIndex((s) => s.date === date);
@@ -2551,6 +2731,7 @@ function ReservationDashboardInner() {
   };
 
   const addHoursPeriod = () => {
+    markBookingDirty();
     setConfig((prev) => {
       const baseDays = prev.hours.periods?.[0]?.days ?? prev.hours.normal;
       const next = [...(prev.hours.periods ?? []), makeHoursPeriod(baseDays, undefined, undefined, `Period ${prev.hours.periods.length + 1}`)];
@@ -2559,6 +2740,7 @@ function ReservationDashboardInner() {
   };
 
   const removeHoursPeriod = (id: string) => {
+    markBookingDirty();
     setConfig((prev) => {
       const next = (prev.hours.periods ?? []).filter((p) => p.id !== id);
       if (!next.length) return prev;
@@ -2568,6 +2750,7 @@ function ReservationDashboardInner() {
   // --- Custom closures (manual dates / periods)
   const [customClosureFrom, setCustomClosureFrom] = useState<string>("");
   const [customClosureTo, setCustomClosureTo] = useState<string>("");
+  const [editingClosedRange, setEditingClosedRange] = useState<{ from: string; to: string } | null>(null);
 
   const addDaysISO = (iso: string, add: number) => {
     const d = new Date(iso + "T00:00:00");
@@ -2584,11 +2767,39 @@ function ReservationDashboardInner() {
     const end = new Date(customClosureTo + "T00:00:00").getTime();
     if (Number.isNaN(start) || Number.isNaN(end) || start > end) return;
 
-    let cur = customClosureFrom;
-    while (new Date(cur + "T00:00:00").getTime() <= end) {
-      upsertSpecialByDate(cur, { closed: true });
-      cur = addDaysISO(cur, 1);
-    }
+    markBookingDirty();
+    setConfig((prev) => {
+      const toDate = (iso: string) => new Date(iso + "T00:00:00");
+      const rangeToReplace = editingClosedRange
+        ? {
+            start: toDate(editingClosedRange.from),
+            end: toDate(editingClosedRange.to),
+          }
+        : null;
+
+      const filtered = prev.hours.special.filter((specialDay) => {
+        if (!specialDay.closed || !rangeToReplace) return true;
+        const day = toDate(specialDay.date);
+        return day < rangeToReplace.start || day > rangeToReplace.end;
+      });
+
+      const byDate = new Map(filtered.map((specialDay) => [specialDay.date, specialDay]));
+      let cur = customClosureFrom;
+      while (new Date(cur + "T00:00:00").getTime() <= end) {
+        const existing = byDate.get(cur);
+        if (existing) {
+          byDate.set(cur, { ...existing, closed: true });
+        } else {
+          byDate.set(cur, { date: cur, closed: true, open: "11:00", close: "17:00" });
+        }
+        cur = addDaysISO(cur, 1);
+      }
+
+      const nextSpecial = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+      return { ...prev, hours: { ...prev.hours, special: nextSpecial } };
+    });
+
+    setEditingClosedRange(null);
     setCustomClosureFrom("");
     setCustomClosureTo("");
   };
@@ -2638,6 +2849,12 @@ function ReservationDashboardInner() {
   }, [config.hours.special]);
 
   const removeClosedRange = (from: string, to: string) => {
+    markBookingDirty();
+    if (editingClosedRange?.from === from && editingClosedRange?.to === to) {
+      setEditingClosedRange(null);
+      setCustomClosureFrom("");
+      setCustomClosureTo("");
+    }
     setConfig((prev) => {
       const toDate = (iso: string) => new Date(iso + "T00:00:00");
       const start = toDate(from);
@@ -2650,6 +2867,18 @@ function ReservationDashboardInner() {
       });
       return { ...prev, hours: { ...prev.hours, special: keep } };
     });
+  };
+
+  const beginClosedRangeEdit = (from: string, to: string) => {
+    setCustomClosureFrom(from);
+    setCustomClosureTo(to);
+    setEditingClosedRange({ from, to });
+  };
+
+  const cancelClosedRangeEdit = () => {
+    setEditingClosedRange(null);
+    setCustomClosureFrom("");
+    setCustomClosureTo("");
   };
 
   const handleMagicLink = async () => {
@@ -3074,7 +3303,7 @@ function ReservationDashboardInner() {
                                 )}
                               </div>
                               <div className={`text-xs ${isCancelledBooking(b) ? "text-gray-500 line-through" : "text-gray-600"}`}>
-                                {b.guests} gäster{b.tableId ? ` • Bord ${b.tableId}` : ""}
+                                {b.guests} gäster{formatBookingTableLabel(b) ? ` • ${formatBookingTableLabel(b)}` : ""}
                               </div>
                             </div>
                           ))}
@@ -3403,7 +3632,7 @@ function ReservationDashboardInner() {
             {openBooking.name} – {openBooking.time}
           </h4>
           <p className="text-sm text-gray-500 mb-4">
-            {openBooking.guests} gäster{openBooking.tableId ? ` • Bord ${openBooking.tableId}` : ""}
+            {openBooking.guests} gäster{formatBookingTableLabel(openBooking) ? ` • ${formatBookingTableLabel(openBooking)}` : ""}
             {isCancelledBooking(openBooking) ? " • Avbokad" : ""}
           </p>
           <div className="bg-pink-50 border border-pink-200 rounded-lg p-3 text-gray-800 whitespace-pre-wrap">
@@ -3459,31 +3688,78 @@ function ReservationDashboardInner() {
                 }
               />
             </Field>
-            <Field label="Bord (valfritt)">
-              <select
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
-                value={
-                  editBookingDraft?.tableId == null
-                    ? (openBooking.tableId == null ? "" : String(openBooking.tableId))
-                    : String(editBookingDraft.tableId)
-                }
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  const parsed = raw ? Number(raw) : null;
-                  setEditBookingDraft((prev) => ({
-                    ...(prev ?? openBooking),
-                    tableId: raw && Number.isFinite(parsed) ? parsed : null,
-                  }));
-                }}
-              >
-                <option value="">Auto (välj bord automatiskt)</option>
-                {tableOptions.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label} · {t.cap} platser
-                  </option>
-                ))}
-              </select>
-            </Field>
+            {(() => {
+              const selectedTables = bookingAssignedTableIds(editBookingDraft ?? openBooking);
+              const primaryTableId = selectedTables[0] ?? null;
+              const secondaryTableId = selectedTables[1] ?? null;
+              return (
+                <>
+                  <Field label="Bord 1 (valfritt)">
+                    <select
+                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                      value={primaryTableId == null ? "" : String(primaryTableId)}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const parsed = raw ? Number(raw) : null;
+                        setEditBookingDraft((prev) => {
+                          const current = prev ?? openBooking;
+                          const currentTables = bookingAssignedTableIds(current);
+                          const normalized = normalizeTableIds([
+                            raw && Number.isFinite(parsed) ? parsed : null,
+                            currentTables[1] ?? null,
+                          ]);
+                          return {
+                            ...current,
+                            tableId: normalized[0] ?? null,
+                            tableIds: normalized.length ? normalized : null,
+                          };
+                        });
+                      }}
+                    >
+                      <option value="">Auto (välj bord automatiskt)</option>
+                      {tableOptions.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.label} · {t.cap} platser
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Bord 2 (valfritt)">
+                    <select
+                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 disabled:opacity-60"
+                      value={secondaryTableId == null ? "" : String(secondaryTableId)}
+                      disabled={primaryTableId == null}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const parsed = raw ? Number(raw) : null;
+                        setEditBookingDraft((prev) => {
+                          const current = prev ?? openBooking;
+                          const currentTables = bookingAssignedTableIds(current);
+                          const normalized = normalizeTableIds([
+                            currentTables[0] ?? null,
+                            raw && Number.isFinite(parsed) ? parsed : null,
+                          ]);
+                          return {
+                            ...current,
+                            tableId: normalized[0] ?? null,
+                            tableIds: normalized.length ? normalized : null,
+                          };
+                        });
+                      }}
+                    >
+                      <option value="">Ingen</option>
+                      {tableOptions
+                        .filter((t) => t.id !== primaryTableId)
+                        .map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.label} · {t.cap} platser
+                          </option>
+                        ))}
+                    </select>
+                  </Field>
+                </>
+              );
+            })()}
             <Field label="Kommentar / önskemål">
               <textarea
                 rows={3}
@@ -3540,14 +3816,17 @@ function ReservationDashboardInner() {
                   if (!openBooking) return;
                   const target = openBooking;
                   const next = editBookingDraft ?? target;
+                  const nextTableIds = bookingAssignedTableIds(next);
 
-                  if (next.tableId != null) {
+                  if (nextTableIds.length) {
                     const draftId = `draft-${uid()}`;
                     const draftBooking: Booking = {
                       ...next,
                       id: draftId,
                       date: next.date,
                       time: round30(next.time),
+                      tableId: nextTableIds[0] ?? null,
+                      tableIds: nextTableIds,
                       durationMin: next.durationMin ?? bookingDurationMin,
                       note: !!next.notes,
                     };
@@ -3558,11 +3837,14 @@ function ReservationDashboardInner() {
                       mealRanges
                     );
                     const simulatedDraft = simulated.find((b) => String(b.id) === draftId);
-                    if (simulatedDraft?.tableId !== next.tableId) {
-                      window.alert("Valt bord är redan upptaget eller saknar tillräcklig gruppkapacitet vid den tiden.");
+                    const simulatedTableIds = simulatedDraft ? bookingAssignedTableIds(simulatedDraft) : [];
+                    if (!sameTableSelection(simulatedTableIds, nextTableIds)) {
+                      window.alert("Valda bord är upptagna eller saknar tillräcklig gruppkapacitet vid den tiden.");
                       return;
                     }
                   }
+
+                  const persistedNotes = buildBookingNotesWithMeta(next.notes, nextTableIds);
 
                   if (restaurantId && settingsReady) {
                     const { error } = await supabase
@@ -3572,8 +3854,8 @@ function ReservationDashboardInner() {
                         time: next.time,
                         name: next.name,
                         guests: next.guests,
-                        notes: next.notes || null,
-                        table_id: next.tableId ?? null,
+                        notes: persistedNotes,
+                        table_id: nextTableIds[0] ?? null,
                         duration_min: next.durationMin ?? bookingDurationMin,
                       })
                       .eq("id", target.id)
@@ -3585,7 +3867,15 @@ function ReservationDashboardInner() {
                   }
                   setBookings((prev) => {
                     const updated = prev.map((b) =>
-                      String(b.id) === String(target.id) ? { ...b, ...next, note: !!next.notes } : b
+                      String(b.id) === String(target.id)
+                        ? {
+                            ...b,
+                            ...next,
+                            tableId: nextTableIds[0] ?? null,
+                            tableIds: nextTableIds.length ? nextTableIds : null,
+                            note: !!next.notes?.trim(),
+                          }
+                        : b
                     );
                     const dates = Array.from(new Set<string>(updated.map((b) => b.date)));
                     let out = updated;
@@ -3673,13 +3963,16 @@ function ReservationDashboardInner() {
               />
             </Field>
 
-            <Field label="Bord (valfritt)">
+            <Field label="Bord 1 (valfritt)">
               <select
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
                 value={formTableId == null ? "" : String(formTableId)}
                 onChange={(e) => {
-                  const next = e.target.value ? Number(e.target.value) : null;
-                  setFormTableId(Number.isNaN(next as number) ? null : (next as number | null));
+                  const raw = e.target.value;
+                  const parsed = raw ? Number(raw) : null;
+                  const normalized = normalizeTableIds([raw && Number.isFinite(parsed) ? parsed : null, formTableIdSecondary]);
+                  setFormTableId(normalized[0] ?? null);
+                  setFormTableIdSecondary(normalized[1] ?? null);
                 }}
               >
                 <option value="">Auto (välj bord automatiskt)</option>
@@ -3688,6 +3981,30 @@ function ReservationDashboardInner() {
                     {t.label} · {t.cap} platser
                   </option>
                 ))}
+              </select>
+            </Field>
+
+            <Field label="Bord 2 (valfritt)">
+              <select
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 disabled:opacity-60"
+                value={formTableIdSecondary == null ? "" : String(formTableIdSecondary)}
+                disabled={formTableId == null}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const parsed = raw ? Number(raw) : null;
+                  const normalized = normalizeTableIds([formTableId, raw && Number.isFinite(parsed) ? parsed : null]);
+                  setFormTableId(normalized[0] ?? null);
+                  setFormTableIdSecondary(normalized[1] ?? null);
+                }}
+              >
+                <option value="">Ingen</option>
+                {tableOptions
+                  .filter((t) => t.id !== formTableId)
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label} · {t.cap} platser
+                    </option>
+                  ))}
               </select>
             </Field>
 
@@ -3718,8 +4035,20 @@ function ReservationDashboardInner() {
       {/* Settings drawer */}
       {settingsOpen && (
         <Drawer onClose={() => setSettingsOpen(false)}>
-          <div className="space-y-6">
+          <div className="space-y-6" onInputCapture={markSettingsDirty} onChangeCapture={markSettingsDirty}>
             <Section title="Restauranginfo">
+              {primaryMismatchNotice ? (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 flex items-center justify-between gap-2">
+                  <span>{primaryMismatchNotice}</span>
+                  <button
+                    type="button"
+                    className="rounded-md border border-amber-300 px-2 py-1 text-xs font-semibold hover:bg-amber-100"
+                    onClick={() => window.location.reload()}
+                  >
+                    Ladda om
+                  </button>
+                </div>
+              ) : null}
               {settingsSaveError ? (
                 <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
                   Kunde inte spara inställningar: {settingsSaveError}
@@ -4266,28 +4595,58 @@ function ReservationDashboardInner() {
                       </Field>
                     </div>
                     <div>
-                      <button
-                        type="button"
-                        className="w-full px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
-                        onClick={addCustomClosures}
-                      >
-                        Lägg till period
-                      </button>
+                      <div className="w-full flex flex-col gap-2">
+                        <button
+                          type="button"
+                          className="w-full px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 shadow"
+                          onClick={addCustomClosures}
+                        >
+                          {editingClosedRange ? "Uppdatera period" : "Lägg till period"}
+                        </button>
+                        {editingClosedRange ? (
+                          <button
+                            type="button"
+                            className="w-full px-4 py-2 rounded-lg border border-pink-200 text-pink-700 hover:bg-pink-50"
+                            onClick={cancelClosedRangeEdit}
+                          >
+                            Avbryt
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-gray-500">Ex: semester 15–31 juli</div>
+                  <div className="mt-2 text-xs text-gray-500">Ex: semester 15–31 juli. Klicka på en sparad period för att redigera.</div>
 
                   <div className="mt-3 space-y-2">
                     {closedRanges.length ? (
                       closedRanges.map((r) => (
-                        <div key={`${r.from}-${r.to}`} className="flex items-center justify-between text-sm bg-white/70 border border-pink-200 rounded-lg px-3 py-2">
+                        <div
+                          key={`${r.from}-${r.to}`}
+                          className={`flex items-center justify-between text-sm bg-white/70 border rounded-lg px-3 py-2 cursor-pointer ${
+                            editingClosedRange?.from === r.from && editingClosedRange?.to === r.to
+                              ? "border-pink-400 ring-2 ring-pink-200"
+                              : "border-pink-200 hover:bg-pink-50/60"
+                          }`}
+                          onClick={() => beginClosedRangeEdit(r.from, r.to)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              beginClosedRangeEdit(r.from, r.to);
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                        >
                           <div className="text-gray-800">
                             {r.from === r.to ? r.from : `${r.from} → ${r.to}`} <span className="text-xs text-gray-500">({r.count} dagar)</span>
                           </div>
                           <button
                             type="button"
                             className="text-xs text-pink-700 hover:text-pink-800"
-                            onClick={() => removeClosedRange(r.from, r.to)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              removeClosedRange(r.from, r.to);
+                            }}
                           >
                             Ta bort
                           </button>

@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { resolveOwnerPrimaryRestaurant } from "./_ownerPrimary";
 
 const getEnv = (key: string) => process.env[key] ?? "";
 
@@ -7,6 +8,8 @@ const getToken = (req: VercelRequest) => {
   const authHeader = req.headers.authorization || "";
   return authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
 };
+
+const OWNER_PRIMARY_TABLE_MISSING_CODE = "42P01";
 
 const insertMembershipIfMissing = async (supabaseUrl: string, serviceKey: string, userId: string, restaurantId: string) => {
   const serviceClient = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
@@ -43,59 +46,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const serviceClient = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
   if (req.method === "GET") {
-    const { data: ownerMembership, error: ownerErr } = await serviceClient
-      .from("memberships")
-      .select("restaurant_id, role")
-      .eq("user_id", userId)
-      .eq("role", "owner")
-      .limit(1)
-      .maybeSingle();
-    if (ownerErr) {
-      res.status(500).json({ error: ownerErr.message });
+    const ownerPrimary = await resolveOwnerPrimaryRestaurant(serviceClient, userId);
+    if (ownerPrimary.error) {
+      res.status(500).json({ error: ownerPrimary.error });
       return;
     }
 
-    let membership = ownerMembership ?? null;
-    if (!membership) {
-      const { data: anyMembership, error: anyErr } = await serviceClient
-        .from("memberships")
-        .select("restaurant_id, role")
-        .eq("user_id", userId)
-        .limit(1)
-        .maybeSingle();
-      if (anyErr) {
-        res.status(500).json({ error: anyErr.message });
+    if (ownerPrimary.isOwner && ownerPrimary.restaurantId) {
+      try {
+        await insertMembershipIfMissing(supabaseUrl, serviceKey, userId, ownerPrimary.restaurantId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to create membership";
+        res.status(500).json({ error: msg });
         return;
       }
-      membership = anyMembership ?? null;
-    }
 
-    let restaurantId = membership?.restaurant_id ?? null;
-    let role = membership?.role ?? null;
-
-    if (!restaurantId) {
-      const { data: ownedRestaurant, error: ownedErr } = await serviceClient
-        .from("restaurants")
-        .select("id, owner_id")
-        .eq("owner_id", userId)
-        .limit(1)
-        .maybeSingle();
-      if (ownedErr) {
-        res.status(500).json({ error: ownedErr.message });
+      if (ownerPrimary.restaurantName != null) {
+        res.status(200).json({
+          restaurantId: ownerPrimary.restaurantId,
+          role: "owner",
+          name: ownerPrimary.restaurantName,
+        });
         return;
       }
-      if (ownedRestaurant?.id) {
-        restaurantId = ownedRestaurant.id;
-        role = "owner";
-        try {
-          await insertMembershipIfMissing(supabaseUrl, serviceKey, userId, restaurantId);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Failed to create membership";
-          res.status(500).json({ error: msg });
-          return;
-        }
-      }
     }
+
+    const { data: memberships, error: membershipsErr } = await serviceClient
+      .from("memberships")
+      .select("restaurant_id, role")
+      .eq("user_id", userId);
+    if (membershipsErr) {
+      res.status(500).json({ error: membershipsErr.message });
+      return;
+    }
+
+    const candidates = (memberships ?? [])
+      .filter((membership) => !!membership.restaurant_id)
+      .sort((left, right) => {
+        const leftRank = left.role === "owner" ? 0 : 1;
+        const rightRank = right.role === "owner" ? 0 : 1;
+        if (leftRank !== rightRank) return leftRank - rightRank;
+        return (left.restaurant_id ?? "").localeCompare(right.restaurant_id ?? "");
+      });
+
+    const membership = candidates[0] ?? null;
+
+    const restaurantId = membership?.restaurant_id ?? ownerPrimary.restaurantId ?? null;
+    const role = membership?.role ?? (ownerPrimary.restaurantId ? "owner" : null);
 
     if (!restaurantId) {
       res.status(200).json({ restaurantId: null, role: null, name: null });
@@ -120,6 +117,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { name } = (req.body ?? {}) as { name?: string };
     const baseName = (name ?? "").trim() || "Bokata Restaurant";
 
+    const ownerPrimary = await resolveOwnerPrimaryRestaurant(serviceClient, userId);
+    if (ownerPrimary.error) {
+      res.status(500).json({ error: ownerPrimary.error });
+      return;
+    }
+
+    if (ownerPrimary.isOwner && ownerPrimary.restaurantId) {
+      try {
+        await insertMembershipIfMissing(supabaseUrl, serviceKey, userId, ownerPrimary.restaurantId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to create membership";
+        res.status(500).json({ error: msg });
+        return;
+      }
+
+      let nameForResponse = ownerPrimary.restaurantName;
+      if (!nameForResponse) {
+        const { data: existingRestaurant, error: existingError } = await serviceClient
+          .from("restaurants")
+          .select("name")
+          .eq("id", ownerPrimary.restaurantId)
+          .maybeSingle();
+        if (existingError) {
+          res.status(500).json({ error: existingError.message });
+          return;
+        }
+        nameForResponse = existingRestaurant?.name ?? "";
+      }
+
+      res.status(200).json({ restaurantId: ownerPrimary.restaurantId, role: "owner", name: nameForResponse ?? "" });
+      return;
+    }
+
     const { data: created, error: createErr } = await serviceClient
       .from("restaurants")
       .insert({ name: baseName, owner_id: userId })
@@ -136,6 +166,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to create membership";
       res.status(500).json({ error: msg });
+      return;
+    }
+
+    const { error: primaryError } = await serviceClient.from("owner_primary_restaurants").upsert(
+      {
+        owner_id: userId,
+        restaurant_id: created.id,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "owner_id" }
+    );
+
+    if (primaryError && primaryError.code !== OWNER_PRIMARY_TABLE_MISSING_CODE) {
+      res.status(500).json({ error: primaryError.message });
       return;
     }
 
