@@ -1616,7 +1616,7 @@ function ReservationDashboardInner() {
         setAiSaveState("saving");
         setAiSaveMessage("");
         const token = session?.access_token || "";
-        const resp = await fetch("/api/ai-settings", {
+        const resp = await fetch("/api/booking-settings", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

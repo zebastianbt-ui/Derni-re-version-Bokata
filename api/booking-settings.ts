@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import { PRIMARY_RESTAURANT_MISMATCH_CODE, resolveOwnerPrimaryRestaurant } from "./_ownerPrimary";
+import { PRIMARY_RESTAURANT_MISMATCH_CODE, resolveOwnerPrimaryRestaurant } from "../lib/ownerPrimary";
 
 const getEnv = (key: string) => process.env[key] ?? "";
 
@@ -12,6 +12,13 @@ type BookingSettingsPayload = {
   notify_enabled?: boolean | null;
   require_manual_confirmation?: boolean | null;
   knowledge_public?: string | null;
+  knowledge?: string | null;
+  assistant_name?: string | null;
+  web_search_enabled?: boolean | null;
+  site_url?: string | null;
+  google_maps_url?: string | null;
+  facebook_url?: string | null;
+  instagram_url?: string | null;
   forceOverwrite?: boolean;
 };
 
@@ -112,6 +119,16 @@ const isSuspiciousOverwrite = (args: {
   return largeKnowledgeDrop || hoursRemoved || seatingRemoved;
 };
 
+const isSuspiciousAiOverwrite = (existingKnowledge: unknown, incomingKnowledge: unknown) => {
+  const existingLen = stringLength(existingKnowledge);
+  const incomingLen = stringLength(incomingKnowledge);
+  return (
+    existingLen >= 300 &&
+    incomingLen + 120 < existingLen &&
+    incomingLen < Math.floor(existingLen * 0.9)
+  );
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method Not Allowed" });
@@ -149,11 +166,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     notify_enabled,
     require_manual_confirmation,
     knowledge_public,
+    knowledge,
+    assistant_name,
+    web_search_enabled,
+    site_url,
+    google_maps_url,
+    facebook_url,
+    instagram_url,
     forceOverwrite,
   } = (req.body ?? {}) as BookingSettingsPayload;
 
   if (!restaurantId) {
     res.status(400).json({ error: "Missing restaurantId" });
+    return;
+  }
+
+  const hasBookingPayload =
+    hours !== undefined ||
+    seating !== undefined ||
+    notify_email !== undefined ||
+    notify_enabled !== undefined ||
+    require_manual_confirmation !== undefined ||
+    knowledge_public !== undefined;
+
+  const hasAiPayload =
+    knowledge !== undefined ||
+    assistant_name !== undefined ||
+    web_search_enabled !== undefined ||
+    site_url !== undefined ||
+    google_maps_url !== undefined ||
+    facebook_url !== undefined ||
+    instagram_url !== undefined;
+
+  if (!hasBookingPayload && !hasAiPayload) {
+    res.status(400).json({ error: "No settings payload provided" });
     return;
   }
 
@@ -216,6 +262,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .insert({ restaurant_id: restaurantId, user_id: userId, role: "owner" });
     if (insertMembershipError && insertMembershipError.code !== "23505") {
       res.status(500).json({ error: insertMembershipError.message });
+      return;
+    }
+  }
+
+  if (hasAiPayload) {
+    const { data: existingAiSettings, error: existingAiSettingsError } = await serviceClient
+      .from("ai_settings")
+      .select("knowledge")
+      .eq("restaurant_id", restaurantId)
+      .maybeSingle();
+
+    if (existingAiSettingsError) {
+      res.status(500).json({ error: existingAiSettingsError.message });
+      return;
+    }
+
+    if (!forceOverwrite && isSuspiciousAiOverwrite(existingAiSettings?.knowledge, knowledge)) {
+      res.status(409).json({
+        error:
+          "Blocked suspicious AI knowledge overwrite. Reload the dashboard first, then retry only if this large change is intentional.",
+        code: "SUSPICIOUS_OVERWRITE_BLOCKED",
+      });
+      return;
+    }
+
+    const { error: aiError } = await serviceClient.from("ai_settings").upsert(
+      {
+        restaurant_id: restaurantId,
+        knowledge: knowledge ?? null,
+        assistant_name: assistant_name ?? null,
+        web_search_enabled: web_search_enabled ?? null,
+        site_url: site_url ?? null,
+        google_maps_url: google_maps_url ?? null,
+        facebook_url: facebook_url ?? null,
+        instagram_url: instagram_url ?? null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "restaurant_id" }
+    );
+
+    if (aiError) {
+      res.status(500).json({ error: aiError.message });
+      return;
+    }
+
+    if (!hasBookingPayload) {
+      res.status(200).json({ ok: true });
       return;
     }
   }

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import { resolveOwnerPrimaryRestaurant } from "./_ownerPrimary";
+import { resolveOwnerPrimaryRestaurant } from "../lib/ownerPrimary";
 
 const getEnv = (key: string) => process.env[key] ?? "";
 
