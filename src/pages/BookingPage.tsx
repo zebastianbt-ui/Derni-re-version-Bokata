@@ -375,8 +375,7 @@ export default function BookingPage() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const fromQuery = params.get("r");
-    const fromLocal = window.localStorage.getItem("bokata_restaurant_id");
-    const next = fromQuery || fromLocal || "";
+    const next = fromQuery || "";
     if (!next) {
       setMissingRestaurant(true);
       return;
@@ -510,9 +509,8 @@ export default function BookingPage() {
     [publicSettings?.knowledge_public]
   );
 
-  const effectiveSettings = settingsLoaded
-    ? publicSettings ?? { public_id: restaurantSlug, hours: DEFAULT_HOURS, seating: DEFAULT_SEATING }
-    : { public_id: restaurantSlug, hours: EMPTY_HOURS, seating: DEFAULT_SEATING };
+  const settingsLoading = !settingsLoaded && restaurantSlug !== "demo";
+  const effectiveSettings = publicSettings ?? { public_id: restaurantSlug, hours: DEFAULT_HOURS, seating: DEFAULT_SEATING };
   const normalizedHours = useMemo(() => normalizeHours(effectiveSettings.hours), [effectiveSettings.hours]);
   const settingsMissing = settingsLoaded && !publicSettings && restaurantSlug !== "demo";
   const bookingNow = useMemo(() => getNowInBookingTimeZone(), [clockTick]);
@@ -787,9 +785,9 @@ export default function BookingPage() {
                         if (!c.day) return <div key={c.key} className="h-10" />;
                         const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(c.day).padStart(2, "0")}`;
                         const isSel = iso === date;
-                        const closed = isClosedDate(iso);
+                        const closed = settingsLoading ? false : isClosedDate(iso);
                         const passed = isDateInPast(iso);
-                        const blocked = closed || passed;
+                        const blocked = settingsLoading || closed || passed;
                         return (
                           <button
                             key={c.key}
@@ -850,7 +848,7 @@ export default function BookingPage() {
                             ? { capacity: 0, booked: 0, available: 0, canFit: false }
                             : mockAvailability(date, t, guests || 1);
                           const isSel = t === time;
-                          const blocked = passed || manualFull || !a.canFit;
+                          const blocked = settingsLoading || passed || manualFull || !a.canFit;
                           const tag = manualFull
                             ? "Fullbokat"
                             : passed
@@ -885,7 +883,9 @@ export default function BookingPage() {
                         })}
                       </div>
                       <div className="mt-4 text-xs text-gray-500">
-                        {settingsMissing
+                        {settingsLoading
+                          ? "Laddar öppettider…"
+                          : settingsMissing
                           ? "Tiderna är inte konfigurerade än. Välj ändå en tid så uppdateras när restaurangen sparat sina tider."
                           : ""}
                       </div>
