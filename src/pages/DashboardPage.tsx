@@ -2914,7 +2914,10 @@ function ReservationDashboardInner() {
     setAuthMsg(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/dashboard` },
+      options: {
+        redirectTo: `${window.location.origin}/dashboard`,
+        queryParams: { prompt: "select_account" },
+      },
     });
     if (error) {
       setAuthLoading(false);
@@ -2929,7 +2932,7 @@ function ReservationDashboardInner() {
   }, [location.search]);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "global" });
   };
 
   const settingsDateInputClass =
