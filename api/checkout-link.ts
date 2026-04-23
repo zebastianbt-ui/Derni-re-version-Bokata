@@ -31,7 +31,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const priceMonthly = getEnv("STRIPE_PRICE_MONTHLY");
   const priceYearly = getEnv("STRIPE_PRICE_YEARLY");
   const price2Year = getEnv("STRIPE_PRICE_2YEAR");
-  const priceIdDirect = getEnv("STRIPE_PRICE_ID");
   const siteUrl = getEnv("SITE_URL") || "https://www.bokata.se";
   const successUrl =
     getEnv("STRIPE_SUCCESS_URL") || `${siteUrl}/api/checkout-complete?session_id={CHECKOUT_SESSION_ID}`;
@@ -47,10 +46,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const email = typeof source.email === "string" ? source.email : undefined;
   const normalizedEmail = normalizeEmail(email);
 
-  // Choix du price (priorité à STRIPE_PRICE_ID si fourni)
+  // Choix du price strictement par plan (évite un ancien price global inattendu)
+  const normalizedPlanKey = planKey === "ettar" || planKey === "tvar" ? planKey : "manad";
   const priceId =
-    priceIdDirect ||
-    (planKey === "ettar" ? priceYearly : planKey === "tvar" ? price2Year : priceMonthly);
+    normalizedPlanKey === "ettar"
+      ? priceYearly
+      : normalizedPlanKey === "tvar"
+        ? price2Year
+        : priceMonthly;
 
   if (!priceId) {
     res.status(500).json({ error: "Missing Stripe price id" });
