@@ -4449,18 +4449,16 @@ function ReservationDashboardInner() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 items-end gap-2">
                             <div>
                               <Field label="Från">
-                                <input
-                                  type="date"
-                                  lang="sv-SE"
+                                <SwedishDateInput
                                   className={settingsDateInputClass}
                                   value={period.from}
-                                  onChange={(e) =>
+                                  onChange={(value) =>
                                     setConfig((prev) => ({
                                       ...prev,
                                       hours: {
                                         ...prev.hours,
                                         periods: prev.hours.periods.map((p) =>
-                                          p.id === period.id ? { ...p, from: e.target.value } : p
+                                          p.id === period.id ? { ...p, from: value } : p
                                         ),
                                       },
                                     }))
@@ -4470,18 +4468,16 @@ function ReservationDashboardInner() {
                             </div>
                             <div>
                               <Field label="Till">
-                                <input
-                                  type="date"
-                                  lang="sv-SE"
+                                <SwedishDateInput
                                   className={settingsDateInputClass}
                                   value={period.to}
-                                  onChange={(e) =>
+                                  onChange={(value) =>
                                     setConfig((prev) => ({
                                       ...prev,
                                       hours: {
                                         ...prev.hours,
                                         periods: prev.hours.periods.map((p) =>
-                                          p.id === period.id ? { ...p, to: e.target.value } : p
+                                          p.id === period.id ? { ...p, to: value } : p
                                         ),
                                       },
                                     }))
@@ -4662,23 +4658,19 @@ function ReservationDashboardInner() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 items-end gap-2 justify-items-center sm:justify-items-stretch">
                     <div className="w-full sm:w-auto">
                       <Field label="Från" className="text-center sm:text-left">
-                        <input
-                          type="date"
-                          lang="sv-SE"
+                        <SwedishDateInput
                           className={settingsDateInputClass}
                           value={customClosureFrom}
-                          onChange={(e) => setCustomClosureFrom(e.target.value)}
+                          onChange={setCustomClosureFrom}
                         />
                       </Field>
                     </div>
                     <div className="w-full sm:w-auto">
                       <Field label="Till" className="text-center sm:text-left">
-                        <input
-                          type="date"
-                          lang="sv-SE"
+                        <SwedishDateInput
                           className={settingsDateInputClass}
                           value={customClosureTo}
-                          onChange={(e) => setCustomClosureTo(e.target.value)}
+                          onChange={setCustomClosureTo}
                         />
                       </Field>
                     </div>
@@ -5429,6 +5421,132 @@ function Drawer({ onClose, children }: { onClose: () => void; children: React.Re
         </div>
         {children}
       </div>
+    </div>
+  );
+}
+
+const SWEDISH_MONTHS = [
+  "januari", "februari", "mars", "april", "maj", "juni",
+  "juli", "augusti", "september", "oktober", "november", "december",
+];
+const SWEDISH_WEEKDAYS = ["Må", "Ti", "On", "To", "Fr", "Lö", "Sö"];
+
+function SwedishDateInput({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const selected = value ? new Date(`${value}T12:00:00`) : null;
+  const initial = selected && !Number.isNaN(selected.getTime()) ? selected : new Date();
+  const [open, setOpen] = useState(false);
+  const [viewYear, setViewYear] = useState(initial.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initial.getMonth());
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  const moveMonth = (delta: number) => {
+    const next = new Date(viewYear, viewMonth + delta, 1);
+    setViewYear(next.getFullYear());
+    setViewMonth(next.getMonth());
+  };
+
+  const firstDay = new Date(viewYear, viewMonth, 1);
+  const mondayOffset = (firstDay.getDay() + 6) % 7;
+  const gridStart = new Date(viewYear, viewMonth, 1 - mondayOffset);
+  const days = Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart);
+    date.setDate(gridStart.getDate() + index);
+    return date;
+  });
+  const todayIso = toISODateInputValue(new Date());
+
+  const chooseDate = (date: Date) => {
+    onChange(`${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`);
+    setOpen(false);
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      <div className="relative">
+        <input
+          type="text"
+          inputMode="none"
+          readOnly
+          value={value}
+          placeholder="ÅÅÅÅ-MM-DD"
+          aria-label="Välj datum"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+          className={`${className ?? ""} cursor-pointer pr-9`}
+        />
+        <button
+          type="button"
+          aria-label="Öppna kalender"
+          onClick={() => setOpen((current) => !current)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-pink-700"
+        >
+          ▣
+        </button>
+      </div>
+      {open ? (
+        <div className="absolute left-1/2 z-[70] mt-2 w-[292px] -translate-x-1/2 rounded-xl border border-pink-200 bg-white p-3 text-left shadow-xl sm:left-0 sm:translate-x-0">
+          <div className="mb-3 flex items-center justify-between">
+            <button type="button" onClick={() => moveMonth(-1)} className="rounded-lg px-2 py-1 text-lg hover:bg-pink-50" aria-label="Föregående månad">‹</button>
+            <div className="font-semibold text-gray-800">{SWEDISH_MONTHS[viewMonth]} {viewYear}</div>
+            <button type="button" onClick={() => moveMonth(1)} className="rounded-lg px-2 py-1 text-lg hover:bg-pink-50" aria-label="Nästa månad">›</button>
+          </div>
+          <div className="grid grid-cols-7 text-center text-xs font-semibold text-gray-500">
+            {SWEDISH_WEEKDAYS.map((day) => <div key={day} className="py-1">{day}</div>)}
+          </div>
+          <div className="grid grid-cols-7 gap-0.5">
+            {days.map((date) => {
+              const iso = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+              const isSelected = iso === value;
+              const isToday = iso === todayIso;
+              const inMonth = date.getMonth() === viewMonth;
+              return (
+                <button
+                  key={iso}
+                  type="button"
+                  onClick={() => chooseDate(date)}
+                  className={`h-9 rounded-lg text-sm ${
+                    isSelected
+                      ? "bg-pink-600 font-semibold text-white"
+                      : inMonth
+                      ? "text-gray-800 hover:bg-pink-50"
+                      : "text-gray-400 hover:bg-gray-50"
+                  } ${isToday && !isSelected ? "ring-1 ring-pink-400" : ""}`}
+                >
+                  {date.getDate()}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-2 flex justify-between border-t border-gray-100 pt-2 text-sm">
+            <button type="button" onClick={() => onChange("")} className="px-2 py-1 text-gray-500 hover:text-gray-800">Rensa</button>
+            <button type="button" onClick={() => chooseDate(new Date())} className="px-2 py-1 font-medium text-pink-700 hover:text-pink-800">Idag</button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
