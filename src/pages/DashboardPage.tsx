@@ -977,6 +977,10 @@ function ReservationDashboardInner() {
   const location = useLocation();
   const [authMsg, setAuthMsg] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [passwordChangeValue, setPasswordChangeValue] = useState("");
+  const [passwordConfirmValue, setPasswordConfirmValue] = useState("");
+  const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
+  const [passwordChangeMsg, setPasswordChangeMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [accessDenied, setAccessDenied] = useState<string | null>(null);
   const [settingsSaveError, setSettingsSaveError] = useState<string | null>(null);
   const [primaryMismatchNotice, setPrimaryMismatchNotice] = useState<string | null>(null);
@@ -985,6 +989,7 @@ function ReservationDashboardInner() {
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [restaurantName, setRestaurantName] = useState("");
   const [restaurantRole, setRestaurantRole] = useState<string | null>(null);
+  const canEditFloorplan = restaurantRole !== null;
   const [bookingLinkStatus, setBookingLinkStatus] = useState("");
   const [settingsReady, setSettingsReady] = useState(false);
   const [aiSaveState, setAiSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -1255,7 +1260,7 @@ function ReservationDashboardInner() {
   }, [restaurantId]);
 
   useEffect(() => {
-    if (!restaurantId || restaurantRole !== "owner") return;
+    if (!restaurantId || !canEditFloorplan) return;
     if (floorplanSaveTimer.current) window.clearTimeout(floorplanSaveTimer.current);
     floorplanSaveTimer.current = window.setTimeout(async () => {
       await supabase.from("floorplans").upsert(
@@ -1270,7 +1275,7 @@ function ReservationDashboardInner() {
     return () => {
       if (floorplanSaveTimer.current) window.clearTimeout(floorplanSaveTimer.current);
     };
-  }, [floorplan, restaurantId, restaurantRole]);
+  }, [floorplan, restaurantId, canEditFloorplan]);
 
   useEffect(() => {
     if (!dragging) return;
@@ -1788,6 +1793,32 @@ function ReservationDashboardInner() {
   const activeBookings = useMemo(() => bookings.filter((b) => !isCancelledBooking(b)), [bookings]);
   const dayBookings = useMemo(() => bookings.filter((b) => b.date === dateSel), [bookings, dateSel]);
   const dayActiveBookings = useMemo(() => dayBookings.filter((b) => !isCancelledBooking(b)), [dayBookings]);
+  const floorplanSeatCount = useMemo(() => tableCaps.reduce((sum, table) => sum + table.cap, 0), [tableCaps]);
+  const maxActiveBookingGuests = useMemo(
+    () => activeBookings.reduce((max, booking) => Math.max(max, Number(booking.guests) || 0), 0),
+    [activeBookings]
+  );
+  const floorplanCapacityAlert = useMemo(() => {
+    if (!settingsReady || !restaurantId || floorplanSeatCount <= 0) return null;
+
+    const reasons: string[] = [];
+    if (config.seating.maxGuests > floorplanSeatCount) {
+      reasons.push(
+        `Max gäster samtidigt är ${config.seating.maxGuests}, men tableplanen har bara ${floorplanSeatCount} platser.`
+      );
+    }
+    if (maxActiveBookingGuests > floorplanSeatCount) {
+      reasons.push(
+        `En befintlig bokning har ${maxActiveBookingGuests} gäster, vilket är mer än tableplanens ${floorplanSeatCount} platser.`
+      );
+    }
+    if (!reasons.length) return null;
+
+    return {
+      summary: reasons.join(" "),
+      totalSeats: floorplanSeatCount,
+    };
+  }, [settingsReady, restaurantId, floorplanSeatCount, config.seating.maxGuests, maxActiveBookingGuests]);
 
   const bookingDates = useMemo(() => {
     const set = new Set<string>();
@@ -2935,6 +2966,40 @@ function ReservationDashboardInner() {
     await supabase.auth.signOut({ scope: "global" });
   };
 
+  const handleChangePassword = async () => {
+    const nextPassword = passwordChangeValue;
+    const confirmPassword = passwordConfirmValue;
+
+    if (!nextPassword.trim() || !confirmPassword.trim()) {
+      setPasswordChangeMsg({ type: "error", text: "Fyll i båda lösenordsfälten." });
+      return;
+    }
+
+    if (nextPassword.length < 8) {
+      setPasswordChangeMsg({ type: "error", text: "Lösenordet måste vara minst 8 tecken." });
+      return;
+    }
+
+    if (nextPassword !== confirmPassword) {
+      setPasswordChangeMsg({ type: "error", text: "Lösenorden matchar inte." });
+      return;
+    }
+
+    setPasswordChangeLoading(true);
+    setPasswordChangeMsg(null);
+    const { error } = await supabase.auth.updateUser({ password: nextPassword });
+    setPasswordChangeLoading(false);
+
+    if (error) {
+      setPasswordChangeMsg({ type: "error", text: `Kunde inte uppdatera lösenord: ${error.message}` });
+      return;
+    }
+
+    setPasswordChangeValue("");
+    setPasswordConfirmValue("");
+    setPasswordChangeMsg({ type: "success", text: "Lösenordet är uppdaterat." });
+  };
+
   const settingsDateInputClass =
     "bokata-date mt-1 w-full min-w-0 max-w-[140px] mx-auto rounded-lg border border-gray-300 px-2 py-1 text-center text-[11px] focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300 sm:mx-0 sm:max-w-none sm:text-base sm:px-3 sm:py-2";
   const settingsTimeInputClass =
@@ -3033,6 +3098,15 @@ function ReservationDashboardInner() {
       {accessDenied ? (
         <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           {accessDenied}
+        </div>
+      ) : null}
+      {floorplanCapacityAlert ? (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="font-semibold">Varning: tableplanens kapacitet matchar inte bokningarna.</div>
+          <div className="mt-1">{floorplanCapacityAlert.summary}</div>
+          <div className="mt-1">
+            Lägg till fler bord i fliken <span className="font-semibold">Tableplan</span> eller sänk maxkapacitet i inställningarna.
+          </div>
         </div>
       ) : null}
 
@@ -3325,12 +3399,12 @@ function ReservationDashboardInner() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-lg font-bold text-gray-700">Tableplan</h3>
-              <p className="text-sm text-gray-500">Dra och släpp bord samt zoner.</p>
+              <p className="text-sm text-gray-500">Dra och släpp bord samt zoner. Totalt: {floorplanSeatCount} platser.</p>
             </div>
             <div className="flex gap-2">
               <button
                 className="px-3 py-2 rounded-lg border border-pink-200 text-pink-700 bg-pink-50 hover:bg-pink-100 text-sm disabled:opacity-60"
-                disabled={restaurantRole !== "owner"}
+                disabled={!canEditFloorplan}
                 onClick={() =>
                   setFloorplan((prev) => ({
                     ...prev,
@@ -3353,7 +3427,7 @@ function ReservationDashboardInner() {
               </button>
               <button
                 className="px-3 py-2 rounded-lg border border-pink-200 text-pink-700 bg-pink-50 hover:bg-pink-100 text-sm disabled:opacity-60"
-                disabled={restaurantRole !== "owner"}
+                disabled={!canEditFloorplan}
                 onClick={() =>
                   setFloorplan((prev) => ({
                     ...prev,
@@ -3381,7 +3455,7 @@ function ReservationDashboardInner() {
                     <div
                       key={z.id}
                       onPointerDown={(e) => {
-                        if (restaurantRole !== "owner") return;
+                        if (!canEditFloorplan) return;
                         const rect = canvasRef.current?.getBoundingClientRect();
                         if (!rect) return;
                         setSelectedItem({ type: "zone", id: z.id });
@@ -3407,7 +3481,7 @@ function ReservationDashboardInner() {
                     <div
                       key={t.id}
                       onPointerDown={(e) => {
-                        if (restaurantRole !== "owner") return;
+                        if (!canEditFloorplan) return;
                         const rect = canvasRef.current?.getBoundingClientRect();
                         if (!rect) return;
                         setSelectedItem({ type: "table", id: t.id });
@@ -3437,8 +3511,13 @@ function ReservationDashboardInner() {
 
             <div className="rounded-2xl border border-pink-200 bg-white p-4">
               <div className="text-sm font-semibold text-gray-700 mb-3">Egenskaper</div>
-              {restaurantRole !== "owner" ? (
-                <div className="text-xs text-gray-500 mb-3">Endast ägaren kan redigera tableplan.</div>
+              {floorplanCapacityAlert ? (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  {floorplanCapacityAlert.summary}
+                </div>
+              ) : null}
+              {!canEditFloorplan ? (
+                <div className="text-xs text-gray-500 mb-3">Du saknar behörighet att redigera tableplan.</div>
               ) : null}
               {selectedItem ? (
                 selectedItem.type === "table" ? (
@@ -3451,7 +3530,7 @@ function ReservationDashboardInner() {
                           <input
                             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
                             value={t.label ?? ""}
-                            disabled={restaurantRole !== "owner"}
+                            disabled={!canEditFloorplan}
                             onChange={(e) =>
                               setFloorplan((prev) => ({
                                 ...prev,
@@ -3465,7 +3544,7 @@ function ReservationDashboardInner() {
                             type="number"
                             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
                             value={t.seats}
-                            disabled={restaurantRole !== "owner"}
+                            disabled={!canEditFloorplan}
                             onChange={(e) =>
                               setFloorplan((prev) => ({
                                 ...prev,
@@ -3491,7 +3570,7 @@ function ReservationDashboardInner() {
                                   ? "border-pink-400 bg-pink-50 text-pink-700"
                                   : "border-gray-300 text-gray-600"
                               }`}
-                              disabled={restaurantRole !== "owner"}
+                              disabled={!canEditFloorplan}
                               onClick={() =>
                                 setFloorplan((prev) => ({
                                   ...prev,
@@ -3516,7 +3595,7 @@ function ReservationDashboardInner() {
                                   ? "border-pink-400 bg-pink-50 text-pink-700"
                                   : "border-gray-300 text-gray-600"
                               }`}
-                              disabled={restaurantRole !== "owner"}
+                              disabled={!canEditFloorplan}
                               onClick={() =>
                                 setFloorplan((prev) => ({
                                   ...prev,
@@ -3538,7 +3617,7 @@ function ReservationDashboardInner() {
                         </Field>
                         <button
                           className="w-full rounded-lg border border-rose-200 bg-rose-50 text-rose-700 px-3 py-2 disabled:opacity-60"
-                          disabled={restaurantRole !== "owner"}
+                          disabled={!canEditFloorplan}
                           onClick={() =>
                             setFloorplan((prev) => ({
                               ...prev,
@@ -3561,7 +3640,7 @@ function ReservationDashboardInner() {
                           <input
                             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
                             value={z.name}
-                            disabled={restaurantRole !== "owner"}
+                            disabled={!canEditFloorplan}
                             onChange={(e) =>
                               setFloorplan((prev) => ({
                                 ...prev,
@@ -3576,7 +3655,7 @@ function ReservationDashboardInner() {
                               type="number"
                               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
                               value={z.w}
-                              disabled={restaurantRole !== "owner"}
+                              disabled={!canEditFloorplan}
                               onChange={(e) =>
                                 setFloorplan((prev) => ({
                                   ...prev,
@@ -3592,7 +3671,7 @@ function ReservationDashboardInner() {
                               type="number"
                               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
                               value={z.h}
-                              disabled={restaurantRole !== "owner"}
+                              disabled={!canEditFloorplan}
                               onChange={(e) =>
                                 setFloorplan((prev) => ({
                                   ...prev,
@@ -3606,7 +3685,7 @@ function ReservationDashboardInner() {
                         </div>
                         <button
                           className="w-full rounded-lg border border-rose-200 bg-rose-50 text-rose-700 px-3 py-2 disabled:opacity-60"
-                          disabled={restaurantRole !== "owner"}
+                          disabled={!canEditFloorplan}
                           onClick={() =>
                             setFloorplan((prev) => ({
                               ...prev,
@@ -3646,6 +3725,7 @@ function ReservationDashboardInner() {
             <Field label="Datum">
               <input
                 type="date"
+                lang="sv-SE"
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
                 value={editBookingDraft?.date ?? openBooking.date}
                 onChange={(e) =>
@@ -3907,6 +3987,7 @@ function ReservationDashboardInner() {
             <Field label="Datum">
               <input
                 type="date"
+                lang="sv-SE"
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
                 value={formDate}
                 onChange={(e) => setFormDate(e.target.value)}
@@ -4370,6 +4451,7 @@ function ReservationDashboardInner() {
                               <Field label="Från">
                                 <input
                                   type="date"
+                                  lang="sv-SE"
                                   className={settingsDateInputClass}
                                   value={period.from}
                                   onChange={(e) =>
@@ -4390,6 +4472,7 @@ function ReservationDashboardInner() {
                               <Field label="Till">
                                 <input
                                   type="date"
+                                  lang="sv-SE"
                                   className={settingsDateInputClass}
                                   value={period.to}
                                   onChange={(e) =>
@@ -4581,6 +4664,7 @@ function ReservationDashboardInner() {
                       <Field label="Från" className="text-center sm:text-left">
                         <input
                           type="date"
+                          lang="sv-SE"
                           className={settingsDateInputClass}
                           value={customClosureFrom}
                           onChange={(e) => setCustomClosureFrom(e.target.value)}
@@ -4591,6 +4675,7 @@ function ReservationDashboardInner() {
                       <Field label="Till" className="text-center sm:text-left">
                         <input
                           type="date"
+                          lang="sv-SE"
                           className={settingsDateInputClass}
                           value={customClosureTo}
                           onChange={(e) => setCustomClosureTo(e.target.value)}
@@ -4662,6 +4747,71 @@ function ReservationDashboardInner() {
                 </div>
               </div>
 
+            </Section>
+
+            <Section title="Konto & säkerhet">
+              <div
+                className="space-y-3"
+                onInputCapture={(event) => event.stopPropagation()}
+                onChangeCapture={(event) => event.stopPropagation()}
+              >
+                <div className="text-sm text-gray-600">Byt lösenord för kontot: {profileEmail || "—"}</div>
+
+                <Field label="Nytt lösenord">
+                  <input
+                    type="password"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    value={passwordChangeValue}
+                    onChange={(event) => {
+                      setPasswordChangeValue(event.target.value);
+                      setPasswordChangeMsg(null);
+                    }}
+                    placeholder="Minst 8 tecken"
+                    autoComplete="new-password"
+                  />
+                </Field>
+
+                <Field label="Bekräfta nytt lösenord">
+                  <input
+                    type="password"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-pink-300"
+                    value={passwordConfirmValue}
+                    onChange={(event) => {
+                      setPasswordConfirmValue(event.target.value);
+                      setPasswordChangeMsg(null);
+                    }}
+                    placeholder="Skriv samma lösenord igen"
+                    autoComplete="new-password"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        handleChangePassword();
+                      }
+                    }}
+                  />
+                </Field>
+
+                <button
+                  type="button"
+                  className="w-full rounded-lg bg-pink-600 px-4 py-2 font-semibold text-white hover:bg-pink-700 disabled:opacity-60"
+                  disabled={passwordChangeLoading || !passwordChangeValue || !passwordConfirmValue}
+                  onClick={handleChangePassword}
+                >
+                  {passwordChangeLoading ? "Sparar..." : "Byt lösenord"}
+                </button>
+
+                {passwordChangeMsg ? (
+                  <div
+                    className={`rounded-lg px-3 py-2 text-sm ${
+                      passwordChangeMsg.type === "error"
+                        ? "border border-rose-200 bg-rose-50 text-rose-700"
+                        : "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                    }`}
+                  >
+                    {passwordChangeMsg.text}
+                  </div>
+                ) : null}
+              </div>
             </Section>
 
             <Section title="AI-profil & kunskapsbas">

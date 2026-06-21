@@ -326,11 +326,34 @@ function isManuallyFullBookedSlot(dateIso: string, timeValue: string) {
   return slots.includes(normalizeSlotTime(timeValue));
 }
 
+function timeToMin(value: string) {
+  const [h, m] = value.split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return NaN;
+  return h * 60 + m;
+}
+
 const weekdaySv: DayName[] = ["söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag"];
 const toDayName = (iso: string): DayName | null => {
   const d = new Date(iso + "T00:00:00");
   if (Number.isNaN(d.getTime())) return null;
   return weekdaySv[d.getDay()];
+};
+
+const isMadameBla = (value?: string | null) => /madame\s*bl[åa]/i.test(value ?? "");
+const getMadameBlaDropInRange = (iso: string, day: DayName | null) => {
+  if (!day) return null;
+  if (isIsoInRange(iso, "2026-05-01", "2026-06-28")) {
+    if (day === "lördag" || day === "söndag") return { fromMin: 11 * 60, toMinExclusive: 16 * 60 };
+    return null;
+  }
+  if (isIsoInRange(iso, "2026-06-29", "2026-08-16")) {
+    return { fromMin: 11 * 60, toMinExclusive: 16 * 60 };
+  }
+  if (isIsoInRange(iso, "2026-08-17", "2026-10-04")) {
+    if (day === "lördag" || day === "söndag") return { fromMin: 11 * 60, toMinExclusive: 16 * 60 };
+    return null;
+  }
+  return null;
 };
 
 function mockAvailability(date: string, time: string, guests: number) {
@@ -514,9 +537,22 @@ export default function BookingPage() {
   const normalizedHours = useMemo(() => normalizeHours(effectiveSettings.hours), [effectiveSettings.hours]);
   const settingsMissing = settingsLoaded && !publicSettings && restaurantSlug !== "demo";
   const bookingNow = useMemo(() => getNowInBookingTimeZone(), [clockTick]);
+  const madameBlaMode = useMemo(
+    () => isMadameBla(restaurantName) || isMadameBla(publicSettings?.knowledge_public ?? ""),
+    [restaurantName, publicSettings?.knowledge_public]
+  );
 
   const isDateInPast = (iso: string) => isPastBookingSlot(iso, undefined, bookingNow);
   const isTimeSlotInPast = (iso: string, value: string) => isPastBookingSlot(iso, value, bookingNow);
+  const isDropInOnlySlot = (iso: string, value: string) => {
+    if (!madameBlaMode) return false;
+    const day = toDayName(iso);
+    const rule = getMadameBlaDropInRange(iso, day);
+    if (!rule) return false;
+    const mins = timeToMin(value);
+    if (!Number.isFinite(mins)) return false;
+    return mins >= rule.fromMin && mins < rule.toMinExclusive;
+  };
 
   const isClosedDate = (iso: string) => {
     const special = normalizedHours.special.find((s) => s.date === iso);
@@ -570,18 +606,19 @@ export default function BookingPage() {
   const avail = useMemo(() => {
     const blockedByPast = time ? isTimeSlotInPast(date, time) : isDateInPast(date);
     const blockedByManualFull = time ? isManuallyFullBookedSlot(date, time) : false;
-    if (isClosedDate(date) || blockedByPast || blockedByManualFull) {
+    const blockedByDropInOnly = time ? isDropInOnlySlot(date, time) : false;
+    if (isClosedDate(date) || blockedByPast || blockedByManualFull || blockedByDropInOnly) {
       return { capacity: 0, booked: 0, available: 0, canFit: false };
     }
     return mockAvailability(date, time, guests);
-  }, [date, time, guests, normalizedHours, bookingNow]);
+  }, [date, time, guests, normalizedHours, bookingNow, madameBlaMode]);
 
   useEffect(() => {
     if (!time) return;
-    if (!times.includes(time) || isTimeSlotInPast(date, time) || isManuallyFullBookedSlot(date, time)) {
+    if (!times.includes(time) || isTimeSlotInPast(date, time) || isManuallyFullBookedSlot(date, time) || isDropInOnlySlot(date, time)) {
       setTime("");
     }
-  }, [date, time, times, bookingNow]);
+  }, [date, time, times, bookingNow, madameBlaMode]);
 
   const hasName = name.trim().length > 0;
   const hasEmail = email.trim().length > 0;
@@ -594,6 +631,7 @@ export default function BookingPage() {
     if (!time) return "Välj en tid.";
     if (isTimeSlotInPast(date, time)) return "Det går inte att boka en passerad tid.";
     if (isManuallyFullBookedSlot(date, time)) return "Den tiden är fullbokad.";
+    if (isDropInOnlySlot(date, time)) return "Den tiden är endast drop-in.";
     if (!guests || guests < 1) return "Ange antal gäster.";
     if (!hasName) return "Ange ditt namn.";
     if (!hasEmail) return "Ange din e‑post.";
@@ -624,6 +662,10 @@ export default function BookingPage() {
     }
     if (isManuallyFullBookedSlot(date, time)) {
       setSubmitError("Den tiden är fullbokad.");
+      return;
+    }
+    if (isDropInOnlySlot(date, time)) {
+      setSubmitError("Den tiden är endast drop-in.");
       return;
     }
     setSubmitting(true);
@@ -844,12 +886,15 @@ export default function BookingPage() {
                         {times.map((t) => {
                           const passed = isTimeSlotInPast(date, t);
                           const manualFull = isManuallyFullBookedSlot(date, t);
+                          const dropInOnly = isDropInOnlySlot(date, t);
                           const a = passed || manualFull
                             ? { capacity: 0, booked: 0, available: 0, canFit: false }
                             : mockAvailability(date, t, guests || 1);
                           const isSel = t === time;
-                          const blocked = settingsLoading || passed || manualFull || !a.canFit;
-                          const tag = manualFull
+                          const blocked = settingsLoading || passed || manualFull || dropInOnly || !a.canFit;
+                          const tag = dropInOnly
+                            ? "Endast Drop in"
+                            : manualFull
                             ? "Fullbokat"
                             : passed
                             ? "Passerad"
@@ -871,6 +916,8 @@ export default function BookingPage() {
                                   ? isSel
                                     ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white border-violet-600"
                                     : "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
+                                  : dropInOnly
+                                  ? "bg-amber-50 text-amber-700 border-amber-200 cursor-not-allowed"
                                   : "bg-gray-50 text-gray-400 border-gray-200 line-through cursor-not-allowed"
                               }`}
                             >

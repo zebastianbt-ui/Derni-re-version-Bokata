@@ -159,6 +159,7 @@ const pickPeriodForDate = (periods: any[], iso: string) => {
 const normalizeTime = (t: string) => (t?.length >= 5 ? t.slice(0, 5) : t);
 
 const BOOKING_TIME_ZONE = "Europe/Stockholm";
+const TABLE_IDS_META_PREFIX = "__BOKATA_TABLE_IDS__:";
 const MANUAL_FULLY_BOOKED_SLOTS: Record<string, string[]> = {
   "2026-04-03": ["11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30"],
   "2026-04-05": ["13:00"],
@@ -197,6 +198,69 @@ const isPastBookingSlot = (dateIso: string, timeValue: string) => {
 const isManuallyFullBookedSlot = (dateIso: string, timeValue: string) => {
   const slots = MANUAL_FULLY_BOOKED_SLOTS[dateIso] ?? [];
   return slots.includes(normalizeTime(timeValue));
+};
+
+const isMadameBlaKnowledge = (knowledge?: string | null) => /madame\s*bl[åa]/i.test(knowledge ?? "");
+const getMadameBlaDropInRange = (dateIso: string, day: string | null) => {
+  if (!day) return null;
+  if (isIsoInRange(dateIso, "2026-05-01", "2026-06-28")) {
+    if (day === "lördag" || day === "söndag") return { fromMin: 11 * 60, toMinExclusive: 16 * 60 };
+    return null;
+  }
+  if (isIsoInRange(dateIso, "2026-06-29", "2026-08-16")) {
+    return { fromMin: 11 * 60, toMinExclusive: 16 * 60 };
+  }
+  if (isIsoInRange(dateIso, "2026-08-17", "2026-10-04")) {
+    if (day === "lördag" || day === "söndag") return { fromMin: 11 * 60, toMinExclusive: 16 * 60 };
+    return null;
+  }
+  return null;
+};
+const isDropInOnlySlotForMadameBla = (dateIso: string, timeValue: string, knowledge?: string | null) => {
+  if (!isMadameBlaKnowledge(knowledge)) return false;
+  const day = toDayNameSv(dateIso);
+  const rule = getMadameBlaDropInRange(dateIso, day);
+  if (!rule) return false;
+  const mins = timeToMin(normalizeTime(timeValue));
+  if (!Number.isFinite(mins)) return false;
+  return mins >= rule.fromMin && mins < rule.toMinExclusive;
+};
+
+const normalizeTableIds = (values: Array<number | null | undefined>) => {
+  const unique = new Set<number>();
+  for (const value of values) {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed <= 0) continue;
+    unique.add(parsed);
+  }
+  return Array.from(unique);
+};
+
+const parseBookingNotesMeta = (raw: string | null | undefined) => {
+  const text = raw ?? "";
+  if (!text.trim()) return { notes: "", tableIds: [] as number[] };
+
+  let metaIds: number[] = [];
+  const keptLines: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith(TABLE_IDS_META_PREFIX)) {
+      const rawIds = trimmed.slice(TABLE_IDS_META_PREFIX.length);
+      metaIds = normalizeTableIds(rawIds.split(",").map((part) => Number(part.trim())));
+      continue;
+    }
+    keptLines.push(line);
+  }
+
+  return { notes: keptLines.join("\n").trim(), tableIds: metaIds };
+};
+
+const buildBookingNotesWithMeta = (notes: string | null | undefined, tableIds: number[]) => {
+  const cleaned = (notes ?? "").trim();
+  const normalizedIds = normalizeTableIds(tableIds);
+  if (normalizedIds.length <= 1) return cleaned || null;
+  const metaLine = `${TABLE_IDS_META_PREFIX}${normalizedIds.join(",")}`;
+  return cleaned ? `${cleaned}\n${metaLine}` : metaLine;
 };
 
 type FloorplanTable = {
@@ -452,6 +516,54 @@ const chooseBestTableGroup = (args: {
   return bestGroup;
 };
 
+const chooseFallbackTableGroup = (args: {
+  tables: FloorplanTable[];
+  guests: number;
+  preferredTableId?: number | null;
+  startMin: number;
+  endMin: number;
+  assigned: AssignedTableBlock[];
+}) => {
+  if (!args.tables.length || args.guests < 1) return null;
+
+  const conflictingTableIds = new Set<number>();
+  for (const block of args.assigned) {
+    if (!overlap(args.startMin, args.endMin, block.startMin, block.endMin)) continue;
+    block.tableIds.forEach((id) => conflictingTableIds.add(id));
+  }
+
+  const available = args.tables.filter((table) => !conflictingTableIds.has(table.id));
+  if (!available.length) return null;
+
+  if (args.preferredTableId != null) {
+    const preferred = available.find((table) => table.id === args.preferredTableId);
+    if (preferred && preferred.seats >= args.guests) return [preferred.id];
+  }
+
+  const single = [...available]
+    .filter((table) => table.seats >= args.guests)
+    .sort((a, b) => a.seats - b.seats || a.id - b.id)[0];
+  if (single) return [single.id];
+
+  const ranked = [...available].sort((a, b) => {
+    const aPref = args.preferredTableId != null && a.id === args.preferredTableId ? 0 : 1;
+    const bPref = args.preferredTableId != null && b.id === args.preferredTableId ? 0 : 1;
+    if (aPref !== bPref) return aPref - bPref;
+    if (a.seats !== b.seats) return b.seats - a.seats;
+    return a.id - b.id;
+  });
+
+  const picked: number[] = [];
+  let seats = 0;
+  for (const table of ranked) {
+    picked.push(table.id);
+    seats += table.seats;
+    if (seats >= args.guests) return picked.sort((a, b) => a - b);
+  }
+
+  return null;
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method Not Allowed" });
@@ -524,6 +636,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const requireManual = !!s.require_manual_confirmation;
   const notifyEnabled = !!s.notify_enabled;
   const notifyEmail = s.notify_email || null;
+  if (isDropInOnlySlotForMadameBla(date, time, s.knowledge_public)) {
+    res.status(400).json({ error: "Den tiden är endast drop-in." });
+    return;
+  }
   const bookingMessageRaw = extractMultilineLabelValue(
     s.knowledge_public,
     BOOKING_CONFIRMATION_EMAIL_AUTO_LABEL
@@ -596,7 +712,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data: sameDayBookings } = await supabase
     .from("bookings")
-    .select("time,guests,duration_min,status,table_id")
+    .select("time,guests,duration_min,status,table_id,notes")
     .eq("restaurant_id", restaurantId)
     .eq("date", date)
     .neq("status", "cancelled");
@@ -619,6 +735,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   let assignedTableId: number | null = null;
+  let assignedTableIds: number[] = [];
   const { data: floorplanRow } = await supabase
     .from("floorplans")
     .select("layout")
@@ -629,41 +746,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     | Array<{ seats?: number; x?: number; y?: number; w?: number; h?: number; label?: string }>
     | undefined;
   const tables = buildPlanTables(planTables);
+  const floorplanTotalSeats = tables.reduce((sum, table) => sum + table.seats, 0);
+  const peakExistingGuests = (sameDayBookings ?? []).reduce((max, booking: any) => {
+    const guestsCount = Number(booking?.guests) || 0;
+    return guestsCount > max ? guestsCount : max;
+  }, 0);
+  const floorplanCapacityMismatch = tables.length > 0 && floorplanTotalSeats > 0 && peakExistingGuests > floorplanTotalSeats;
 
-  if (tables.length) {
-    const existing = (sameDayBookings ?? []).map((b: any) => ({
-      time: normalizeTime(b.time),
-      guests: Number(b.guests) || 0,
-      durationMin: b.duration_min ?? durationMin,
-      tableId: b.table_id ?? null,
-    }));
+  if (floorplanCapacityMismatch) {
+    console.warn("Floorplan capacity mismatch detected; falling back to maxTables mode for this request", {
+      restaurantId,
+      date,
+      floorplanTotalSeats,
+      peakExistingGuests,
+    });
+  }
+
+  if (tables.length && !floorplanCapacityMismatch) {
+    const existing = (sameDayBookings ?? []).map((b: any) => {
+      const parsedMeta = parseBookingNotesMeta(b.notes ?? "");
+      const tableIds = normalizeTableIds([...(parsedMeta.tableIds ?? []), b.table_id]);
+      return {
+        time: normalizeTime(b.time),
+        guests: Number(b.guests) || 0,
+        durationMin: b.duration_min ?? durationMin,
+        tableId: b.table_id ?? null,
+        tableIds,
+        hasMetaTableIds: parsedMeta.tableIds.length > 0,
+      };
+    });
 
     const tableMap = new Map<number, FloorplanTable>();
     tables.forEach((table) => tableMap.set(table.id, table));
 
     const assigned: AssignedTableBlock[] = [];
-    const needsAssign: Array<{ time: string; guests: number; durationMin: number; tableId: number | null }> = [];
+    const needsAssign: Array<{
+      time: string;
+      guests: number;
+      durationMin: number;
+      tableId: number | null;
+      tableIds: number[];
+      hasMetaTableIds: boolean;
+    }> = [];
 
     for (const booking of existing) {
       const bs = timeToMin(booking.time);
       if (!Number.isFinite(bs)) {
-        needsAssign.push(booking);
+        console.warn("Skipping booking with invalid time during table assignment", {
+          restaurantId,
+          date,
+          time: booking.time,
+        });
         continue;
       }
       const be = bs + booking.durationMin;
-      if (booking.tableId != null) {
-        const fixedTableId = booking.tableId;
-        const fixedTable = tableMap.get(fixedTableId);
-        const canStayFixed =
-          !!fixedTable &&
-          fixedTable.seats >= booking.guests &&
-          !assigned.some((block) =>
-            overlap(bs, be, block.startMin, block.endMin) && block.tableIds.includes(fixedTableId)
-          );
-        if (canStayFixed) {
-          assigned.push({ tableIds: [fixedTableId], startMin: bs, endMin: be });
-          continue;
-        }
+      const fixedGroup = booking.tableIds.filter((id: number) => tableMap.has(id));
+      const fixedSeats = fixedGroup.reduce((sum: number, id: number) => sum + (tableMap.get(id)?.seats ?? 0), 0);
+      const fixedOccupied = assigned.some(
+        (block) => overlap(bs, be, block.startMin, block.endMin) && block.tableIds.some((id) => fixedGroup.includes(id))
+      );
+      const legacySingleTableFallback =
+        booking.tableId != null &&
+        !booking.hasMetaTableIds &&
+        fixedGroup.length === 1 &&
+        fixedSeats > 0 &&
+        fixedSeats < booking.guests;
+      const canStayFixed = fixedGroup.length > 0 && !fixedOccupied && (fixedSeats >= booking.guests || legacySingleTableFallback);
+      if (canStayFixed) {
+        assigned.push({ tableIds: fixedGroup, startMin: bs, endMin: be });
+        continue;
       }
       needsAssign.push(booking);
     }
@@ -677,32 +828,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
       const be = bs + booking.durationMin;
-      const group = chooseBestTableGroup({
-        tables,
-        guests: booking.guests,
-        preferredTableId: booking.tableId,
-        startMin: bs,
-        endMin: be,
-        assigned,
-      });
+      const group =
+        chooseBestTableGroup({
+          tables,
+          guests: booking.guests,
+          preferredTableId: booking.tableIds[0] ?? booking.tableId,
+          startMin: bs,
+          endMin: be,
+          assigned,
+        }) ??
+        chooseFallbackTableGroup({
+          tables,
+          guests: booking.guests,
+          preferredTableId: booking.tableIds[0] ?? booking.tableId,
+          startMin: bs,
+          endMin: be,
+          assigned,
+        });
       if (!group?.length) {
+        const fallbackAll = tables.map((table) => table.id);
+        if (fallbackAll.length) {
+          console.warn("Could not assign existing booking with floorplan, locking all tables for interval", {
+            restaurantId,
+            date,
+            time: booking.time,
+            guests: booking.guests,
+          });
+          assigned.push({ tableIds: fallbackAll, startMin: bs, endMin: be });
+          continue;
+        }
         res.status(400).json({ error: "Tyvärr finns det inga lediga bord vid den tiden." });
         return;
       }
       assigned.push({ tableIds: group, startMin: bs, endMin: be });
     }
 
-    const requestedGroup = chooseBestTableGroup({
-      tables,
-      guests,
-      startMin,
-      endMin,
-      assigned,
-    });
+    const requestedGroup =
+      chooseBestTableGroup({
+        tables,
+        guests,
+        startMin,
+        endMin,
+        assigned,
+      }) ??
+      chooseFallbackTableGroup({
+        tables,
+        guests,
+        startMin,
+        endMin,
+        assigned,
+      });
     if (!requestedGroup?.length) {
       res.status(400).json({ error: "Tyvärr finns det inga lediga bord vid den tiden." });
       return;
     }
+    assignedTableIds = requestedGroup;
     assignedTableId = requestedGroup[0] ?? null;
   } else {
     const overlapTables =
@@ -726,6 +906,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const confirmExpiresAt =
     requireManual && confirmTtlHours > 0 ? new Date(Date.now() + confirmTtlHours * 3600_000).toISOString() : null;
   const status = requireManual ? "pending" : "confirmed";
+  const persistedNotes = buildBookingNotesWithMeta(notes || null, assignedTableIds);
 
   const { data: inserted, error } = await supabase
     .from("bookings")
@@ -735,7 +916,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       time,
       guests,
       name,
-      notes: notes || null,
+      notes: persistedNotes,
       status,
       source: "web",
       duration_min: durationMin,
