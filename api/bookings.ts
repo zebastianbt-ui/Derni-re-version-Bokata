@@ -160,11 +160,11 @@ const normalizeTime = (t: string) => (t?.length >= 5 ? t.slice(0, 5) : t);
 
 const BOOKING_TIME_ZONE = "Europe/Stockholm";
 const TABLE_IDS_META_PREFIX = "__BOKATA_TABLE_IDS__:";
-const TONIGHT_FULLY_BOOKED_DATE = "2026-07-26";
 const MANUAL_FULLY_BOOKED_SLOTS: Record<string, string[]> = {
   "2026-04-03": ["11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30"],
   "2026-04-05": ["13:00"],
-  [TONIGHT_FULLY_BOOKED_DATE]: ["17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00", "21:30"],
+  "2026-07-26": ["17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00", "21:30"],
+  "2026-07-27": ["19:00", "19:30", "20:00", "20:30", "21:00"],
 };
 
 const getNowInBookingTimeZone = () => {

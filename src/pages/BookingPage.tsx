@@ -283,11 +283,12 @@ function genTimeSlots(start = "11:00", end = "21:00", stepMin = 30, lastBookingB
 }
 
 const BOOKING_TIME_ZONE = "Europe/Stockholm";
-const TONIGHT_FULLY_BOOKED_DATE = "2026-07-26";
+const FULLY_BOOKED_NOTICE_DATES = new Set(["2026-07-26"]);
 const MANUAL_FULLY_BOOKED_SLOTS: Record<string, string[]> = {
   "2026-04-03": ["11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30"],
   "2026-04-05": ["13:00"],
-  [TONIGHT_FULLY_BOOKED_DATE]: ["17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00", "21:30"],
+  "2026-07-26": ["17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00", "21:30"],
+  "2026-07-27": ["19:00", "19:30", "20:00", "20:30", "21:00"],
 };
 
 function normalizeSlotTime(value: string) {
@@ -931,7 +932,7 @@ export default function BookingPage() {
                           );
                         })}
                       </div>
-                      {date === TONIGHT_FULLY_BOOKED_DATE ? (
+                      {FULLY_BOOKED_NOTICE_DATES.has(date) ? (
                         <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
                           Fullbokat
                         </div>
