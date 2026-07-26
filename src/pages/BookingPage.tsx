@@ -933,7 +933,7 @@ export default function BookingPage() {
                       </div>
                       {date === TONIGHT_FULLY_BOOKED_DATE ? (
                         <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
-                          Tyvärr är det fullbokat ikväll.
+                          Fullbokat
                         </div>
                       ) : null}
                       <div className="mt-4 text-xs text-gray-500">
