@@ -5477,7 +5477,7 @@ function SwedishDateInput({
     date.setDate(gridStart.getDate() + index);
     return date;
   });
-  const todayIso = toISODateInputValue(new Date());
+  const todayIso = toIsoDate(new Date());
 
   const chooseDate = (date: Date) => {
     onChange(`${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`);
