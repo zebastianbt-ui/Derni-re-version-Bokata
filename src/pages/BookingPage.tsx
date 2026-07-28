@@ -286,6 +286,8 @@ const BOOKING_TIME_ZONE = "Europe/Stockholm";
 const SUMMER_BOOKING_FROM = "2026-06-29";
 const SUMMER_BOOKING_TO = "2026-08-16";
 const SUMMER_LATEST_BOOKING_TIME = "19:30";
+const POST_SUMMER_WEEKDAY_LATEST_BOOKING_TIME = "16:00";
+const POST_SUMMER_SATURDAY_LATEST_BOOKING_TIME = "19:30";
 const FULLY_BOOKED_NOTICE_DATES = new Set(["2026-07-26"]);
 const MANUAL_FULLY_BOOKED_SLOTS: Record<string, string[]> = {
   "2026-04-03": ["11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30"],
@@ -347,6 +349,14 @@ const toDayName = (iso: string): DayName | null => {
   if (Number.isNaN(d.getTime())) return null;
   return weekdaySv[d.getDay()];
 };
+
+function latestBookingTimeForDate(dateIso: string) {
+  if (isSummerBookingDate(dateIso)) return SUMMER_LATEST_BOOKING_TIME;
+  if (dateIso <= SUMMER_BOOKING_TO) return null;
+  return toDayName(dateIso) === "lördag"
+    ? POST_SUMMER_SATURDAY_LATEST_BOOKING_TIME
+    : POST_SUMMER_WEEKDAY_LATEST_BOOKING_TIME;
+}
 
 const isMadameBla = (value?: string | null) => /madame\s*bl[åa]/i.test(value ?? "");
 const getMadameBlaDropInRange = (iso: string, day: DayName | null) => {
@@ -587,8 +597,9 @@ export default function BookingPage() {
     const h = dayHours(date);
     if (!h) return [];
     const slots = genTimeSlots(h.open, h.close, 30);
-    if (!isSummerBookingDate(date)) return slots;
-    return slots.filter((slot) => timeToMin(slot) <= timeToMin(SUMMER_LATEST_BOOKING_TIME));
+    const latestBookingTime = latestBookingTimeForDate(date);
+    if (!latestBookingTime) return slots;
+    return slots.filter((slot) => timeToMin(slot) <= timeToMin(latestBookingTime));
   }, [date, normalizedHours]);
 
   const findNextOpenDate = (startIso: string) => {

@@ -163,6 +163,8 @@ const TABLE_IDS_META_PREFIX = "__BOKATA_TABLE_IDS__:";
 const SUMMER_BOOKING_FROM = "2026-06-29";
 const SUMMER_BOOKING_TO = "2026-08-16";
 const SUMMER_LATEST_BOOKING_TIME = "19:30";
+const POST_SUMMER_WEEKDAY_LATEST_BOOKING_TIME = "16:00";
+const POST_SUMMER_SATURDAY_LATEST_BOOKING_TIME = "19:30";
 const MANUAL_FULLY_BOOKED_SLOTS: Record<string, string[]> = {
   "2026-04-03": ["11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30"],
   "2026-04-05": ["13:00"],
@@ -205,6 +207,14 @@ const isManuallyFullBookedSlot = (dateIso: string, timeValue: string) => {
 };
 
 const isSummerBookingDate = (dateIso: string) => isIsoInRange(dateIso, SUMMER_BOOKING_FROM, SUMMER_BOOKING_TO);
+
+const latestBookingTimeForDate = (dateIso: string) => {
+  if (isSummerBookingDate(dateIso)) return SUMMER_LATEST_BOOKING_TIME;
+  if (dateIso <= SUMMER_BOOKING_TO) return null;
+  return toDayNameSv(dateIso) === "lördag"
+    ? POST_SUMMER_SATURDAY_LATEST_BOOKING_TIME
+    : POST_SUMMER_WEEKDAY_LATEST_BOOKING_TIME;
+};
 
 const isMadameBlaKnowledge = (knowledge?: string | null) => /madame\s*bl[åa]/i.test(knowledge ?? "");
 const getMadameBlaDropInRange = (dateIso: string, day: string | null) => {
@@ -708,9 +718,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const closeMin = timeToMin(dayHours.close);
     const lastBookingBufferMin = 60;
     const defaultLatestStart = Math.max(openMin, closeMin - lastBookingBufferMin);
-    const summerLatestStart = timeToMin(SUMMER_LATEST_BOOKING_TIME);
-    const latestStart = isSummerBookingDate(date)
-      ? Math.min(defaultLatestStart, summerLatestStart)
+    const latestBookingTime = latestBookingTimeForDate(date);
+    const bookingRuleLatestStart = latestBookingTime ? timeToMin(latestBookingTime) : null;
+    const latestStart = bookingRuleLatestStart !== null
+      ? Math.min(defaultLatestStart, bookingRuleLatestStart)
       : defaultLatestStart;
     if (!Number.isFinite(t) || t < openMin || t > latestStart) {
       res.status(400).json({
