@@ -160,17 +160,13 @@ const normalizeTime = (t: string) => (t?.length >= 5 ? t.slice(0, 5) : t);
 
 const BOOKING_TIME_ZONE = "Europe/Stockholm";
 const TABLE_IDS_META_PREFIX = "__BOKATA_TABLE_IDS__:";
+const SUMMER_BOOKING_FROM = "2026-06-29";
+const SUMMER_BOOKING_TO = "2026-08-16";
+const SUMMER_LATEST_BOOKING_TIME = "19:30";
 const MANUAL_FULLY_BOOKED_SLOTS: Record<string, string[]> = {
   "2026-04-03": ["11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30"],
   "2026-04-05": ["13:00"],
   "2026-07-26": ["17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00", "21:30"],
-  "2026-07-27": ["18:30", "19:00", "19:30", "20:00", "20:30"],
-  "2026-07-28": ["18:30", "19:00", "19:30", "20:00", "20:30"],
-  "2026-07-29": ["18:30", "19:00", "19:30", "20:00", "20:30"],
-  "2026-07-30": ["18:30", "19:00", "19:30", "20:00", "20:30"],
-  "2026-07-31": ["18:30", "19:00", "19:30", "20:00", "20:30"],
-  "2026-08-01": ["18:30", "19:00", "19:30", "20:00", "20:30"],
-  "2026-08-02": ["18:30", "19:00", "19:30", "20:00", "20:30"],
 };
 
 const getNowInBookingTimeZone = () => {
@@ -207,6 +203,8 @@ const isManuallyFullBookedSlot = (dateIso: string, timeValue: string) => {
   const slots = MANUAL_FULLY_BOOKED_SLOTS[dateIso] ?? [];
   return slots.includes(normalizeTime(timeValue));
 };
+
+const isSummerBookingDate = (dateIso: string) => isIsoInRange(dateIso, SUMMER_BOOKING_FROM, SUMMER_BOOKING_TO);
 
 const isMadameBlaKnowledge = (knowledge?: string | null) => /madame\s*bl[åa]/i.test(knowledge ?? "");
 const getMadameBlaDropInRange = (dateIso: string, day: string | null) => {
@@ -709,7 +707,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const openMin = timeToMin(dayHours.open);
     const closeMin = timeToMin(dayHours.close);
     const lastBookingBufferMin = 60;
-    const latestStart = Math.max(openMin, closeMin - lastBookingBufferMin);
+    const defaultLatestStart = Math.max(openMin, closeMin - lastBookingBufferMin);
+    const summerLatestStart = timeToMin(SUMMER_LATEST_BOOKING_TIME);
+    const latestStart = isSummerBookingDate(date)
+      ? Math.min(defaultLatestStart, summerLatestStart)
+      : defaultLatestStart;
     if (!Number.isFinite(t) || t < openMin || t > latestStart) {
       res.status(400).json({
         error: `Ogiltig tid. Vi har öppet ${dayHours.open}–${dayHours.close}. Sista bokningsbara tiden är ${minToTime(latestStart)}.`,
