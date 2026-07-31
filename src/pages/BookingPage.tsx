@@ -288,6 +288,9 @@ const SUMMER_BOOKING_TO = "2026-08-16";
 const SUMMER_LATEST_BOOKING_TIME = "19:30";
 const POST_SUMMER_WEEKDAY_LATEST_BOOKING_TIME = "16:00";
 const POST_SUMMER_SATURDAY_LATEST_BOOKING_TIME = "19:30";
+const DATE_SPECIFIC_LATEST_BOOKING_TIMES: Record<string, string> = {
+  "2026-07-31": "18:30",
+};
 const FULLY_BOOKED_NOTICE_DATES = new Set(["2026-07-26"]);
 const MANUAL_FULLY_BOOKED_SLOTS: Record<string, string[]> = {
   "2026-04-03": ["11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30"],
@@ -351,6 +354,7 @@ const toDayName = (iso: string): DayName | null => {
 };
 
 function latestBookingTimeForDate(dateIso: string) {
+  if (DATE_SPECIFIC_LATEST_BOOKING_TIMES[dateIso]) return DATE_SPECIFIC_LATEST_BOOKING_TIMES[dateIso];
   if (isSummerBookingDate(dateIso)) return SUMMER_LATEST_BOOKING_TIME;
   if (dateIso <= SUMMER_BOOKING_TO) return null;
   return toDayName(dateIso) === "lördag"
