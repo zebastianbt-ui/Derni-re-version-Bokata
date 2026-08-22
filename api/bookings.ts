@@ -164,7 +164,6 @@ const SUMMER_BOOKING_FROM = "2026-06-29";
 const SUMMER_BOOKING_TO = "2026-08-16";
 const SUMMER_LATEST_BOOKING_TIME = "19:30";
 const POST_SUMMER_WEEKDAY_LATEST_BOOKING_TIME = "16:00";
-const POST_SUMMER_SATURDAY_LATEST_BOOKING_TIME = "19:30";
 const DATE_SPECIFIC_LATEST_BOOKING_TIMES: Record<string, string> = {
   "2026-07-31": "18:30",
 };
@@ -173,6 +172,12 @@ const MANUAL_FULLY_BOOKED_SLOTS: Record<string, string[]> = {
   "2026-04-05": ["13:00"],
   "2026-07-26": ["17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00", "21:30"],
 };
+const MADAME_BLA_RESTAURANT_IDS = new Set([
+  "77832d94-da22-464c-aa60-1ceecea4b3f9",
+  "70b7c285-2b34-48d5-b42c-e16dc883f5af",
+  "8300e19c-6f0f-42fb-8a96-9eac38268a1d",
+]);
+const MADAME_BLA_CLOSED_DATES = new Set(["2026-09-07", "2026-09-08"]);
 
 const getNowInBookingTimeZone = () => {
   const formatter = new Intl.DateTimeFormat("sv-SE", {
@@ -215,12 +220,30 @@ const latestBookingTimeForDate = (dateIso: string) => {
   if (DATE_SPECIFIC_LATEST_BOOKING_TIMES[dateIso]) return DATE_SPECIFIC_LATEST_BOOKING_TIMES[dateIso];
   if (isSummerBookingDate(dateIso)) return SUMMER_LATEST_BOOKING_TIME;
   if (dateIso <= SUMMER_BOOKING_TO) return null;
-  return toDayNameSv(dateIso) === "lördag"
-    ? POST_SUMMER_SATURDAY_LATEST_BOOKING_TIME
-    : POST_SUMMER_WEEKDAY_LATEST_BOOKING_TIME;
+  return POST_SUMMER_WEEKDAY_LATEST_BOOKING_TIME;
 };
 
 const isMadameBlaKnowledge = (knowledge?: string | null) => /madame\s*bl[åa]/i.test(knowledge ?? "");
+const isMadameBlaRestaurant = (restaurantId?: string | null, knowledge?: string | null) =>
+  !!restaurantId && (MADAME_BLA_RESTAURANT_IDS.has(restaurantId) || isMadameBlaKnowledge(knowledge));
+const isMadameBlaClosedDate = (restaurantId: string, dateIso: string, knowledge?: string | null) =>
+  MADAME_BLA_CLOSED_DATES.has(dateIso) && isMadameBlaRestaurant(restaurantId, knowledge);
+const getMadameBlaHoursOverride = (dateIso: string, day: string | null) => {
+  if (!day) return undefined;
+  if (isIsoInRange(dateIso, "2026-08-23", "2026-09-06")) {
+    return { closed: false, open: "11:00", close: "17:00" };
+  }
+  if (isIsoInRange(dateIso, "2026-09-07", "2026-10-11")) {
+    if (day === "torsdag" || day === "fredag" || day === "lördag" || day === "söndag") {
+      return { closed: false, open: "11:00", close: "17:00" };
+    }
+    return { closed: true, open: "11:00", close: "17:00" };
+  }
+  if (isIsoInRange(dateIso, "2026-10-12", "2026-12-31")) {
+    return { closed: true, open: "11:00", close: "17:00" };
+  }
+  return undefined;
+};
 const getMadameBlaDropInRange = (dateIso: string, day: string | null) => {
   if (!day) return null;
   if (isIsoInRange(dateIso, "2026-05-01", "2026-06-28")) {
@@ -230,14 +253,19 @@ const getMadameBlaDropInRange = (dateIso: string, day: string | null) => {
   if (isIsoInRange(dateIso, "2026-06-29", "2026-08-16")) {
     return { fromMin: 11 * 60, toMinExclusive: 16 * 60 };
   }
-  if (isIsoInRange(dateIso, "2026-08-17", "2026-10-04")) {
-    if (day === "lördag" || day === "söndag") return { fromMin: 11 * 60, toMinExclusive: 16 * 60 };
+  if (isIsoInRange(dateIso, "2026-08-17", "2026-10-11")) {
+    if (day === "lördag" || day === "söndag") return { fromMin: 0, toMinExclusive: 24 * 60 };
     return null;
   }
   return null;
 };
-const isDropInOnlySlotForMadameBla = (dateIso: string, timeValue: string, knowledge?: string | null) => {
-  if (!isMadameBlaKnowledge(knowledge)) return false;
+const isDropInOnlySlotForMadameBla = (
+  dateIso: string,
+  timeValue: string,
+  restaurantId?: string | null,
+  knowledge?: string | null
+) => {
+  if (!isMadameBlaRestaurant(restaurantId, knowledge)) return false;
   const day = toDayNameSv(dateIso);
   const rule = getMadameBlaDropInRange(dateIso, day);
   if (!rule) return false;
@@ -656,7 +684,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const requireManual = !!s.require_manual_confirmation;
   const notifyEnabled = !!s.notify_enabled;
   const notifyEmail = s.notify_email || null;
-  if (isDropInOnlySlotForMadameBla(date, time, s.knowledge_public)) {
+  const madameBlaOverride = isMadameBlaRestaurant(restaurantId, s.knowledge_public)
+    ? getMadameBlaHoursOverride(date, toDayNameSv(date))
+    : undefined;
+  if (madameBlaOverride?.closed || isMadameBlaClosedDate(restaurantId, date, s.knowledge_public)) {
+    res.status(400).json({ error: "Restaurangen är stängd den dagen." });
+    return;
+  }
+  if (isDropInOnlySlotForMadameBla(date, time, restaurantId, s.knowledge_public)) {
     res.status(400).json({ error: "Den tiden är endast drop-in." });
     return;
   }
@@ -691,7 +726,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const hours = s.hours ?? null;
-  if (hours) {
+  if (hours || madameBlaOverride) {
     const special = Array.isArray(hours.special) ? hours.special : [];
     const periods = Array.isArray(hours.periods) ? hours.periods : [];
     const normal = hours.normal ?? null;
@@ -706,7 +741,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     let dayHours: { open: string; close: string } | null = null;
-    if (specialDay && !specialDay.closed) {
+    if (madameBlaOverride && !madameBlaOverride.closed) {
+      dayHours = { open: madameBlaOverride.open, close: madameBlaOverride.close };
+    } else if (specialDay && !specialDay.closed) {
       dayHours = { open: specialDay.open, close: specialDay.close };
     } else {
       const period = periods.length ? pickPeriodForDate(periods, date) : null;

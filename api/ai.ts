@@ -124,12 +124,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const now = new Date();
     return `${now.getFullYear()}-${pad2Local(now.getMonth() + 1)}-${pad2Local(now.getDate())}`;
   })();
+  const MADAME_BLA_CLOSED_DATES = ["2026-09-07", "2026-09-08"];
+  const isMadameBlaContext = /madame\s*bl[åa]/i.test(
+    [knowledge, context?.restaurant?.name].filter(Boolean).join("\n")
+  );
+  const getMadameBlaHoursOverride = (iso?: string | null) => {
+    if (!iso || !isMadameBlaContext) return undefined;
+    const dt = toUtcDate(iso);
+    if (!dt) return undefined;
+    const dayName = weekdaySv[dt.getUTCDay()];
+    if (iso >= "2026-08-23" && iso <= "2026-09-06") {
+      return { dayName, closed: false, open: "11:00", close: "17:00" };
+    }
+    if (iso >= "2026-09-07" && iso <= "2026-10-11") {
+      if (dayName === "torsdag" || dayName === "fredag" || dayName === "lördag" || dayName === "söndag") {
+        return { dayName, closed: false, open: "11:00", close: "17:00" };
+      }
+      return { dayName, closed: true, open: "11:00", close: "17:00" };
+    }
+    if (iso >= "2026-10-12" && iso <= "2026-12-31") {
+      return { dayName, closed: true, open: "11:00", close: "17:00" };
+    }
+    return undefined;
+  };
+  const isMadameBlaWeekendDropInOnly = (iso?: string | null) => {
+    const override = getMadameBlaHoursOverride(iso);
+    return !!override && !override.closed && (override.dayName === "lördag" || override.dayName === "söndag");
+  };
 
   const closedRangesText = (() => {
     const special = context?.hours?.special ?? [];
     const dates = special
       .filter((s) => s?.closed && s.date)
       .map((s) => s.date)
+      .concat(isMadameBlaContext ? MADAME_BLA_CLOSED_DATES : [])
       .sort();
     if (!dates.length) return "";
     const addDay = (iso: string) => {
@@ -451,10 +479,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const closedRanges = (() => {
     const ranges: { start: string; end: string }[] = [];
     const closedDates =
-      context?.hours?.special
+      (context?.hours?.special
         ?.filter((s) => s.closed && s.date)
-        .map((s) => s.date)
-        .sort() ?? [];
+        .map((s) => s.date) ?? [])
+        .concat(isMadameBlaContext ? MADAME_BLA_CLOSED_DATES : [])
+        .sort();
     if (closedDates.length) {
       let start = closedDates[0];
       let prev = closedDates[0];
@@ -729,6 +758,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const isClosedDate = (iso?: string | null) => {
     if (!iso) return false;
+    const madameBlaOverride = getMadameBlaHoursOverride(iso);
+    if (madameBlaOverride) return madameBlaOverride.closed;
+    if (isMadameBlaContext && MADAME_BLA_CLOSED_DATES.includes(iso)) return true;
     const special = context?.hours?.special?.find((s) => s.date === iso);
     if (special) return special.closed;
     const dt = toUtcDate(iso);
@@ -742,6 +774,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const getDayHours = (iso?: string | null) => {
     if (!iso) return null;
+    const madameBlaOverride = getMadameBlaHoursOverride(iso);
+    if (madameBlaOverride) return madameBlaOverride;
     const dt = toUtcDate(iso);
     if (!dt) return null;
     const dayName = weekdaySv[dt.getUTCDay()];
@@ -2233,6 +2267,16 @@ Si la question est courte ("menu?", "ouvert?", "adresse?"), réponds pour CE res
           `Tyvärr, vi har stängt ${dayName ? `på ${dayName}ar` : "den dagen"}.`,
           `Désolé, nous sommes fermés ${dayName ? `le ${dayName}` : "ce jour‑là"}.`,
           `Sorry, we’re closed ${dayName ? `on ${dayName}` : "that day"}.`
+        )
+      );
+      return;
+    }
+    if (isMadameBlaWeekendDropInOnly(date)) {
+      sendReply(
+        t(
+          "På helger tar vi endast drop-in, så det går inte att boka bord online den dagen.",
+          "Les week-ends sont uniquement en drop-in, donc il n’est pas possible de réserver en ligne ce jour-là.",
+          "Weekends are drop-in only, so online table bookings are not available that day."
         )
       );
       return;
