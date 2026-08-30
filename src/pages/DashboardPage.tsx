@@ -65,31 +65,36 @@ type MealRangeMap = Record<MealKey, [string, string]>;
 const MEAL_KEYS: MealKey[] = ["Frukost", "Lunch", "Fika", "Middag"];
 const MEAL_FILTERS: Meal[] = ["Alla", ...MEAL_KEYS];
 
-const MEAL_THEME_CLASSES: Record<Meal, { active: string; inactive: string; swatch: string }> = {
+const MEAL_THEME_CLASSES: Record<Meal, { active: string; inactive: string; swatch: string; booking: string }> = {
   Alla: {
     active: "bg-gray-900 border-gray-900 text-white font-bold",
     inactive: "bg-white border-gray-300 text-gray-700 hover:bg-gray-50",
     swatch: "bg-gray-700",
+    booking: "bg-gray-100 border-gray-300 text-gray-700",
   },
   Frukost: {
     active: "bg-orange-100 border-orange-500 text-orange-800 font-bold",
     inactive: "bg-white border-orange-300 text-orange-700 hover:bg-orange-50",
     swatch: "bg-orange-500",
+    booking: "bg-orange-100 border-orange-300 text-orange-900",
   },
   Lunch: {
     active: "bg-[#e6007a]/10 border-[#e6007a] text-[#b80062] font-bold",
     inactive: "bg-white border-[#e6007a]/40 text-[#e6007a] hover:bg-[#e6007a]/5",
     swatch: "bg-[#e6007a]",
+    booking: "bg-[#e6007a]/10 border-[#e6007a]/35 text-[#8f004c]",
   },
   Fika: {
     active: "bg-[#4b0c73]/10 border-[#4b0c73] text-[#4b0c73] font-bold",
     inactive: "bg-white border-[#4b0c73]/40 text-[#4b0c73] hover:bg-[#4b0c73]/5",
     swatch: "bg-[#4b0c73]",
+    booking: "bg-[#4b0c73]/10 border-[#4b0c73]/35 text-[#4b0c73]",
   },
   Middag: {
     active: "bg-blue-100 border-blue-500 text-blue-800 font-bold",
     inactive: "bg-white border-blue-300 text-blue-700 hover:bg-blue-50",
     swatch: "bg-blue-500",
+    booking: "bg-blue-100 border-blue-300 text-blue-900",
   },
 };
 
@@ -110,7 +115,6 @@ type Booking = {
   note?: boolean;
   notes?: string;
   createdAt?: string;
-  color?: string;
 };
 
 const isCancelledBooking = (booking: Pick<Booking, "status">) => booking.status === "cancelled";
@@ -1532,15 +1536,14 @@ function ReservationDashboardInner() {
         time: "11:00",
         name: "Emma Larsson",
         guests: 2,
-        color: "bg-green-200",
         note: true,
         notes: "Allergi: nötter (inga spår).",
       },
-      { id: uid(), date: "2025-09-05", time: "11:30", name: "Klara Nyman", guests: 2, color: "bg-green-200" },
-      { id: uid(), date: "2025-09-05", time: "12:00", name: "Sara Lind", guests: 3, color: "bg-yellow-200", note: true, notes: "Vegan + glutenfritt." },
-      { id: uid(), date: "2025-09-05", time: "12:30", name: "Henrik Holm", guests: 6, color: "bg-purple-200" },
-      { id: uid(), date: "2025-09-05", time: "13:00", name: "Familjen Sjögren", guests: 4, color: "bg-green-200", note: true, notes: "Barnstol. Hörnbord om möjligt." },
-      { id: uid(), date: "2025-09-05", time: "18:00", name: "Familjen Karlsson", guests: 8, color: "bg-yellow-200", note: true, notes: "Jordnöt – inga spår." },
+      { id: uid(), date: "2025-09-05", time: "11:30", name: "Klara Nyman", guests: 2 },
+      { id: uid(), date: "2025-09-05", time: "12:00", name: "Sara Lind", guests: 3, note: true, notes: "Vegan + glutenfritt." },
+      { id: uid(), date: "2025-09-05", time: "12:30", name: "Henrik Holm", guests: 6 },
+      { id: uid(), date: "2025-09-05", time: "13:00", name: "Familjen Sjögren", guests: 4, note: true, notes: "Barnstol. Hörnbord om möjligt." },
+      { id: uid(), date: "2025-09-05", time: "18:00", name: "Familjen Karlsson", guests: 8, note: true, notes: "Jordnöt – inga spår." },
     ];
     const durationMin = defaultSettings.seating.maxBookingDurationMin || 90;
     return base.map((b) => ({ ...b, durationMin }));
@@ -1606,7 +1609,6 @@ function ReservationDashboardInner() {
         source: (r.source as Booking["source"]) ?? "walkin",
         clientEmail: r.client_email ?? null,
         createdAt: r.created_at ?? undefined,
-        color: "bg-pink-100",
         };
       });
 
@@ -2740,8 +2742,6 @@ function ReservationDashboardInner() {
       return { ok: false, error: "Valda bord är upptagna eller saknar tillräcklig gruppkapacitet vid den tiden." };
     }
 
-    const colors = ["bg-green-200", "bg-blue-200", "bg-yellow-200", "bg-pink-200", "bg-purple-200"];
-
     const b: Booking = {
       id: uid(),
       date: d.date,
@@ -2750,7 +2750,6 @@ function ReservationDashboardInner() {
       guests: d.guests,
       notes: d.notes,
       note: !!d.notes,
-      color: colors[Math.floor(Math.random() * colors.length)],
       tableId,
       tableIds: assignedTableIds.length ? assignedTableIds : null,
       durationMin,
@@ -3254,8 +3253,15 @@ function ReservationDashboardInner() {
       {activeTab === "overview" ? (
         <>
           {/* Top stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <Stat icon="📅" label="Bokningar idag" value={String(dayActiveBookings.length)} />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <Stat
+              icon="📅"
+              label="Bokningar idag"
+              value={String(dayActiveBookings.length)}
+              secondaryLabel="Vs förra veckan"
+              secondaryValue={`${weekStats.diff >= 0 ? "+" : ""}${weekStats.diff} gäster`}
+              secondarySub={weekStats.pct != null ? `${weekStats.pct >= 0 ? "+" : ""}${weekStats.pct}%` : "—"}
+            />
             <Stat
               icon="👥"
               label="Antal gäster idag"
@@ -3264,23 +3270,22 @@ function ReservationDashboardInner() {
               secondaryValue={String(weekStats.curGuests)}
               secondarySub="gäster"
             />
-            <Stat icon="🕒" label="Mest bokade tid" value={busiestLeast.max} />
-            <Stat icon="🕘" label="Minst bokade tid" value={busiestLeast.min} />
+            <Stat
+              icon="🕒"
+              label="Mest bokade tid"
+              value={busiestLeast.max}
+              secondaryLabel="Minst bokade tid"
+              secondaryValue={busiestLeast.min}
+            />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <Stat icon="💗" label="Stammiskunder" value={String(regularCustomersToday)} />
             <Stat
               icon={<img src={forkTransparent} alt="Bokata" className="h-4 w-4" />}
               label="Svar skickade av AI"
               value="0"
               sub="denna vecka"
-            />
-            <Stat
-              icon="↕️"
-              label="Vs förra veckan"
-              value={`${weekStats.diff >= 0 ? "+" : ""}${weekStats.diff} gäster`}
-              sub={weekStats.pct != null ? `${weekStats.pct >= 0 ? "+" : ""}${weekStats.pct}%` : "—"}
             />
           </div>
 
@@ -3427,38 +3432,43 @@ function ReservationDashboardInner() {
                       <div className="flex items-start gap-3">
                         <div className="w-14 shrink-0 text-sm font-semibold text-gray-700 pt-1">{time}</div>
                         <div className="flex flex-wrap gap-2">
-                          {groupedByTime[time].map((b) => (
-                            <div
-                              key={b.id}
-                              className={`px-2 py-1 rounded shadow border text-sm ${
-                                isCancelledBooking(b)
-                                  ? "bg-gray-100 border-gray-300 text-gray-500 cursor-pointer"
-                                  : `${b.color ?? "bg-pink-100"} text-gray-700 cursor-pointer hover:brightness-95`
-                              }`}
-                              onClick={() => setOpenBooking(b)}
-                              title={b.note ? "Visa anteckning" : "Redigera bokning"}
-                            >
-                              <div className="flex items-center gap-2 font-medium">
-                                <span className={isCancelledBooking(b) ? "line-through" : ""}>{b.name}</span>
-                                {isCancelledBooking(b) ? (
-                                  <span className="inline-flex items-center rounded-full bg-gray-200 text-gray-700 text-[10px] px-2 py-0.5 font-semibold">
-                                    Avbokad
-                                  </span>
-                                ) : null}
-                                {b.note && (
-                                  <span
-                                    className="inline-flex items-center rounded-full bg-pink-200 text-pink-800 text-[10px] px-2 py-0.5 font-semibold"
-                                    title={b.notes || "Särskilt önskemål"}
-                                  >
-                                    📎
-                                  </span>
-                                )}
+                          {groupedByTime[time].map((b) => {
+                            const bookingMeal = mealForWithRanges(b.time, mealRanges);
+                            const bookingTheme = MEAL_THEME_CLASSES[bookingMeal];
+                            const cancelled = isCancelledBooking(b);
+                            return (
+                              <div
+                                key={b.id}
+                                className={`px-2 py-1 rounded shadow border text-sm ${
+                                  cancelled
+                                    ? "bg-gray-100 border-gray-300 text-gray-500 cursor-pointer"
+                                    : `${bookingTheme.booking} cursor-pointer hover:brightness-95`
+                                }`}
+                                onClick={() => setOpenBooking(b)}
+                                title={b.note ? "Visa anteckning" : "Redigera bokning"}
+                              >
+                                <div className="flex items-center gap-2 font-medium">
+                                  <span className={cancelled ? "line-through" : ""}>{b.name}</span>
+                                  {cancelled ? (
+                                    <span className="inline-flex items-center rounded-full bg-gray-200 text-gray-700 text-[10px] px-2 py-0.5 font-semibold">
+                                      Avbokad
+                                    </span>
+                                  ) : null}
+                                  {b.note && (
+                                    <span
+                                      className="inline-flex items-center rounded-full bg-pink-200 text-pink-800 text-[10px] px-2 py-0.5 font-semibold"
+                                      title={b.notes || "Särskilt önskemål"}
+                                    >
+                                      📎
+                                    </span>
+                                  )}
+                                </div>
+                                <div className={`text-xs ${cancelled ? "text-gray-500 line-through" : "opacity-80"}`}>
+                                  {b.guests} gäster{formatBookingTableLabel(b) ? ` • ${formatBookingTableLabel(b)}` : ""}
+                                </div>
                               </div>
-                              <div className={`text-xs ${isCancelledBooking(b) ? "text-gray-500 line-through" : "text-gray-600"}`}>
-                                {b.guests} gäster{formatBookingTableLabel(b) ? ` • ${formatBookingTableLabel(b)}` : ""}
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
