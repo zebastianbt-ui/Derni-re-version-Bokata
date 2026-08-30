@@ -58,9 +58,40 @@ const installDashboardErrorOverlay = () => {
 
 installDashboardErrorOverlay();
 
-type Meal = "Alla" | "Frukost" | "Lunch" | "Middag";
-type MealKey = "Frukost" | "Lunch" | "Middag";
+type Meal = "Alla" | "Frukost" | "Lunch" | "Fika" | "Middag";
+type MealKey = "Frukost" | "Lunch" | "Fika" | "Middag";
 type MealRangeMap = Record<MealKey, [string, string]>;
+
+const MEAL_KEYS: MealKey[] = ["Frukost", "Lunch", "Fika", "Middag"];
+const MEAL_FILTERS: Meal[] = ["Alla", ...MEAL_KEYS];
+
+const MEAL_THEME_CLASSES: Record<Meal, { active: string; inactive: string; swatch: string }> = {
+  Alla: {
+    active: "bg-gray-900 border-gray-900 text-white font-bold",
+    inactive: "bg-white border-gray-300 text-gray-700 hover:bg-gray-50",
+    swatch: "bg-gray-700",
+  },
+  Frukost: {
+    active: "bg-orange-100 border-orange-500 text-orange-800 font-bold",
+    inactive: "bg-white border-orange-300 text-orange-700 hover:bg-orange-50",
+    swatch: "bg-orange-500",
+  },
+  Lunch: {
+    active: "bg-[#e6007a]/10 border-[#e6007a] text-[#b80062] font-bold",
+    inactive: "bg-white border-[#e6007a]/40 text-[#e6007a] hover:bg-[#e6007a]/5",
+    swatch: "bg-[#e6007a]",
+  },
+  Fika: {
+    active: "bg-[#4b0c73]/10 border-[#4b0c73] text-[#4b0c73] font-bold",
+    inactive: "bg-white border-[#4b0c73]/40 text-[#4b0c73] hover:bg-[#4b0c73]/5",
+    swatch: "bg-[#4b0c73]",
+  },
+  Middag: {
+    active: "bg-blue-100 border-blue-500 text-blue-800 font-bold",
+    inactive: "bg-white border-blue-300 text-blue-700 hover:bg-blue-50",
+    swatch: "bg-blue-500",
+  },
+};
 
 type BookingStatus = "pending" | "confirmed" | "cancelled";
 
@@ -75,6 +106,7 @@ type Booking = {
   tableIds?: number[] | null;
   status?: BookingStatus;
   source?: "web" | "phone" | "walkin";
+  clientEmail?: string | null;
   note?: boolean;
   notes?: string;
   createdAt?: string;
@@ -132,6 +164,8 @@ const formatBookingTableLabel = (booking: Pick<Booking, "tableId" | "tableIds">)
   return `Bord ${ids.join(" + ")}`;
 };
 
+const normalizeCustomerEmail = (value?: string | null) => (value ?? "").trim().toLowerCase();
+
 const sameTableSelection = (left: number[], right: number[]) => {
   const a = normalizeTableIds(left).sort((x, y) => x - y);
   const b = normalizeTableIds(right).sort((x, y) => x - y);
@@ -151,6 +185,7 @@ type BookingRow = {
   duration_min: number | null;
   status: string | null;
   source: string | null;
+  client_email: string | null;
   created_at: string;
 };
 
@@ -430,6 +465,11 @@ type OnboardingFaq = {
 
 const DEFAULT_MEAL_RANGES: MealRangeMap = {
   Frukost: ["08:00", "10:59"],
+  Lunch: ["11:00", "14:59"],
+  Fika: ["15:00", "16:59"],
+  Middag: ["17:00", "21:00"],
+};
+const LEGACY_DEFAULT_MEAL_RANGES: Partial<MealRangeMap> = {
   Lunch: ["11:00", "14:30"],
   Middag: ["17:00", "21:30"],
 };
@@ -437,7 +477,7 @@ const ALL_DAY_RANGE: [string, string] = ["00:00", "23:59"];
 
 const ENGINE = {
   slotStepMin: 30,
-  durations: { Frukost: 60, Lunch: 90, Middag: 120 } as const,
+  durations: { Frukost: 60, Lunch: 90, Fika: 60, Middag: 120 } as const,
   tables: [2, 2, 2, 4, 4, 4, 6, 6],
 };
 
@@ -586,18 +626,27 @@ const isValidTime = (t: string) => {
 
 const normalizeMealRanges = (raw?: Partial<MealRangeMap> | null): MealRangeMap => {
   const out: MealRangeMap = { ...DEFAULT_MEAL_RANGES };
-  (["Frukost", "Lunch", "Middag"] as MealKey[]).forEach((key) => {
+  MEAL_KEYS.forEach((key) => {
     const val = raw?.[key];
     if (Array.isArray(val) && val.length === 2 && isValidTime(val[0]) && isValidTime(val[1])) {
       out[key] = [val[0], val[1]];
     }
   });
+  if (raw && !raw.Fika) {
+    MEAL_KEYS.forEach((key) => {
+      const val = raw[key];
+      const legacy = LEGACY_DEFAULT_MEAL_RANGES[key];
+      if (legacy && val?.[0] === legacy[0] && val?.[1] === legacy[1]) {
+        out[key] = DEFAULT_MEAL_RANGES[key];
+      }
+    });
+  }
   return out;
 };
 
 const mealForWithRanges = (t: string, ranges: MealRangeMap): Meal => {
   const x = timeToMin(t);
-  for (const m of ["Frukost", "Lunch", "Middag"] as MealKey[]) {
+  for (const m of MEAL_KEYS) {
     const [a, b] = ranges[m];
     if (x >= timeToMin(a) && x <= timeToMin(b)) return m;
   }
@@ -1535,7 +1584,7 @@ function ReservationDashboardInner() {
       if (!restaurantId || !settingsReady) return;
       const { data, error } = await supabase
         .from("bookings")
-        .select("id,restaurant_id,date,time,name,guests,notes,table_id,duration_min,status,source,created_at")
+        .select("id,restaurant_id,date,time,name,guests,notes,table_id,duration_min,status,source,client_email,created_at")
         .eq("restaurant_id", restaurantId);
       if (error) return;
       const rows = (data ?? []) as BookingRow[];
@@ -1555,6 +1604,7 @@ function ReservationDashboardInner() {
         durationMin: r.duration_min ?? bookingDurationMin,
         status: (r.status as BookingStatus) ?? "confirmed",
         source: (r.source as Booking["source"]) ?? "walkin",
+        clientEmail: r.client_email ?? null,
         createdAt: r.created_at ?? undefined,
         color: "bg-pink-100",
         };
@@ -1783,8 +1833,8 @@ function ReservationDashboardInner() {
   }, [profileName, profileEmail, session?.user?.id]);
 
   const ALL_TIMES = useMemo(() => {
-    const mins = [mealRanges.Frukost[0], mealRanges.Lunch[0], mealRanges.Middag[0]].map(timeToMin);
-    const maxs = [mealRanges.Frukost[1], mealRanges.Lunch[1], mealRanges.Middag[1]].map(timeToMin);
+    const mins = MEAL_KEYS.map((meal) => mealRanges[meal][0]).map(timeToMin);
+    const maxs = MEAL_KEYS.map((meal) => mealRanges[meal][1]).map(timeToMin);
     const out: string[] = [];
     for (let s = Math.min(...mins), e = Math.max(...maxs); s <= e; s += ENGINE.slotStepMin) out.push(minToTime(s));
     return out;
@@ -1930,16 +1980,36 @@ function ReservationDashboardInner() {
   }, [dayActiveBookings]);
 
   const guestsByMeal = useMemo(() => {
-    const m: Record<Meal, number> = { Alla: 0, Frukost: 0, Lunch: 0, Middag: 0 };
+    const m: Record<Meal, number> = { Alla: 0, Frukost: 0, Lunch: 0, Fika: 0, Middag: 0 };
     dayActiveBookings.forEach((b) => {
       const mf = mealForWithRanges(b.time, mealRanges);
-      m[mf] += b.guests;
+      if (mf !== "Alla") m[mf] += b.guests;
       m.Alla += b.guests;
     });
     return m;
   }, [dayActiveBookings, mealRanges]);
 
+  const regularCustomerEmails = useMemo(() => {
+    const counts = new Map<string, number>();
+    activeBookings.forEach((b) => {
+      const email = normalizeCustomerEmail(b.clientEmail);
+      if (!email) return;
+      counts.set(email, (counts.get(email) ?? 0) + 1);
+    });
+    return new Set(Array.from(counts.entries()).filter(([, count]) => count >= 2).map(([email]) => email));
+  }, [activeBookings]);
+
+  const regularCustomersToday = useMemo(() => {
+    const emails = new Set<string>();
+    dayActiveBookings.forEach((b) => {
+      const email = normalizeCustomerEmail(b.clientEmail);
+      if (email && regularCustomerEmails.has(email)) emails.add(email);
+    });
+    return emails.size;
+  }, [dayActiveBookings, regularCustomerEmails]);
+
   const updateMealRange = (meal: MealKey, idx: 0 | 1, value: string) => {
+    markBookingDirty();
     setConfig((prev) => {
       const ranges = normalizeMealRanges(prev.seating.mealRanges);
       const nextRange: [string, string] = [...ranges[meal]] as [string, string];
@@ -3186,20 +3256,26 @@ function ReservationDashboardInner() {
           {/* Top stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <Stat icon="📅" label="Bokningar idag" value={String(dayActiveBookings.length)} />
-            <Stat icon="👥" label="Antal gäster idag" value={String(totalGuestsDay)} />
+            <Stat
+              icon="👥"
+              label="Antal gäster idag"
+              value={String(totalGuestsDay)}
+              secondaryLabel="Totalt denna vecka"
+              secondaryValue={String(weekStats.curGuests)}
+              secondarySub="gäster"
+            />
             <Stat icon="🕒" label="Mest bokade tid" value={busiestLeast.max} />
             <Stat icon="🕘" label="Minst bokade tid" value={busiestLeast.min} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <Stat icon="💗" label="Stammiskunder" value="0" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <Stat icon="💗" label="Stammiskunder" value={String(regularCustomersToday)} />
             <Stat
               icon={<img src={forkTransparent} alt="Bokata" className="h-4 w-4" />}
               label="Svar skickade av AI"
               value="0"
               sub="denna vecka"
             />
-            <Stat icon="📈" label="Totalt denna vecka" value={String(weekStats.curGuests)} sub="gäster" />
             <Stat
               icon="↕️"
               label="Vs förra veckan"
@@ -3297,15 +3373,14 @@ function ReservationDashboardInner() {
           {/* Day schedule */}
           <div className="md:col-span-3 border border-gray-300 rounded-lg p-4">
             <div className="flex flex-wrap items-center gap-2 mb-4">
-              {(["Alla", "Frukost", "Lunch", "Middag"] as Meal[]).map((m) => {
+              {MEAL_FILTERS.map((m) => {
                 const on = activeMeal === m;
+                const theme = MEAL_THEME_CLASSES[m];
                 return (
                   <button
                     key={m}
                     className={`px-3 py-1 text-sm rounded transition border focus:outline-none focus:ring-2 focus:ring-pink-400 ${
-                      on
-                        ? "bg-pink-100 border-pink-500 text-pink-700 font-bold"
-                        : "bg-white border-pink-300 text-pink-600 hover:bg-pink-50"
+                      on ? theme.active : theme.inactive
                     }`}
                     onClick={() => setActiveMeal(m)}
                     aria-pressed={on}
@@ -4379,6 +4454,34 @@ function ReservationDashboardInner() {
                 </Field>
               </div>
 
+              <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="mb-3 text-base font-bold text-gray-800">Måltidskategorier</div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {MEAL_KEYS.map((meal) => (
+                    <div key={meal} className="rounded-lg border border-gray-200 bg-white p-3">
+                      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-800">
+                        <span className={`h-2.5 w-2.5 rounded-full ${MEAL_THEME_CLASSES[meal].swatch}`} />
+                        <span>{meal}</span>
+                      </div>
+                      <div className={settingsTimeGridClass}>
+                        <input
+                          type="time"
+                          className={settingsTimeInputClass}
+                          value={mealRanges[meal][0]}
+                          onChange={(e) => updateMealRange(meal, 0, e.target.value)}
+                        />
+                        <input
+                          type="time"
+                          className={settingsTimeInputClass}
+                          value={mealRanges[meal][1]}
+                          onChange={(e) => updateMealRange(meal, 1, e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-base font-bold text-gray-800">Öppettider</div>
@@ -5332,20 +5435,35 @@ function Stat({
   label,
   value,
   sub,
+  secondaryLabel,
+  secondaryValue,
+  secondarySub,
 }: {
   icon?: React.ReactNode;
   label: string;
   value: string;
   sub?: string;
+  secondaryLabel?: string;
+  secondaryValue?: string;
+  secondarySub?: string;
 }) {
   return (
-    <div className="bg-white p-4 shadow-lg rounded-lg border border-pink-300">
+    <div className="bg-white p-4 shadow-lg rounded-lg border-2 border-[#4b0c73]">
       <p className="text-sm text-gray-500 flex items-center gap-2">
         {icon ? <span className="text-base">{icon}</span> : null}
         <span>{label}</span>
       </p>
       <h2 className="text-xl font-bold text-gray-800">{value}</h2>
       {sub ? <p className="text-xs text-gray-500 mt-1">{sub}</p> : null}
+      {secondaryLabel ? (
+        <div className="mt-3 border-t border-[#4b0c73]/15 pt-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#4b0c73]">{secondaryLabel}</p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-lg font-bold text-gray-800">{secondaryValue}</span>
+            {secondarySub ? <span className="text-xs text-gray-500">{secondarySub}</span> : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
