@@ -1,6 +1,15 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { VercelRequest, VercelResponse } from "../lib/vercelTypes";
 import { createClient } from "@supabase/supabase-js";
 import { rateLimit } from "../lib/rateLimit";
+import {
+  BOOKING_TIME_ZONE,
+  getMadameBlaHoursOverride,
+  isDropInOnlySlotForMadameBla,
+  isMadameBlaClosedDate,
+  isMadameBlaRestaurant,
+  isManuallyFullBookedSlot,
+  latestBookingTimeForDate,
+} from "../lib/specialRestaurantRules";
 import crypto from "crypto";
 
 type BookingSettings = {
@@ -28,6 +37,7 @@ const buildBookingCancelUrl = (origin: string, secret: string, bookingId: string
 };
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 20;
+const EMAIL_SEND_TIMEOUT_MS = Math.max(1000, Number(getEnv("RESEND_TIMEOUT_MS") || 5000));
 const BOOKING_MESSAGE_LABEL = "Bokningsmeddelande";
 const BOOKING_CONFIRMATION_EMAIL_AUTO_LABEL = "Bekräftelsemail (automatisk)";
 const BOOKING_CONFIRMATION_EMAIL_MANUAL_LABEL = "Bekräftelsemail (manuell)";
@@ -50,6 +60,12 @@ const escapeHtml = (value: string) =>
     .replace(/>/g, "&gt;")
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#039;");
+
+const redactEmail = (value: string) => {
+  const [local, domain] = value.split("@");
+  if (!domain) return "***";
+  return `${local.slice(0, 2) || "*"}***@${domain}`;
+};
 
 const extractMultilineLabelValue = (knowledge: string | null | undefined, label: string) => {
   if (!knowledge) return "";
@@ -158,26 +174,7 @@ const pickPeriodForDate = (periods: any[], iso: string) => {
 };
 const normalizeTime = (t: string) => (t?.length >= 5 ? t.slice(0, 5) : t);
 
-const BOOKING_TIME_ZONE = "Europe/Stockholm";
 const TABLE_IDS_META_PREFIX = "__BOKATA_TABLE_IDS__:";
-const SUMMER_BOOKING_FROM = "2026-06-29";
-const SUMMER_BOOKING_TO = "2026-08-16";
-const SUMMER_LATEST_BOOKING_TIME = "19:30";
-const POST_SUMMER_WEEKDAY_LATEST_BOOKING_TIME = "16:00";
-const DATE_SPECIFIC_LATEST_BOOKING_TIMES: Record<string, string> = {
-  "2026-07-31": "18:30",
-};
-const MANUAL_FULLY_BOOKED_SLOTS: Record<string, string[]> = {
-  "2026-04-03": ["11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30"],
-  "2026-04-05": ["13:00"],
-  "2026-07-26": ["17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00", "21:30"],
-};
-const MADAME_BLA_RESTAURANT_IDS = new Set([
-  "77832d94-da22-464c-aa60-1ceecea4b3f9",
-  "70b7c285-2b34-48d5-b42c-e16dc883f5af",
-  "8300e19c-6f0f-42fb-8a96-9eac38268a1d",
-]);
-const MADAME_BLA_CLOSED_DATES = new Set(["2026-09-07", "2026-09-08"]);
 
 const getNowInBookingTimeZone = () => {
   const formatter = new Intl.DateTimeFormat("sv-SE", {
@@ -207,71 +204,6 @@ const isPastBookingSlot = (dateIso: string, timeValue: string) => {
   if (dateIso < now.date) return true;
   if (dateIso > now.date) return false;
   return normalizeTime(timeValue) < now.time;
-};
-
-const isManuallyFullBookedSlot = (dateIso: string, timeValue: string) => {
-  const slots = MANUAL_FULLY_BOOKED_SLOTS[dateIso] ?? [];
-  return slots.includes(normalizeTime(timeValue));
-};
-
-const isSummerBookingDate = (dateIso: string) => isIsoInRange(dateIso, SUMMER_BOOKING_FROM, SUMMER_BOOKING_TO);
-
-const latestBookingTimeForDate = (dateIso: string) => {
-  if (DATE_SPECIFIC_LATEST_BOOKING_TIMES[dateIso]) return DATE_SPECIFIC_LATEST_BOOKING_TIMES[dateIso];
-  if (isSummerBookingDate(dateIso)) return SUMMER_LATEST_BOOKING_TIME;
-  if (dateIso <= SUMMER_BOOKING_TO) return null;
-  return POST_SUMMER_WEEKDAY_LATEST_BOOKING_TIME;
-};
-
-const isMadameBlaKnowledge = (knowledge?: string | null) => /madame\s*bl[åa]/i.test(knowledge ?? "");
-const isMadameBlaRestaurant = (restaurantId?: string | null, knowledge?: string | null) =>
-  !!restaurantId && (MADAME_BLA_RESTAURANT_IDS.has(restaurantId) || isMadameBlaKnowledge(knowledge));
-const isMadameBlaClosedDate = (restaurantId: string, dateIso: string, knowledge?: string | null) =>
-  MADAME_BLA_CLOSED_DATES.has(dateIso) && isMadameBlaRestaurant(restaurantId, knowledge);
-const getMadameBlaHoursOverride = (dateIso: string, day: string | null) => {
-  if (!day) return undefined;
-  if (isIsoInRange(dateIso, "2026-08-23", "2026-09-06")) {
-    return { closed: false, open: "11:00", close: "17:00" };
-  }
-  if (isIsoInRange(dateIso, "2026-09-07", "2026-10-11")) {
-    if (day === "torsdag" || day === "fredag" || day === "lördag" || day === "söndag") {
-      return { closed: false, open: "11:00", close: "17:00" };
-    }
-    return { closed: true, open: "11:00", close: "17:00" };
-  }
-  if (isIsoInRange(dateIso, "2026-10-12", "2026-12-31")) {
-    return { closed: true, open: "11:00", close: "17:00" };
-  }
-  return undefined;
-};
-const getMadameBlaDropInRange = (dateIso: string, day: string | null) => {
-  if (!day) return null;
-  if (isIsoInRange(dateIso, "2026-05-01", "2026-06-28")) {
-    if (day === "lördag" || day === "söndag") return { fromMin: 11 * 60, toMinExclusive: 16 * 60 };
-    return null;
-  }
-  if (isIsoInRange(dateIso, "2026-06-29", "2026-08-16")) {
-    return { fromMin: 11 * 60, toMinExclusive: 16 * 60 };
-  }
-  if (isIsoInRange(dateIso, "2026-08-17", "2026-10-11")) {
-    if (day === "lördag" || day === "söndag") return { fromMin: 0, toMinExclusive: 24 * 60 };
-    return null;
-  }
-  return null;
-};
-const isDropInOnlySlotForMadameBla = (
-  dateIso: string,
-  timeValue: string,
-  restaurantId?: string | null,
-  knowledge?: string | null
-) => {
-  if (!isMadameBlaRestaurant(restaurantId, knowledge)) return false;
-  const day = toDayNameSv(dateIso);
-  const rule = getMadameBlaDropInRange(dateIso, day);
-  if (!rule) return false;
-  const mins = timeToMin(normalizeTime(timeValue));
-  if (!Number.isFinite(mins)) return false;
-  return mins >= rule.fromMin && mins < rule.toMinExclusive;
 };
 
 const normalizeTableIds = (values: Array<number | null | undefined>) => {
@@ -309,6 +241,26 @@ const buildBookingNotesWithMeta = (notes: string | null | undefined, tableIds: n
   if (normalizedIds.length <= 1) return cleaned || null;
   const metaLine = `${TABLE_IDS_META_PREFIX}${normalizedIds.join(",")}`;
   return cleaned ? `${cleaned}\n${metaLine}` : metaLine;
+};
+
+const isMissingGuardedBookingRpc = (error: unknown) => {
+  const err = error as { code?: string; message?: string; details?: string };
+  const text = `${err?.message ?? ""} ${err?.details ?? ""}`;
+  return err?.code === "42883" || /create_booking_guarded|function .* does not exist/i.test(text);
+};
+
+const guardedBookingError = (error: unknown) => {
+  const message = ((error as { message?: string })?.message ?? "").toUpperCase();
+  if (message.includes("BOKATA_SAME_EMAIL_LIMIT")) {
+    return { status: 400, message: "Max 2 bokningar per dag för samma e-postadress." };
+  }
+  if (message.includes("BOKATA_GUEST_CAPACITY_EXCEEDED")) {
+    return { status: 400, message: "Tyvärr är det fullt vid den tiden." };
+  }
+  if (message.includes("BOKATA_TABLE_CAPACITY_EXCEEDED")) {
+    return { status: 400, message: "Tyvärr finns det inga lediga bord vid den tiden." };
+  }
+  return null;
 };
 
 type FloorplanTable = {
@@ -534,14 +486,14 @@ const chooseBestTableGroup = (args: {
 
     const nextCandidates = Array.from(frontier)
       .map((id) => availableById.get(id))
-      .filter(Boolean)
+      .filter((table): table is FloorplanTable => !!table)
       .sort((a, b) => {
         const aPref = args.preferredTableId != null && a.id === args.preferredTableId ? 0 : 1;
         const bPref = args.preferredTableId != null && b.id === args.preferredTableId ? 0 : 1;
         if (aPref !== bPref) return aPref - bPref;
         if (a.seats !== b.seats) return b.seats - a.seats;
         return a.id - b.id;
-      }) as FloorplanTable[];
+      });
 
     for (const next of nextCandidates) {
       if (group.includes(next.id)) continue;
@@ -970,56 +922,126 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const status = requireManual ? "pending" : "confirmed";
   const persistedNotes = buildBookingNotesWithMeta(notes || null, assignedTableIds);
 
-  const { data: inserted, error } = await supabase
-    .from("bookings")
-    .insert({
-      restaurant_id: restaurantId,
-      date,
-      time,
-      guests,
-      name,
-      notes: persistedNotes,
-      status,
-      source: "web",
-      duration_min: durationMin,
-      table_id: assignedTableId,
-      client_email: normalizedEmail,
-      client_phone: phone || null,
-      confirm_token: confirmToken,
-      confirm_expires_at: confirmExpiresAt,
-    })
-    .select("id")
-    .single();
+  type InsertedBooking = { id: string };
+  type BookingInsertResult = {
+    data: InsertedBooking | null;
+    error: { message: string; status?: number } | null;
+  };
+
+  const insertBookingDirect = async (): Promise<BookingInsertResult> => {
+    const { data, error } = await supabase
+      .from("bookings")
+      .insert({
+        restaurant_id: restaurantId,
+        date,
+        time,
+        guests,
+        name,
+        notes: persistedNotes,
+        status,
+        source: "web",
+        duration_min: durationMin,
+        table_id: assignedTableId,
+        client_email: normalizedEmail,
+        client_phone: phone || null,
+        confirm_token: confirmToken,
+        confirm_expires_at: confirmExpiresAt,
+      })
+      .select("id")
+      .single();
+
+    return { data: data ? { id: String((data as { id: unknown }).id) } : null, error };
+  };
+
+  const insertBookingGuarded = async (): Promise<BookingInsertResult> => {
+    if (getEnv("BOOKING_GUARDED_RPC") === "off") return insertBookingDirect();
+
+    const { data, error } = await supabase.rpc("create_booking_guarded", {
+      p_restaurant_id: restaurantId,
+      p_date: date,
+      p_time: normalizeTime(time),
+      p_guests: guests,
+      p_duration_min: durationMin,
+      p_max_guests: maxGuests,
+      p_max_tables: maxTables,
+      p_same_email_limit: 2,
+      p_name: name,
+      p_notes: persistedNotes,
+      p_status: status,
+      p_source: "web",
+      p_table_id: assignedTableId,
+      p_client_email: normalizedEmail,
+      p_client_phone: phone || null,
+      p_confirm_token: confirmToken,
+      p_confirm_expires_at: confirmExpiresAt,
+    });
+
+    if (!error) {
+      const row = Array.isArray(data) ? data[0] : data;
+      return { data: row?.id ? { id: String(row.id) } : null, error: null };
+    }
+
+    if (isMissingGuardedBookingRpc(error)) {
+      console.warn("create_booking_guarded RPC missing; falling back to direct booking insert");
+      return insertBookingDirect();
+    }
+
+    const mapped = guardedBookingError(error);
+    if (mapped) return { data: null, error: mapped };
+    return { data: null, error };
+  };
+
+  const { data: inserted, error } = await insertBookingGuarded();
 
   if (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status ?? 500).json({ error: error.message });
+    return;
+  }
+  if (!inserted?.id) {
+    res.status(500).json({ error: "Booking insert did not return an id" });
     return;
   }
 
   const origin = getSiteUrl();
   const summary = `${date} kl ${time} • ${guests} gäster`;
-  const bookingId = inserted?.id ? String(inserted.id) : "";
+  const bookingId = String(inserted.id);
   const cancelUrl =
     bookingId && normalizedEmail
       ? buildBookingCancelUrl(origin, getBookingCancelSecret(serviceKey), bookingId, normalizedEmail)
       : null;
 
-  const sendEmail = async (to: string, subject: string, html: string) => {
+  type EmailDeliveryResult = { ok: boolean; status: number; text: string };
+  type EmailDelivery = EmailDeliveryResult & { purpose: "restaurant-notification" | "guest-confirmation" };
+
+  const sendEmail = async (to: string, subject: string, html: string): Promise<EmailDeliveryResult> => {
     if (!resendKey) return { ok: false, status: 0, text: "Missing RESEND_API_KEY" };
-    const resp = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${resendKey}`,
-      },
-      body: JSON.stringify({ from: resendFrom, to, subject, html }),
-    });
-    const text = await resp.text();
-    if (!resp.ok) {
-      console.error("Resend error", resp.status, text || resp.statusText, { to, from: resendFrom });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), EMAIL_SEND_TIMEOUT_MS);
+    try {
+      const resp = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${resendKey}`,
+        },
+        body: JSON.stringify({ from: resendFrom, to, subject, html }),
+        signal: controller.signal,
+      });
+      const text = await resp.text();
+      if (!resp.ok) {
+        console.error("Resend error", resp.status, text || resp.statusText, { to: redactEmail(to), from: resendFrom });
+      }
+      return { ok: resp.ok, status: resp.status, text };
+    } catch (err) {
+      const text = err instanceof Error ? err.message : String(err);
+      console.error("Resend request failed", text, { to: redactEmail(to), from: resendFrom });
+      return { ok: false, status: 0, text };
+    } finally {
+      clearTimeout(timeout);
     }
-    return { ok: resp.ok, status: resp.status, text };
   };
+
+  const emailJobs: Promise<EmailDelivery>[] = [];
 
   if (notifyEnabled && notifyEmail) {
     const actions = requireManual
@@ -1028,17 +1050,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         <p><a href="${origin}/api/bookings-confirm?token=${confirmToken}&action=decline">❌ Avböj</a></p>
       `
       : "";
-    await sendEmail(
-      notifyEmail,
-      requireManual ? "Ny bokning (väntar på bekräftelse)" : "Ny bokning",
-      `
+    const safeName = escapeHtml(name);
+    const safeClientEmail = escapeHtml(normalizedEmail);
+    const safePhone = phone ? escapeHtml(phone) : "";
+    const safeNotes = notes ? escapeHtml(notes) : "";
+    emailJobs.push(
+      sendEmail(
+        notifyEmail,
+        requireManual ? "Ny bokning (väntar på bekräftelse)" : "Ny bokning",
+        `
         <h2>Ny bokning</h2>
-        <p><strong>${name}</strong></p>
+        <p><strong>${safeName}</strong></p>
         <p>${summary}</p>
-        <p>Email: ${email}${phone ? `<br/>Telefon: ${phone}` : ""}</p>
-        ${notes ? `<p>Önskemål: ${notes}</p>` : ""}
+        <p>Email: ${safeClientEmail}${safePhone ? `<br/>Telefon: ${safePhone}` : ""}</p>
+        ${safeNotes ? `<p>Önskemål: ${safeNotes}</p>` : ""}
         ${actions}
       `
+      ).then((result) => ({ purpose: "restaurant-notification", ...result }))
     );
   }
 
@@ -1047,18 +1075,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { greeting, body } = resolveGreetingAndMessageBody(bookingMessageRaw, firstName);
     const greetingHtml = escapeHtml(greeting);
     const bookingMessageHtml = bookingMessageToHtml(stripRepeatedConfirmationIntro(body));
-    await sendEmail(
-      email,
-      "Din bokning är bekräftad!",
-      `
+    emailJobs.push(
+      sendEmail(
+        normalizedEmail,
+        "Din bokning är bekräftad!",
+        `
         <p>${greetingHtml}</p>
         <p>Tack för er bokning!</p>
         ${bookingMessageHtml ? `<p>${bookingMessageHtml}</p>` : "<p>Vi ser fram emot att välkomna er!</p>"}
         <p>(${summary})</p>
         ${cancelUrl ? `<p>Kan du inte komma? <a href="${cancelUrl}">Avboka din reservation här</a>.</p>` : ""}
       `
+      ).then((result) => ({ purpose: "guest-confirmation", ...result }))
     );
   }
 
-  res.status(200).json({ status, id: inserted?.id });
+  const emailSettled = await Promise.allSettled(emailJobs);
+  const emailDelivery = emailSettled.map((item) => {
+    if (item.status === "fulfilled") {
+      return { purpose: item.value.purpose, ok: item.value.ok, status: item.value.status };
+    }
+    const text = item.reason instanceof Error ? item.reason.message : String(item.reason);
+    console.error("Email job failed unexpectedly", text);
+    return { purpose: "unknown", ok: false, status: 0 };
+  });
+  const failedEmailCount = emailDelivery.filter((item) => !item.ok).length;
+  if (failedEmailCount) {
+    console.warn("Booking created with failed email deliveries", { bookingId, failedEmailCount });
+  }
+
+  res.status(200).json({ status, id: inserted?.id, emailDelivery });
 }

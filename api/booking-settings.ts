@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { VercelRequest, VercelResponse } from "../lib/vercelTypes";
 import { createClient } from "@supabase/supabase-js";
 import { PRIMARY_RESTAURANT_MISMATCH_CODE, resolveOwnerPrimaryRestaurant } from "../lib/ownerPrimary";
 
@@ -79,7 +79,7 @@ const hasSeatingData = (seating: unknown) => {
 
   if (isRecord(seating.mealRanges)) {
     const mealRanges = seating.mealRanges as Record<string, unknown>;
-    const meals = ["Frukost", "Lunch", "Middag"];
+    const meals = ["Frukost", "Lunch", "Fika", "Middag"];
     if (
       meals.some((meal) => {
         const value = mealRanges[meal];

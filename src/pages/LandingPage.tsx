@@ -588,7 +588,12 @@ function DashboardMock() {
     { label: 'Svar skickade av AI denna vecka', value: '37', icon: '🤖' },
   ];
 
-  const schedule = [
+  type DemoScheduleRow = {
+    time: string;
+    items: Array<[name: string, guests: number, variant: BookChipVariant]>;
+  };
+
+  const schedule: DemoScheduleRow[] = [
     { time: '11:00', items: [
       ['Emma Larsson', 2, 'green'],
       ['Linnéa Bergström', 2, 'teal'],
@@ -767,7 +772,13 @@ function DashboardMock() {
   );
 }
 
-function StepCard({ index, title, text }) {
+type StepCardProps = {
+  index: number | string;
+  title: string;
+  text: string;
+};
+
+function StepCard({ index, title, text }: StepCardProps) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-pink-100 p-6 shadow-sm">
       <span aria-hidden className="absolute inset-0 flex items-center justify-center text-7xl md:text-8xl font-black bg-gradient-to-br from-[#3d015f] to-pink-600 bg-clip-text text-transparent opacity-10 select-none">{index}</span>
@@ -777,7 +788,13 @@ function StepCard({ index, title, text }) {
   );
 }
 
-function StatCard({ icon, label, value }) {
+type StatCardProps = {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+};
+
+function StatCard({ icon, label, value }: StatCardProps) {
   return (
     <div className="rounded-xl border border-pink-200 bg-white p-4 shadow-sm flex items-center gap-3">
       <div className="text-lg select-none">{icon}</div>
@@ -789,8 +806,10 @@ function StatCard({ icon, label, value }) {
   );
 }
 
-function BookChip({ name, guests, variant = 'gray' }) {
-  const variants = {
+type BookChipVariant = "green" | "teal" | "yellow" | "amber" | "orange" | "blue" | "indigo" | "violet" | "rose" | "gray";
+
+function BookChip({ name, guests, variant = "gray" }: { name: string; guests: number; variant?: BookChipVariant }) {
+  const variants: Record<BookChipVariant, string> = {
     green: 'bg-green-100 text-green-800 border-green-200',
     teal: 'bg-teal-100 text-teal-800 border-teal-200',
     yellow: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -812,11 +831,20 @@ function BookChip({ name, guests, variant = 'gray' }) {
   );
 }
 
-function Feature({ children }) {
+function Feature({ children }: { children: React.ReactNode }) {
   return <div className="rounded-2xl bg-white p-5 border border-pink-100 shadow-sm">{children}</div>;
 }
 
-function PriceCard({ title, priceLine, note, cta, highlight, onSelect }) {
+type PriceCardProps = {
+  title: string;
+  priceLine: string;
+  note?: string;
+  cta: string;
+  highlight?: boolean;
+  onSelect?: (plan: { title: string; price: string; note?: string }) => void;
+};
+
+function PriceCard({ title, priceLine, note, cta, highlight = false, onSelect }: PriceCardProps) {
   return (
     <div
       className={`relative bg-white p-6 rounded-2xl shadow-sm border ring-1 ring-violet-300 ${

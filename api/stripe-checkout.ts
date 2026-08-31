@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { VercelRequest, VercelResponse } from "../lib/vercelTypes";
 import Stripe from "stripe";
 import { rateLimit } from "../lib/rateLimit";
 

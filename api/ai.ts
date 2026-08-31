@@ -1,5 +1,11 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { VercelRequest, VercelResponse } from "../lib/vercelTypes";
 import { rateLimit } from "../lib/rateLimit";
+import {
+  MADAME_BLA_CLOSED_DATES,
+  getMadameBlaHoursOverride as getSharedMadameBlaHoursOverride,
+  isMadameBlaKnowledge,
+  toSwedishDayName,
+} from "../lib/specialRestaurantRules";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -124,28 +130,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const now = new Date();
     return `${now.getFullYear()}-${pad2Local(now.getMonth() + 1)}-${pad2Local(now.getDate())}`;
   })();
-  const MADAME_BLA_CLOSED_DATES = ["2026-09-07", "2026-09-08"];
-  const isMadameBlaContext = /madame\s*bl[åa]/i.test(
-    [knowledge, context?.restaurant?.name].filter(Boolean).join("\n")
-  );
+  const isMadameBlaContext = isMadameBlaKnowledge([knowledge, context?.restaurant?.name].filter(Boolean).join("\n"));
   const getMadameBlaHoursOverride = (iso?: string | null) => {
     if (!iso || !isMadameBlaContext) return undefined;
-    const dt = toUtcDate(iso);
-    if (!dt) return undefined;
-    const dayName = weekdaySv[dt.getUTCDay()];
-    if (iso >= "2026-08-23" && iso <= "2026-09-06") {
-      return { dayName, closed: false, open: "11:00", close: "17:00" };
-    }
-    if (iso >= "2026-09-07" && iso <= "2026-10-11") {
-      if (dayName === "torsdag" || dayName === "fredag" || dayName === "lördag" || dayName === "söndag") {
-        return { dayName, closed: false, open: "11:00", close: "17:00" };
-      }
-      return { dayName, closed: true, open: "11:00", close: "17:00" };
-    }
-    if (iso >= "2026-10-12" && iso <= "2026-12-31") {
-      return { dayName, closed: true, open: "11:00", close: "17:00" };
-    }
-    return undefined;
+    const dayName = toSwedishDayName(iso);
+    const override = getSharedMadameBlaHoursOverride(iso, dayName);
+    return override ? { dayName, ...override } : undefined;
   };
   const isMadameBlaWeekendDropInOnly = (iso?: string | null) => {
     const override = getMadameBlaHoursOverride(iso);
@@ -157,7 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const dates = special
       .filter((s) => s?.closed && s.date)
       .map((s) => s.date)
-      .concat(isMadameBlaContext ? MADAME_BLA_CLOSED_DATES : [])
+      .concat(isMadameBlaContext ? Array.from(MADAME_BLA_CLOSED_DATES) : [])
       .sort();
     if (!dates.length) return "";
     const addDay = (iso: string) => {
@@ -482,7 +472,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (context?.hours?.special
         ?.filter((s) => s.closed && s.date)
         .map((s) => s.date) ?? [])
-        .concat(isMadameBlaContext ? MADAME_BLA_CLOSED_DATES : [])
+        .concat(isMadameBlaContext ? Array.from(MADAME_BLA_CLOSED_DATES) : [])
         .sort();
     if (closedDates.length) {
       let start = closedDates[0];
@@ -760,7 +750,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!iso) return false;
     const madameBlaOverride = getMadameBlaHoursOverride(iso);
     if (madameBlaOverride) return madameBlaOverride.closed;
-    if (isMadameBlaContext && MADAME_BLA_CLOSED_DATES.includes(iso)) return true;
+    if (isMadameBlaContext && MADAME_BLA_CLOSED_DATES.has(iso)) return true;
     const special = context?.hours?.special?.find((s) => s.date === iso);
     if (special) return special.closed;
     const dt = toUtcDate(iso);

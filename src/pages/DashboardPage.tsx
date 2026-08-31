@@ -335,8 +335,11 @@ const dedupeKnowledgeLines = (lines: string[]) => {
   });
 };
 
-class DashboardErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
-  state = { error: null as Error | null };
+type DashboardErrorBoundaryProps = { children: React.ReactNode };
+type DashboardErrorBoundaryState = { error: Error | null };
+
+class DashboardErrorBoundary extends React.Component<DashboardErrorBoundaryProps, DashboardErrorBoundaryState> {
+  override state: DashboardErrorBoundaryState = { error: null };
 
   static getDerivedStateFromError(error: Error) {
     return { error };
@@ -460,6 +463,8 @@ type Settings = {
     requireManualConfirmation: boolean;
   };
 };
+
+type SpecialDay = Settings["hours"]["special"][number];
 
 type OnboardingFaq = {
   id: string;
@@ -1576,7 +1581,7 @@ function ReservationDashboardInner() {
     setBookings((prev) => {
       const updated = prev.map((b) => ({ ...b, durationMin: bookingDurationMin }));
       const dates = Array.from(new Set<string>(updated.map((b) => b.date)));
-      let out = updated;
+      let out: Booking[] = updated;
       for (const d of dates) out = assignTablesForDateWithTables(d, out, tableCaps, mealRanges);
       return out;
     });
@@ -1617,10 +1622,10 @@ function ReservationDashboardInner() {
         const newOnes = mapped.filter((b) => !lastBookingIdsRef.current.has(b.id));
         if (newOnes.length && !opts?.silent) {
           setNewBookingCount((prev) => prev + newOnes.length);
-          const latest = newOnes
+          const sortedNewBookings = newOnes
             .slice()
-            .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""))
-            .at(-1);
+            .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+          const latest = sortedNewBookings[sortedNewBookings.length - 1];
           if (latest) {
             setNewBookingDetail(`Ny bokning: ${latest.date} · ${formatTimeShort(latest.time)} · ${latest.guests} gäster`);
             if (bookingNoticeTimer.current) window.clearTimeout(bookingNoticeTimer.current);
@@ -2883,7 +2888,7 @@ function ReservationDashboardInner() {
         return day < rangeToReplace.start || day > rangeToReplace.end;
       });
 
-      const byDate = new Map(filtered.map((specialDay) => [specialDay.date, specialDay]));
+      const byDate = new Map<string, SpecialDay>(filtered.map((specialDay) => [specialDay.date, specialDay]));
       let cur = customClosureFrom;
       while (new Date(cur + "T00:00:00").getTime() <= end) {
         const existing = byDate.get(cur);
@@ -5369,7 +5374,9 @@ function ReservationDashboardInner() {
     try {
       const reply = await callAi(aiMsg);
       setAiPreview(reply);
-      setAiHistory((prev) => [...prev, { role: "user", content: aiMsg }, { role: "assistant", content: reply }].slice(-12));
+      setAiHistory((prev) =>
+        [...prev, { role: "user" as const, content: aiMsg }, { role: "assistant" as const, content: reply }].slice(-12)
+      );
     } catch (err) {
       setAiPreview(`Fel vid AI-anrop. ${err instanceof Error ? err.message : ""}`.trim());
     }

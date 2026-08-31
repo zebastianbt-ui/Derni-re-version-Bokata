@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { VercelRequest, VercelResponse } from "../lib/vercelTypes";
 import Stripe from "stripe";
 import { rateLimit } from "../lib/rateLimit";
 
@@ -41,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const source = req.method === "GET" ? (req.query ?? {}) : (req.body ?? {});
+  const source = (req.method === "GET" ? (req.query ?? {}) : (req.body ?? {})) as Record<string, unknown>;
   const planKey = typeof source.planKey === "string" ? source.planKey : undefined;
   const email = typeof source.email === "string" ? source.email : undefined;
   const normalizedEmail = normalizeEmail(email);
