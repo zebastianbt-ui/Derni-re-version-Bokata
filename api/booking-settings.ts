@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "../lib/vercelTypes";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 import { PRIMARY_RESTAURANT_MISMATCH_CODE, resolveOwnerPrimaryRestaurant } from "../lib/ownerPrimary";
 

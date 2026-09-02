@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "../lib/vercelTypes";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { rateLimit } from "../lib/rateLimit";
 import {
   MADAME_BLA_CLOSED_DATES,
