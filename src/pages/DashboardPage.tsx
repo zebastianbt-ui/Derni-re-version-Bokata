@@ -1372,7 +1372,7 @@ function ReservationDashboardInner() {
       setAccessDenied(null);
       const { data: member, error: memberError } = await supabase
         .from("memberships")
-        .select("id")
+        .select("restaurant_id")
         .eq("user_id", userId)
         .limit(1)
         .maybeSingle();
@@ -1590,12 +1590,19 @@ function ReservationDashboardInner() {
   const fetchBookings = useCallback(
     async (opts?: { silent?: boolean }) => {
       if (!restaurantId || !settingsReady) return;
-      const { data, error } = await supabase
-        .from("bookings")
-        .select("id,restaurant_id,date,time,name,guests,notes,table_id,duration_min,status,source,client_email,created_at")
-        .eq("restaurant_id", restaurantId);
-      if (error) return;
-      const rows = (data ?? []) as BookingRow[];
+      const token = session?.access_token || "";
+      if (!token) return;
+      const resp = await fetch(`/api/bookings?restaurantId=${encodeURIComponent(restaurantId)}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        console.error("bookings load failed", payload?.error || `HTTP ${resp.status}`);
+        setBookingsReady(true);
+        return;
+      }
+      const rows = ((payload?.bookings ?? []) as BookingRow[]);
       const mapped = rows.map((r) => {
         const parsedMeta = parseBookingNotesMeta(r.notes ?? "");
         const tableIds = normalizeTableIds([...(parsedMeta.tableIds ?? []), r.table_id]);
@@ -1648,7 +1655,7 @@ function ReservationDashboardInner() {
       setBookings(assignTablesForDateWithTables(dateSel, mapped, tableCaps, mealRanges));
       setBookingsReady(true);
     },
-    [restaurantId, settingsReady, bookingDurationMin, dateSel, tableCaps, mealRanges]
+    [restaurantId, settingsReady, session?.access_token, bookingDurationMin, dateSel, tableCaps, mealRanges]
   );
 
   useEffect(() => {

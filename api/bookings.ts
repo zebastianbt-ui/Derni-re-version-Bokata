@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "../lib/vercelTypes";
 import { createClient } from "@supabase/supabase-js";
 import { rateLimit } from "../lib/rateLimit";
+import { resolveOwnerPrimaryRestaurant } from "../lib/ownerPrimary";
 import {
   BOOKING_TIME_ZONE,
   getMadameBlaHoursOverride,
@@ -35,6 +36,13 @@ const buildBookingCancelUrl = (origin: string, secret: string, bookingId: string
   const sig = signBookingCancel(secret, bookingId, normalizedEmail);
   return `${origin}/api/bookings-cancel?bid=${encodeURIComponent(bookingId)}&email=${encodeURIComponent(normalizedEmail)}&sig=${encodeURIComponent(sig)}`;
 };
+
+const getToken = (req: VercelRequest) => {
+  const authHeader = req.headers.authorization || "";
+  return typeof authHeader === "string" && authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+};
+
+const firstQueryValue = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 20;
 const EMAIL_SEND_TIMEOUT_MS = Math.max(1000, Number(getEnv("RESEND_TIMEOUT_MS") || 5000));
@@ -565,6 +573,80 @@ const chooseFallbackTableGroup = (args: {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method === "GET") {
+    const supabaseUrl = getEnv("SUPABASE_URL") || getEnv("VITE_SUPABASE_URL");
+    const anonKey = getEnv("SUPABASE_ANON_KEY") || getEnv("VITE_SUPABASE_ANON_KEY");
+    const serviceKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseUrl || !anonKey || !serviceKey) {
+      res.status(500).json({ error: "Missing Supabase env vars" });
+      return;
+    }
+
+    const token = getToken(req);
+    if (!token) {
+      res.status(401).json({ error: "Missing auth token" });
+      return;
+    }
+
+    const requestedRestaurantId = firstQueryValue(req.query.restaurantId || req.query.restaurant_id);
+    if (!requestedRestaurantId) {
+      res.status(400).json({ error: "Missing restaurantId" });
+      return;
+    }
+
+    const authClient = createClient(supabaseUrl, anonKey, { auth: { persistSession: false } });
+    const { data: userData, error: userError } = await authClient.auth.getUser(token);
+    if (userError || !userData?.user) {
+      res.status(401).json({ error: "Invalid auth token" });
+      return;
+    }
+
+    const serviceClient = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+    const userId = userData.user.id;
+    const ownerPrimary = await resolveOwnerPrimaryRestaurant(serviceClient, userId);
+    if (ownerPrimary.error) {
+      res.status(500).json({ error: ownerPrimary.error });
+      return;
+    }
+
+    let canAccess = ownerPrimary.restaurantId === requestedRestaurantId;
+    if (!canAccess) {
+      const { data: membership, error: membershipError } = await serviceClient
+        .from("memberships")
+        .select("restaurant_id")
+        .eq("user_id", userId)
+        .eq("restaurant_id", requestedRestaurantId)
+        .maybeSingle();
+      if (membershipError) {
+        res.status(500).json({ error: membershipError.message });
+        return;
+      }
+      canAccess = !!membership;
+    }
+
+    if (!canAccess) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const { data, error } = await serviceClient
+      .from("bookings")
+      .select("id,restaurant_id,date,time,name,guests,notes,table_id,duration_min,status,source,client_email,created_at")
+      .eq("restaurant_id", requestedRestaurantId)
+      .order("date", { ascending: true })
+      .order("time", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      res.status(500).json({ error: error.message });
+      return;
+    }
+
+    res.status(200).json({ bookings: data ?? [] });
+    return;
+  }
+
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method Not Allowed" });
     return;
